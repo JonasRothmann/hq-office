@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script type="importmap">{ "imports": { "three": "/src/client/vendor/three/three.module.min.js" } }</script>
+<style>
+  /* The glass tokens of spec section 3, light by default, dark by system or by data-theme. */
+  :root {
+    --glass-bg: rgba(255,255,255,0.62);
+    --glass-blur: blur(24px) saturate(180%);
+    --glass-edge: inset 0 1px 0 rgba(255,255,255,0.75), 0 0 0 1px rgba(15,20,30,0.08);
+    --glass-shadow: 0 10px 30px rgba(15,20,30,0.14);
+    --text: #16181d; --text-2: #5b5f6a; --text-3: #8a8e98;
+    --line: rgba(15,20,30,0.08); --fill: rgba(15,20,30,0.04); --fill-2: rgba(15,20,30,0.07);
+    --row: 30px; --radius: 14px; --radius-s: 8px;
+    --red: #e5484d; --amber: #f5a524; --blue: #3e63dd; --green: #30a46c; --teal: #12a594; --grey: #8b8d98;
+    --opus: #8e4ec6; --sonnet: #12a594; --haiku: #f5a524;
+    --bg: #a9b893;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --glass-bg: rgba(24,25,30,0.60);
+    --glass-blur: blur(24px) saturate(160%);
+    --glass-edge: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(0,0,0,0.5);
+    --glass-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    --text: #ececf1; --text-2: #a0a3ad; --text-3: #6f737d;
+    --line: rgba(255,255,255,0.08); --fill: rgba(255,255,255,0.04); --fill-2: rgba(255,255,255,0.08);
+    --bg: #151b26;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font: 13px/1.4 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-feature-settings: "zero"; }
+  #world { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; z-index: 0; outline: none; }
+  .glass { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-edge), var(--glass-shadow); border-radius: var(--radius); }
+
+  /* The question column */
+  #column { position: fixed; z-index: 3; left: 12px; top: 12px; bottom: 12px; width: 420px; display: flex; flex-direction: column; overflow: hidden; }
+  @media (max-width: 1279px) { #column { width: 360px; } }
+  .tabs { display: flex; gap: 2px; padding: 8px 8px 0; }
+  .tab { height: 28px; padding: 0 10px; border-radius: var(--radius-s); display: flex; align-items: center; gap: 6px; color: var(--text-2); font-weight: 500; }
+  .tab.on { background: var(--fill-2); color: var(--text); }
+  .tab .n { font-size: 11px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--red); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
+  .list { flex: 1; overflow: auto; padding: 8px; }
+  .group { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px; }
+  .group .rule { flex: 1; height: 1px; background: var(--line); }
+  .card { border-radius: 10px; background: var(--fill); box-shadow: 0 0 0 1px var(--line); padding: 10px 12px 12px; margin: 0 0 8px; }
+  .card.blocking { box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent), inset 3px 0 0 var(--red); background: color-mix(in srgb, var(--red) 6%, var(--fill)); }
+  .meta { display: flex; align-items: center; gap: 6px; height: 22px; font-size: 12px; color: var(--text-2); }
+  .lane { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .pill { font-size: 11px; font-weight: 600; height: 18px; padding: 0 6px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; }
+  .pill.red { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+  .pill.grey { background: var(--fill-2); color: var(--text-2); }
+  .pill.amber { background: color-mix(in srgb, var(--amber) 16%, transparent); color: #b7791f; }
+  :root[data-theme="dark"] .pill.amber { color: var(--amber); }
+  .when { margin-left: auto; font-size: 12px; color: var(--text-3); }
+  .title { font-size: 14px; font-weight: 600; margin: 4px 0 4px; letter-spacing: -0.005em; }
+  .body { color: var(--text-2); margin: 0 0 10px; }
+  .body code { font: 12px "JetBrains Mono", ui-monospace, monospace; background: var(--fill-2); padding: 1px 4px; border-radius: 4px; color: var(--text); }
+  .options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .btn { height: 28px; padding: 0 10px; border-radius: var(--radius-s); border: 0; font: 500 13px Inter, system-ui, sans-serif; background: var(--fill-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); display: inline-flex; align-items: center; gap: 6px; }
+  .btn.rec { background: var(--text); color: var(--bg); box-shadow: none; }
+  :root[data-theme="dark"] .btn.rec { background: #ececf1; color: #16181d; }
+  .btn .k { font-size: 11px; opacity: 0.6; }
+  .answer { display: flex; gap: 6px; }
+  .answer input { flex: 1; height: 30px; border-radius: var(--radius-s); border: 0; background: var(--glass-bg); box-shadow: inset 0 0 0 1px var(--line); padding: 0 10px; font: 13px Inter, system-ui, sans-serif; color: var(--text); }
+  .moved { font-size: 11px; color: var(--text-3); margin-top: 8px; display: flex; gap: 6px; align-items: center; }
+  .tell { border-top: 1px solid var(--line); padding: 8px; display: flex; gap: 6px; }
+  .tell input { flex: 1; height: 32px; border-radius: var(--radius-s); border: 0; background: var(--fill); box-shadow: inset 0 0 0 1px var(--line); padding: 0 10px; font: 13px Inter, system-ui, sans-serif; color: var(--text); }
+
+  /* The status pill */
+  #pill { position: fixed; z-index: 3; top: 12px; right: 12px; height: 36px; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 18px; }
+  #pill .seg { height: 28px; padding: 0 10px; border-radius: 14px; display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+  #pill .seg b { color: var(--text); font-weight: 600; }
+  #pill .sep { width: 1px; height: 16px; background: var(--line); }
+  #pill .ico { width: 28px; padding: 0; justify-content: center; }
+  #views { position: fixed; z-index: 3; right: 12px; bottom: 12px; height: 32px; display: flex; align-items: center; gap: 2px; padding: 0 3px; border-radius: 16px; font-size: 12px; color: var(--text-2); }
+  #views .seg { height: 26px; min-width: 26px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 13px; }
+  #views .seg.on { background: var(--fill-2); color: var(--text); }
+
+  /* Desk HUD chips, projected over each desk: two dense rows; one row when zoomed out; all of it on hover */
+  #huds { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+  .hud { position: absolute; left: 0; top: 0; min-width: 150px; padding: 5px 8px 6px; border-radius: 9px; will-change: transform; font-size: 11px; line-height: 15px; white-space: nowrap; }
+  .hud .r1 { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; line-height: 16px; color: var(--text); }
+  .hud .r1 .st { margin-left: auto; padding-left: 8px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .hud .r2 { display: flex; align-items: center; gap: 8px; color: var(--text-2); margin-top: 1px; }
+  .hud .sub { display: inline-flex; align-items: center; gap: 2px; }
+  .hud .sd { width: 6px; height: 6px; border-radius: 50%; }
+  .hud .sub .cnt { margin-left: 2px; color: var(--text); }
+  .hud .ctx { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  .hud .track { width: 34px; height: 4px; border-radius: 2px; background: var(--fill-2); overflow: hidden; }
+  .hud .fill { height: 100%; border-radius: 2px; background: var(--text-2); }
+  .hud .n { font-size: 10px; }
+  .hud .muted { color: var(--text-3); }
+  .hud.alert { box-shadow: var(--glass-edge), 0 0 0 1.5px color-mix(in srgb, var(--red) 70%, transparent), var(--glass-shadow); }
+  .hud .blk { font-size: 10px; height: 14px; min-width: 14px; padding: 0 3px; border-radius: 4px; background: var(--red); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+  .hud.small { min-width: 0; padding: 3px 7px 4px; }
+  .hud.small .r2 { display: none; }
+  .hud.small .r1 { font-size: 11px; }
+  body.noui #column, body.noui #pill, body.noui #views, body.noui #huds { display: none; }
+</style>
+</head>
+<body>
+<canvas id="world" tabindex="0"></canvas>
+<div id="huds"></div>
+
+<aside id="column" class="glass">
+  <nav class="tabs">
+    <div class="tab on">Questions <span class="n">2</span></div>
+    <div class="tab">Messages</div>
+    <div class="tab">Work</div>
+    <div class="tab">Rooms</div>
+  </nav>
+  <div class="list">
+    <div class="group"><span>Blocking</span><span class="rule"></span><span>1</span></div>
+    <article class="card blocking">
+      <div class="meta">
+        <span class="lane"><span class="dot" style="background:var(--red)"></span><span id="q1lane">birch</span></span>
+        <span class="pill red">Blocking</span>
+        <span class="pill grey" title="The lane locked this ask: only an answer moves it">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="2" y="4.5" width="6" height="4.5" rx="1" fill="currentColor"/><path d="M3.3 4.5V3.2a1.7 1.7 0 0 1 3.4 0v1.3" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>Locked</span>
+        <span class="pill amber">Urgent</span>
+        <span class="when">7m</span>
+      </div>
+      <div class="title">Ship the migration tonight, or wait for the backup run?</div>
+      <p class="body">The new <code>lane_vitals</code> table is additive. The nightly backup finishes at 02:10; shipping before it means the backup already has the new column.</p>
+      <div class="options">
+        <button class="btn rec">Ship tonight <span class="k">1</span></button>
+        <button class="btn">Wait for backup <span class="k">2</span></button>
+      </div>
+      <div class="answer"><input placeholder="Or answer in words…"><button class="btn">Send</button></div>
+    </article>
+    <div class="group"><span>Non-blocking</span><span class="rule"></span><span>1</span></div>
+    <article class="card">
+      <div class="meta">
+        <span class="lane"><span class="dot" style="background:var(--amber)"></span><span id="q2lane">cedar</span></span>
+        <span class="pill grey">Normal</span>
+        <span class="when">23m</span>
+      </div>
+      <div class="title">Which poster should hang in the HQ suite?</div>
+      <p class="body">Two drafts are on the shelf. Either works; the lane goes on with the wave one until you pick.</p>
+      <div class="options">
+        <button class="btn">Waves <span class="k">1</span></button>
+        <button class="btn">Leaf <span class="k">2</span></button>
+      </div>
+      <div class="answer"><input placeholder="Or answer in words…"><button class="btn">Send</button></div>
+      <div class="moved">Moved to non-blocking by HQ · 12m</div>
+    </article>
+  </div>
+  <div class="tell"><input placeholder="Tell HQ…"><button class="btn">Send</button></div>
+</aside>
+
+<div id="pill" class="glass">
+  <div class="seg"><span class="dot" style="background:var(--red)"></span><b id="pWait">2</b> waiting on you</div>
+  <div class="seg"><span class="dot" style="background:var(--green)"></span><b id="pWork">3</b> working</div>
+  <div class="seg"><span class="dot" style="background:var(--amber)"></span><b id="pHq">1</b> on HQ</div>
+  <div class="sep"></div>
+  <div class="seg ico" title="Machines"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="2" width="11" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 12h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+  <div class="seg ico" title="Theme"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 2a5 5 0 0 1 0 10z" fill="currentColor"/></svg></div>
+  <div class="seg ico" title="Sound"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5.2h2.2L7.5 2.5v9L4.2 8.8H2z" fill="currentColor"/><path d="M9.5 4.8a3 3 0 0 1 0 4.4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg></div>
+  <div class="seg ico" title="Settings"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M3.1 10.9l1.4-1.4M9.5 4.5l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+</div>
+
+<div id="views" class="glass">
+  <div class="seg" data-rot="-1" title="Turn left (Q)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 6.5A4.5 4.5 0 1 1 4.6 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M1.5 3.8 3 6.7l2.9-1.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="seg" data-rot="1" title="Turn right (E)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="transform:scaleX(-1)"><path d="M3 6.5A4.5 4.5 0 1 1 4.6 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M1.5 3.8 3 6.7l2.9-1.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="sep" style="width:1px;height:14px;background:var(--line)"></div>
+  <div class="seg" data-zoom="0">Far</div>
+  <div class="seg" data-zoom="1">Mid</div>
+  <div class="seg" data-zoom="2">Near</div>
+</div>
+
+<script type="module">
+import { mountWorld } from "/src/client/world/world.js";
+import { deskAnchor, project, onFrame } from "/src/client/world/api.js";
+import { STATUS, MODEL, modelFamily } from "/src/client/world/look.js";
+
+const q = new URLSearchParams(location.search);
+const look = q.get("look") === "a" ? "a" : "b";
+const theme = q.get("theme") === "dark" ? "dark" : "light";
+const n = Math.max(0, Math.min(40, Number(q.get("lanes") ?? 4)));
+const rot = Number(q.get("rot") ?? 0) | 0;
+const zoom = q.has("zoom") ? Number(q.get("zoom")) : null;
+const focus = (q.get("focus") ?? "").split(",").filter(Boolean).map(Number);
+const ui = q.get("ui") !== "0";
+document.documentElement.dataset.theme = theme;
+if (!ui) document.body.classList.add("noui");
+
+// Fake lanes: names, teams of four or five past eight lanes, and statuses that show every pose.
+const NAMES = ["birch", "cedar", "atlas", "dune", "ember", "fjord", "grove", "harbor", "iris", "juniper", "kelp", "linden", "maple", "nori", "oak", "pine", "quill", "reed", "sora", "tide", "umber", "vale", "willow", "yuzu"];
+const CYCLE = ["moving", "needs_you", "hq_turn", "waiting", "moving", "done", "moving", "parked", "needs_you", "moving", "stale", "waiting"];
+const custom = (q.get("statuses") ?? "").split(",").filter(Boolean);
+const lanes = [{ name: "hq", status: "moving" }];
+for (let i = 0; i < n; i++) {
+  const team = n > 8 ? Math.floor(i / 5) * 5 : -1;
+  lanes.push({ name: NAMES[i % NAMES.length] + (i >= NAMES.length ? `-${i}` : ""), parent: team >= 0 && i !== team ? NAMES[team] : null, status: custom[i] ?? CYCLE[i % CYCLE.length] });
+}
+const MODELS = ["claude-opus-4-5", "claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"];
+const EFFORTS = ["high", "medium", "xhigh", null];
+const vitals = {};
+lanes.forEach((l, i) => {
+  const sub = ["moving", "hq_turn", "waiting"].includes(l.status) ? [0, 3, 1, 2, 4, 0, 2][i % 7] : l.status === "needs_you" ? 1 : 0;
+  vitals[l.name] = {
+    model: MODELS[i % MODELS.length], effort: EFFORTS[i % EFFORTS.length],
+    subagents: Array.from({ length: sub }, (_, k) => ({ id: `${l.name}-${k}`, model: MODELS[(i + k + 1) % MODELS.length] })),
+    context: { used: [84000, 132000, 41000, 176000, 12000, 99000][i % 6], max: 200000 },
+    blocking: l.status === "needs_you" ? 1 : 0,
+  };
+});
+
+const canvas = document.getElementById("world");
+const world = mountWorld(canvas, { look, theme, insets: ui ? { left: 444, top: 56 } : {} });
+for (let i = 0; i < ((rot % 4) + 4) % 4; i++) world.rotate(1);
+world.setLanes(lanes, vitals);
+if (zoom !== null) {
+  world.zoom(zoom);
+  world.view.ppm = world.view.ppmTo;
+  world.focusLanes(focus.length ? focus.map((i) => lanes[i + 1].name) : lanes.slice(1).map((l) => l.name), true);
+}
+window.world = world;
+
+// The status pill, from the fake lanes
+const count = (s) => lanes.slice(1).filter((l) => s.includes(l.status)).length;
+document.getElementById("pWait").textContent = count(["needs_you", "blocked"]);
+document.getElementById("pWork").textContent = count(["moving"]);
+document.getElementById("pHq").textContent = count(["hq_turn"]);
+const asking = lanes.slice(1).filter((l) => l.status === "needs_you");
+if (asking[0]) document.getElementById("q1lane").textContent = asking[0].name;
+const onHq = lanes.slice(1).find((l) => l.status === "hq_turn");
+if (onHq) document.getElementById("q2lane").textContent = onHq.name;
+
+// Desk HUD chips: one per lane, projected above its desk every frame
+const WORDS = { moving: "working", needs_you: "needs you", blocked: "blocked", hq_turn: "on HQ", waiting: "waiting", done: "done", parked: "parked", gone: "gone", stale: "stale" };
+const huds = document.getElementById("huds");
+const fmtK = (t) => (t >= 1000 ? `${Math.round(t / 1000)}k` : String(t));
+const shortModel = (m) => (m ?? "").replace(/^claude-/, "").replace(/-(\d)-(\d)$/, " $1.$2");
+const chips = new Map();
+for (const l of lanes) {
+  const v = vitals[l.name];
+  const el = document.createElement("div");
+  el.className = "hud glass" + (v.blocking ? " alert" : "");
+  const pct = Math.round((v.context.used / v.context.max) * 100);
+  const dots = v.subagents.map((s) => `<span class="sd" style="background:${MODEL[modelFamily(s.model)]}"></span>`).join("");
+  el.innerHTML = `
+    <div class="r1"><span class="dot" style="background:${STATUS[l.status]}"></span><span>${l.name}</span>${v.blocking ? `<span class="blk" title="open blocking questions">${v.blocking}</span>` : ""}<span class="st" style="color:${STATUS[l.status]}">${WORDS[l.status]}</span></div>
+    <div class="r2"><span>${shortModel(v.model)} · ${v.effort ?? "—"}</span><span class="sub">${dots}<span class="cnt mono${v.subagents.length ? "" : " muted"}">${v.subagents.length}</span></span><span class="ctx"><span class="track"><span class="fill" style="display:block;width:${pct}%;${pct > 80 ? "background:var(--amber)" : ""}"></span></span><span class="n mono">${fmtK(v.context.used)} / ${fmtK(v.context.max)}</span></span></div>`;
+  huds.appendChild(el);
+  chips.set(l.name, el);
+}
+onFrame(() => {
+  const small = world.view.ppm < 30;
+  for (const [name, el] of chips) {
+    const a = deskAnchor(name);
+    const p = a && project(a);
+    if (!p || !p.visible) { el.style.display = "none"; continue; }
+    el.style.display = "";
+    el.classList.toggle("small", small);
+    el.style.transform = `translate(${Math.round(p.x - el.offsetWidth / 2)}px, ${Math.round(p.y - el.offsetHeight)}px)`;
+  }
+});
+
+// Q and E turn, 1 2 3 zoom
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "q" || e.key === "Q") world.rotate(-1);
+  if (e.key === "e" || e.key === "E") world.rotate(1);
+  if (["1", "2", "3"].includes(e.key)) world.zoom(Number(e.key) - 1);
+  if (e.key === "0") world.fit();
+});
+for (const b of document.querySelectorAll("#views [data-rot]")) b.onclick = () => world.rotate(Number(b.dataset.rot));
+for (const b of document.querySelectorAll("#views [data-zoom]")) b.onclick = () => world.zoom(Number(b.dataset.zoom));
+
+// For screenshots: ready once a few frames have drawn
+let frames = 0;
+onFrame(() => { if (++frames === 8) window.__worldReady = true; });
+</script>
+</body>
+</html>
