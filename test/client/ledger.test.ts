@@ -74,3 +74,27 @@ test.skipIf(!chromeFound)("comments and ticks show on the card, the latest five 
   expect(await page.evaluate(`document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+// Tiers (docs/spec-3d-office.md B3, B7): a BLOCKING group above a NON-BLOCKING one, each counted; a lane's locked ask
+// shows its lock and no tier button; the owner moves an unlocked one and changes its priority from the card.
+test.skipIf(!chromeFound)("tiers: blocking group first, the lock, and the owner's tier and priority controls", async () => {
+  const { id: locked } = await server.post("/api/asks", { lane: "golf", title: "Blocked on this", tier: "blocking", priority: "high" });
+  const lockedCard = `document.querySelector('[data-ask="${locked}"]')`;
+  await until(`!!${lockedCard}`);
+  const groups = `[...document.querySelectorAll("#hud > .tiergroup, #hud > .ask")].map((e) => e.matches(".tiergroup") ? e.textContent.trim() : Number(e.dataset.ask))`;
+  const before = await page.evaluate(groups);
+  expect(before[0]).toBe("BLOCKING 1");
+  expect(before[1]).toBe(locked);
+  expect(before[2]).toMatch(/^NON-BLOCKING \d+$/);
+  expect(await page.evaluate(`[!!${lockedCard}.querySelector(".tag.locked svg"), !!${lockedCard}.querySelector(".tier-set"), ${lockedCard}.querySelector(".prio-set").value]`)).toEqual([true, false, "high"]);
+  // The owner promotes the ledger's question: it joins the blocking group, unlocked, and says who moved it.
+  await page.evaluate(`${card()}.querySelector(".tier-set").click()`);
+  await until(`(${groups})[0] === "BLOCKING 2"`);
+  await until(`/^MOVED BY OWNER \\d\\d:\\d\\d$/.test(${card()}.querySelector(".moved")?.textContent ?? "")`);
+  expect(await page.evaluate(`[${card()}.querySelector(".tier-set").textContent, !!${card()}.querySelector(".tag.locked")]`)).toEqual(["MAKE NON-BLOCKING", false]);
+  // Priority from the picker: urgent goes above the locked high one.
+  await page.evaluate(`(() => { const s = ${card()}.querySelector(".prio-set"); s.value = "urgent"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  await until(`(${groups})[1] === ${askId}`);
+  expect(await page.evaluate(`${card()}.querySelector(".prio-set").className`)).toBe("prio-set p0");
+  expect(errors).toEqual([]);
+});

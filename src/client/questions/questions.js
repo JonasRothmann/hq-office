@@ -40,29 +40,10 @@ export function renderHud() {
   const focusedMin = document.activeElement?.dataset?.secretMin !== undefined;
   // The count lives in the top bar now; the list only needs words when it is empty.
   const head = S.open.length ? "" : `<div class="box"><h2>NOTHING WAITS ON YOU</h2><div style="color:var(--muted);font-size:14px">Every worker is either at its desk or waiting on HQ or CI. Questions land here.</div></div>`;
-  const html = head + S.open.map((a) => {
-    const d = drafts.get(a.id) || {};
-    const kind = a.kind;
-    const want = a.secrets ?? [];
-    const opts = a.options.map((o) => `<button class="opt ${d.opt === o ? "sel" : ""}" data-opt="${esc(o)}">${esc(o)}${a.recommended === o ? ` <span class="pick">HQ PICK</span>` : ""}</button>`).join("");
-    return `<article class="box ask" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
-      <div class="meta">
-        ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
-        <span class="tag ${esc(kind)}">${esc(kind.toUpperCase())}</span>
-        ${want.length ? `<span class="tag secret">SECRETS</span>` : ""}
-        ${a.link ? `<a class="tag" href="${esc(a.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : ""}
-        <span class="due"></span>
-        <span class="timer"></span>
-      </div>
-      <h3>${linkify(a.title)}</h3>
-      ${a.body ? `<div class="text">${a.body.includes("```") ? renderBody(a.body) : clipText(a.body, `q${a.id}`)}</div>` : ""}
-      ${opts ? `<div class="menu">${opts}</div>` : ""}
-      ${want.length ? `<div class="asksec">${want.map((n) => `<label><span class="tag secret">${esc(n)}</span><input class="sin val" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore placeholder="paste ${esc(n)}" data-secret="${esc(n)}"></label>`).join("")}
-        <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
-      ${composer(a.id, `<textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or your own answer" : "Your answer"}">${esc(d.text || "")}</textarea>`,
-        `<button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>`)}
-    </article>`;
-  }).join("");
+  // Two groups, blocking first (the server orders them so), each with its count. Every card is shown in full.
+  const blocking = S.open.filter((a) => a.tier === "blocking"), rest = S.open.filter((a) => a.tier !== "blocking");
+  const group = (cls, label, list) => `<h2 class="tiergroup ${cls}">${label} <span class="tag count n">${list.length}</span></h2>` + list.map(askCard).join("");
+  const html = head + (S.open.length ? group("blocking", "BLOCKING", blocking) + group("nonblocking", "NON-BLOCKING", rest) : "");
   // Values being pasted are kept in memory only and put back as the input's value, never as markup.
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
   for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
@@ -80,6 +61,46 @@ export function renderHud() {
   }
   tick();
   renderBelow();
+}
+
+export const PRIORITIES = ["urgent", "high", "normal", "low"];
+const LOCK = `<svg class="lock" viewBox="0 0 10 12" width="10" height="12" aria-hidden="true"><path d="M2.5 5V3.5a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="1" y="5" width="8" height="6.5" rx="1" fill="currentColor"/></svg>`;
+
+// The tier and priority row of a card: the priority (a picker the owner can change), the lock of a blocking ask its
+// lane locked, the button that moves an unlocked one between tiers, and who last moved it.
+function tierRow(a) {
+  const p = a.priority ?? 2, blocking = a.tier === "blocking";
+  const picker = `<select class="prio-set p${p}" title="Priority" aria-label="Priority">${PRIORITIES.map((name, i) => `<option value="${name}" ${i === p ? "selected" : ""}>${name.toUpperCase()}</option>`).join("")}</select>`;
+  const lock = blocking && a.tier_locked ? `<span class="tag locked" title="The lane that asked cannot go on without the answer: it stays blocking until answered">${LOCK} LOCKED</span>` : "";
+  const move = a.tier_locked ? "" : `<button class="tag tier-set" data-tier="${blocking ? "nonblocking" : "blocking"}">${blocking ? "MAKE NON-BLOCKING" : "MAKE BLOCKING"}</button>`;
+  const at = a.tier_at ? ` ${new Date(a.tier_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : "";
+  const moved = a.tier_by && a.tier_by !== "lane" ? `<span class="moved">MOVED BY ${a.tier_by === "owner" ? "OWNER" : "HQ"}${at}</span>` : "";
+  return `<div class="tierrow">${picker}${lock}${move}${moved}</div>`;
+}
+
+function askCard(a) {
+  const d = drafts.get(a.id) || {};
+  const kind = a.kind;
+  const want = a.secrets ?? [];
+  const opts = a.options.map((o) => `<button class="opt ${d.opt === o ? "sel" : ""}" data-opt="${esc(o)}">${esc(o)}${a.recommended === o ? ` <span class="pick">HQ PICK</span>` : ""}</button>`).join("");
+  return `<article class="box ask ${a.tier === "blocking" ? "blocking" : ""}" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
+    <div class="meta">
+      ${a.lane ? `<button class="tag lane" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : ""}
+      <span class="tag ${esc(kind)}">${esc(kind.toUpperCase())}</span>
+      ${want.length ? `<span class="tag secret">SECRETS</span>` : ""}
+      ${a.link ? `<a class="tag" href="${esc(a.link)}" target="_blank" rel="noopener">OPEN LINK</a>` : ""}
+      <span class="due"></span>
+      <span class="timer"></span>
+    </div>
+    ${tierRow(a)}
+    <h3>${linkify(a.title)}</h3>
+    ${a.body ? `<div class="text">${a.body.includes("```") ? renderBody(a.body) : clipText(a.body, `q${a.id}`)}</div>` : ""}
+    ${opts ? `<div class="menu">${opts}</div>` : ""}
+    ${want.length ? `<div class="asksec">${want.map((n) => `<label><span class="tag secret">${esc(n)}</span><input class="sin val" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore placeholder="paste ${esc(n)}" data-secret="${esc(n)}"></label>`).join("")}
+      <label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label></div>` : ""}
+    ${composer(a.id, `<textarea rows="1" placeholder="${kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or your own answer" : "Your answer"}">${esc(d.text || "")}</textarea>`,
+      `<button class="send ${kind !== "decision" ? "go" : ""}" ${canSend(a, d) ? "" : "disabled"}>${kind === "action" ? "DONE" : kind === "info" ? "OK" : "SEND"}</button>`)}
+  </article>`;
 }
 
 export function tick() {
