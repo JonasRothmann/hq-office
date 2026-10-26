@@ -34,10 +34,12 @@ non-blocking keeps that behaviour exactly and adds blocking as a stronger, expli
 ## D5. Lane vitals come from the agent's own transcript, with self-report as override
 
 herdr reports an agent's kind, status, session id and working directory, but not its model, effort, tokens or
-subagents. Claude Code writes all but effort into its session transcript (`~/.claude/projects/<cwd>/<session>.jsonl`
+subagents. Claude Code writes all of them into its session transcript (`~/.claude/projects/<cwd>/<session>.jsonl`
 and a `subagents/` folder beside it). The server reads the tail of that file for the model and the last usage, and
-the subagents folder for running subagents. Other agents, and lanes on other machines, report through
-`hud lane NAME --model --effort --subagents --context`. Effort falls back to the Claude settings' `effortLevel`.
+the subagents folder for running subagents (running until its meta file says `finished`, or quiet for 10 minutes).
+Current Claude 5 models run a 1M context window although their ids carry no `[1m]`, so the max comes from a small
+table by model family. Other agents, and lanes on other machines, report through
+`hud lane NAME --model --effort --subagents --context`. Effort is on every assistant line of the transcript (`effort`); the Claude settings' `effortLevel` is the fallback.
 Transcript text never leaves `vitals.ts`. Vitals are kept in a new table, `lane_vitals`, so the `lanes` table is
 untouched.
 

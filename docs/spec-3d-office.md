@@ -31,7 +31,7 @@ server with a throwaway data dir, with a screenshot saved under `docs/screens/`.
 | --- | --- | --- |
 | V1 | For a Claude Code lane on this machine, the server reads the model, the context in use (tokens), and the running subagents (count and model each) from the agent's own session transcript, located from herdr's `agent_session` and `foreground_cwd`. It reads only the tail of the file and only these fields. | Test (fixture transcript) |
 | V2 | Any lane can report its own vitals: `hud lane NAME --model M --effort E --subagents N --context USED[/MAX]`. A report wins over what the transcript says, until the transcript changes. | Test |
-| V3 | Effort comes from a report, else from the Claude settings the agent runs under (`effortLevel`), else it is shown as unknown. Unknown is shown as a dash, never guessed. | Test |
+| V3 | Effort comes from a report, else from the transcript (each assistant line carries `effort`), else from the Claude settings the agent runs under (`effortLevel`), else it is unknown. Unknown is shown as a dash, never guessed. | Test |
 | V4 | Vitals are in `/api/state` as `S.vitals[laneName]`. No transcript text ever reaches the state, the database or a log. | Test |
 
 ### Frontend
@@ -82,8 +82,8 @@ ask
 - **Writes.** `POST /api/asks` accepts `tier`, `priority`. `POST /api/asks/:id/tier` takes `{ tier?, priority?, by }`
   and answers 409 for a tier change on a locked ask. `hud tier ID blocking|nonblocking [--priority P]` and
   `hud ask ... --blocking --priority P`.
-- **Storage.** Three columns added to `asks` with defaults, in `db.ts` like the earlier `secrets` and `parent`
-  columns: `tier`, `priority`, `tier_locked`, plus `tier_by`, `tier_at`. Additive only (see decisions).
+- **Storage.** Five columns added to `asks` with defaults, in `db.ts` like the earlier `secrets` and `parent`
+  columns: `tier`, `priority`, `tier_locked`, `tier_by`, `tier_at`. Additive only (see decisions).
 
 ## 3. The visual system
 
@@ -93,7 +93,7 @@ The target is Sims 1 (2000): a fixed three-quarter view from above, soft even li
 furniture, walls that drop away so you look into rooms like a doll's house. Our version is cleaner and brighter: a
 Nordic and Japanese startup, not a suburban house.
 
-- **Camera.** Orthographic, 45° azimuth, about 35° elevation. Pan by drag, zoom by wheel or pinch within limits,
+- **Camera.** Orthographic, 45° azimuth, 30° elevation (the exact 2:1 of the original; see `docs/research/sims1-look.md`). Pan by drag, zoom by wheel or pinch within limits,
   rotate in 90° steps (Q and E, or buttons). It eases to fit all offices when lanes come and go.
 - **Light.** Day: a warm key light with soft shadows, a cool sky fill, gentle ambient. Night (dark theme): a dim blue
   ambient; desk lamps, monitors and lanterns carry the light.
