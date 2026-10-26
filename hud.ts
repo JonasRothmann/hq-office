@@ -4,6 +4,11 @@
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
+//           [--blocking|--nonblocking]   blocking: the lane cannot go on with that work without the answer; it is
+//                                 locked there until answered. The default is non-blocking.
+//           [--priority urgent|high|normal|low]   orders the panel within a tier (default normal)
+//   hud tier ID blocking|nonblocking [--priority P]   move an open question between tiers (not a locked blocking
+//   hud tier ID --priority P                          one) or re-prioritise it; the owner can do the same on the page
 // ask ledger: change an open question instead of withdrawing and reposting it
 //   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L]   only the fields given;
 //                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane
@@ -81,7 +86,16 @@ const { flags, rest, one } = parse(argv);
 
 switch (cmd) {
   case "ask": {
+    // --blocking and --nonblocking take no value.
+    const tierWords = argv.filter((a) => a === "--blocking" || a === "--nonblocking");
+    if (new Set(tierWords).size > 1) {
+      console.error("give --blocking or --nonblocking, not both");
+      process.exit(2);
+    }
+    const { flags, one } = parse(argv.filter((a) => !tierWords.includes(a)));
     const out = await call("POST", flags.item ? "/api/ledger/asks" : "/api/asks", {
+      tier: tierWords[0]?.slice(2),
+      priority: one("priority"),
       lane: one("lane"),
       kind: one("kind"),
       title: one("title"),
@@ -100,6 +114,16 @@ switch (cmd) {
     await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link"), lane: one("lane") });
     console.log(`ask #${rest[0]} updated`);
     break;
+  case "tier": {
+    const [id, tier] = rest;
+    if (!/^\d+$/.test(id ?? "") || (tier !== undefined && tier !== "blocking" && tier !== "nonblocking") || (tier === undefined && one("priority") === undefined)) {
+      console.error("usage: hud tier ID blocking|nonblocking [--priority urgent|high|normal|low]  |  hud tier ID --priority P");
+      process.exit(2);
+    }
+    const out = await call("POST", `/api/asks/${id}/tier`, { tier, priority: one("priority"), by: "hq" });
+    console.log(`ask #${out.id}: ${out.tier}${out.locked ? " (locked)" : ""}, priority ${out.priority}`);
+    break;
+  }
   case "comment":
     await call("POST", `/api/asks/${rest[0]}/comment`, { text: rest.slice(1).join(" ") });
     break;
@@ -208,7 +232,7 @@ switch (cmd) {
     await roomCmd(argv);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
+    console.log("usage: hud ask|update|tier|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 

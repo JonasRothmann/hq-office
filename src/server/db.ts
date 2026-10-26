@@ -17,3 +17,14 @@ if (!(db.query("PRAGMA table_info(asks)").all() as { name: string }[]).some((c) 
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "parent")) db.exec("ALTER TABLE lanes ADD COLUMN parent TEXT");
 // blocked-prompts: the excerpt of the prompt a lane's agent waits on in herdr (null when none); see prompt.ts.
 if (!(db.query("PRAGMA table_info(lanes)").all() as { name: string }[]).some((c) => c.name === "prompt")) db.exec("ALTER TABLE lanes ADD COLUMN prompt TEXT");
+// Question tiers (docs/spec-3d-office.md, section 2): blocking or not, a priority (0 urgent .. 3 low), whether the
+// asking lane locked it as blocking, and who last set tier or priority, and when. Older asks read as non-blocking,
+// normal, unlocked.
+const askColumns = new Set((db.query("PRAGMA table_info(asks)").all() as { name: string }[]).map((c) => c.name));
+for (const [col, def] of [
+  ["tier", "TEXT NOT NULL DEFAULT 'nonblocking'"],
+  ["priority", "INTEGER NOT NULL DEFAULT 2"],
+  ["tier_locked", "INTEGER NOT NULL DEFAULT 0"],
+  ["tier_by", "TEXT"],
+  ["tier_at", "INTEGER"],
+]) if (!askColumns.has(col)) db.exec(`ALTER TABLE asks ADD COLUMN ${col} ${def}`);
