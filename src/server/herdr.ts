@@ -9,6 +9,9 @@ import { checkHq, notifyHq } from "./hq-link.ts";
 
 export let untracked: { name: string; machine: string; status: string }[] = [];
 export let lastSync: { at: number; errors: string[] } = { at: 0, errors: [] };
+// Each named agent on this machine, by name: its kind, session id and working directories, as the last list gave
+// them. vitals.ts finds a lane's transcript from it.
+export let localAgents = new Map<string, { kind: string; session: string | null; cwds: string[] }>();
 
 async function herdrList(machine: string): Promise<any[]> {
   const args = machine === LOCAL ? [HERDR, "agent", "list"] : [HERDR, "--machine", machine, "agent", "list"];
@@ -52,7 +55,12 @@ export async function syncHerdr() {
     MACHINES.map(async (machine) => {
       try {
         const agents = await herdrList(machine);
-        if (machine === LOCAL) local = agents;
+        if (machine === LOCAL) {
+          local = agents;
+          localAgents = new Map(
+            agents.filter((a) => a.name).map((a) => [a.name, { kind: a.agent_session?.agent ?? a.agent, session: a.agent_session?.value ?? null, cwds: [a.foreground_cwd, a.cwd].filter(Boolean) }]),
+          );
+        }
         for (const agent of agents) {
           if (agent.name) seen.set(agent.name, { machine, agent });
         }
