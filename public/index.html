@@ -3,40 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>HQ Office</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 fill=%22%23d63c3c%22/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%23e5484d%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <!-- styles: every .css under src/client, linked by the server (core/ first, then by path) -->
 <!-- styles -->
 </head>
 <body>
+<!-- The 3D office (src/client/world/) draws here, behind every panel. -->
+<canvas id="world" class="world"></canvas>
 <div class="wrap">
-  <div class="top">
-    <div class="box urgent" id="sWait">
+  <h1 class="vh">HQ OFFICE</h1>
+  <header class="top glass" aria-label="Status">
+    <div class="box urgent" id="sWait" title="Questions waiting on you">
       <span class="count">0</span>
-      <span class="k">WAITING<br>ON YOU</span>
-      <span class="old" id="sOld"><span class="k">OLDEST WAIT</span><span class="v">-</span></span>
+      <span class="k">WAITING ON YOU</span>
+      <span class="old" id="sOld"><span class="k">OLDEST</span><span class="v">-</span></span>
     </div>
     <div class="right">
-      <div class="box title"><b>HQ OFFICE</b></div>
       <div class="box strip">
         <div><span class="k">WORKING</span><span class="v" id="sMove">0</span></div>
         <div><span class="k">ON HQ</span><span class="v" id="sHq">0</span></div>
         <div><span class="k">₽ BANK</span><span class="v" id="sBank">0</span></div>
       </div>
       <button class="box fromhq" id="sFrom" type="button" data-tab="updates"><span class="k">FROM HQ</span><span class="v">0 NEW</span></button>
-      <div class="spacer"></div>
       <div class="box health" id="machines"><span class="k">MACHINES</span><span class="v">-</span></div>
       <div class="btns">
-        <button class="btn" id="settingsBtn">SETTINGS</button>
-        <button class="btn" id="alerts">SOUND OFF</button>
+        <button class="btn" id="settingsBtn" type="button" title="Settings" aria-label="Settings">SETTINGS</button>
+        <button class="btn theme" id="themeBtn" type="button">THEME</button>
+        <button class="btn" id="alerts" type="button">SOUND OFF</button>
       </div>
     </div>
-  </div>
+  </header>
 
   <div class="main" id="main">
-    <section class="desk">
+    <section class="desk glass" aria-label="Questions">
       <div class="qwrap">
         <div class="qtabs" id="qtabs" role="tablist">
           <button class="tab" type="button" role="tab" data-qtab="questions">QUESTIONS <span class="tag count" id="qtCount" hidden></span></button>
@@ -63,20 +67,27 @@
       </div>
     </section>
     <section class="stage">
-      <div class="room">
+      <!-- The old pixel room, kept unseen so its modules still find their canvas until the world replaces them. -->
+      <div class="room" hidden>
         <canvas id="room"></canvas>
         <div class="legend">
-          <span><i style="color:#d63c3c">!</i>WAITING ON YOU</span>
-          <span><i style="color:#e0901e">?</i>WAITING ON HQ</span>
-          <span><i style="color:#3c6fd6">…</i>WAITING ON CI/OTHER</span>
-          <span><i style="color:#6a6a82">z</i>PARKED</span>
-          <span><i style="color:#2f9e57">✓</i>DONE</span>
+          <span><i>!</i>WAITING ON YOU</span>
+          <span><i>?</i>WAITING ON HQ</span>
+          <span><i>…</i>WAITING ON CI/OTHER</span>
+          <span><i>z</i>PARKED</span>
+          <span><i>✓</i>DONE</span>
           <span>AT DESK = WORKING</span>
         </div>
       </div>
       <div class="under">
-        <section class="box feed" id="feed">
-          <div class="tabs" id="feedTabs"></div>
+        <div class="box card glass" id="card"></div>
+        <section class="box feed glass" id="feed">
+          <div class="fhead">
+            <div class="tabs" id="feedTabs"></div>
+            <button class="fold" id="feedFold" type="button" aria-expanded="true" aria-controls="feedBody" title="Fold">
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
           <div class="body" id="feedBody"></div>
           <div class="body" id="secretsPane" hidden>
             <form class="sform" id="secretForm" autocomplete="off" novalidate>
@@ -88,13 +99,12 @@
             <div class="slist" id="secretList"></div>
           </div>
         </section>
-        <div class="box card" id="card"></div>
       </div>
     </section>
   </div>
 </div>
 
-<div class="box settings" id="settings" hidden></div>
+<div class="box settings glass" id="settings" hidden></div>
 <script type="module" src="/src/client/main.js"></script>
 <!-- features: every src/client/<name>/index.js, loaded by the server after main.js -->
 <!-- features -->

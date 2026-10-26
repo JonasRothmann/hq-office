@@ -239,7 +239,7 @@ describe.skipIf(!chromeFound)("attach", () => {
     // The failed thumbnail has a red ring and a retry icon, and the tray says why in one line.
     const failed = await page.evaluate(`(() => { const c = document.querySelector('[data-chips="reply"] .chip.err'), w = document.querySelector('[data-chips="reply"] .why');
       return { ring: getComputedStyle(c.querySelector(".cimg")).boxShadow, retry: c.querySelector("button.cimg[data-chip-retry] .cover svg + b")?.textContent, why: w.textContent, lines: Math.round(w.getBoundingClientRect().height / parseFloat(getComputedStyle(w).lineHeight)) }; })()`);
-    expect(failed.ring).toContain("rgb(214, 60, 60)");
+    expect(failed.ring).toContain("rgb(229, 72, 77)");
     expect(failed.retry).toBe("RETRY");
     expect(failed.why).toBe("shot.png did not upload. Tap it to retry.");
     expect(failed.lines).toBe(1);
@@ -266,7 +266,7 @@ describe.skipIf(!chromeFound)("attach", () => {
     await until(`!!document.querySelector('[data-chips="note"] .chip.err')`);
     const r = await page.evaluate(`(() => { const c = document.querySelector('[data-chips="note"] .chip.err'), w = document.querySelector('[data-chips="note"] .why');
       return { label: c.querySelector(".noimg").textContent, retry: !!c.querySelector("[data-chip-retry]"), open: !!c.querySelector("[data-chip-open]"), why: w.textContent, lines: Math.round(w.getBoundingClientRect().height / parseFloat(getComputedStyle(w).lineHeight)), ring: getComputedStyle(c.querySelector(".cimg")).boxShadow }; })()`);
-    expect(r).toEqual({ label: "OVER 10 MB", retry: false, open: false, why: "huge.gif is 10.5 MB; the limit is 10 MB.", lines: 1, ring: expect.stringContaining("rgb(214, 60, 60)") });
+    expect(r).toEqual({ label: "OVER 10 MB", retry: false, open: false, why: "huge.gif is 10.5 MB; the limit is 10 MB.", lines: 1, ring: expect.stringContaining("rgb(229, 72, 77)") });
     await page.evaluate(`document.querySelector('[data-chips="note"] .chip.err [data-chip-rm]').click()`);
     expect(await page.evaluate(`document.querySelector('[data-chips="note"]').innerHTML`)).toBe("");
   });

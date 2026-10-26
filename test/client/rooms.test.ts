@@ -29,8 +29,8 @@ const load = async (hash = "") => {
   await until(`!!document.getElementById("card")?.innerHTML && !!window.__roomsReady`);
 };
 const press = (key: string) => page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
-const inRoom = (slug: string) => `location.hash === "#room/${slug}" && !document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .room")).display === "none" && !!document.querySelector("#roomView .rthread [data-rmsg], #roomView .rthread .empty:not(:empty)")`;
-const inOffice = `location.hash === "" && document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .room")).display !== "none"`;
+const inRoom = (slug: string) => `location.hash === "#room/${slug}" && !document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .under")).display === "none" && !!document.querySelector("#roomView .rthread [data-rmsg], #roomView .rthread .empty:not(:empty)")`;
+const inOffice = `location.hash === "" && document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .under")).display !== "none"`;
 const qcol = `JSON.stringify((({ x, y, width, height }) => [x, y, width, height])(document.querySelector(".desk").getBoundingClientRect()))`;
 
 const LONG_BRIEF = Array.from({ length: 12 }, (_, i) => `### Part ${i + 1}\nA paragraph that goes on for a while about part ${i + 1}, so that the brief is far longer than the screen.\n- a point\n- another point`).join("\n\n");
@@ -131,7 +131,7 @@ test.skipIf(!chromeFound)("an open room: lanes with level and away, brief as mar
       lanes: [...r.querySelectorAll(".rtop .rlane")].map((b) => b.innerText.replace(/\\s+/g, " ").trim()),
       h: md.querySelector("h4")?.textContent, ticks: md.querySelectorAll(".tick.on").length, links: [...md.querySelectorAll("a")].map((a) => a.getAttribute("href")),
       scripts: md.querySelectorAll("script").length, text: md.textContent,
-      font: (() => { const f = (e) => { const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.lineHeight]; }; return { body: f(md.querySelector("p")), item: f(md.querySelector("li")), message: f(r.querySelector(".rthread .msg .text p")), label: getComputedStyle(r.querySelector(".rbrief .k")).fontFamily }; })(),
+      font: (() => { const f = (e) => { const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.lineHeight]; }; return { body: f(md.querySelector("p")), item: f(md.querySelector("li")), message: f(r.querySelector(".rthread .msg .text p")), label: (({ fontSize, fontWeight }) => [fontSize, fontWeight])(getComputedStyle(r.querySelector(".rbrief .k"))) }; })(),
       code: md.querySelector(".codebox pre")?.textContent, copy: !!md.querySelector(".codebox .copy"),
       cards: [...r.querySelectorAll(".art")].map((a) => a.className.replace("art ", "")),
       lastInView: last.bottom <= t.bottom + 1 && last.top >= t.top - 1 && t.bottom <= innerHeight,
@@ -145,11 +145,13 @@ test.skipIf(!chromeFound)("an open room: lanes with level and away, brief as mar
   expect(v.ticks).toBe(1);
   expect(v.links).toEqual(["https://example.com/doc"]);
   expect(v.scripts).toBe(0);
-  // The brief reads like a message: the text font and size, the pixel font for its label only; code in a code box.
+  // The brief reads like a message: the text font and size, the label style (11px, weight 600) for its label only;
+  // code in a code box.
   expect(v.font.body).toEqual(v.font.message);
   expect(v.font.item).toEqual(v.font.message);
-  expect(v.font.body[0]).not.toContain("Press Start");
-  expect(v.font.label).toContain("Press Start");
+  expect(v.font.body[0]).toContain("Inter");
+  expect(v.font.label).toEqual(["11px", "600"]);
+  expect(v.font.body[1]).not.toBe("11px");
   expect(v.code).toBe("bun test");
   expect(v.copy).toBe(true);
   expect(v.text).toContain("<script>");

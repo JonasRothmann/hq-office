@@ -1,10 +1,10 @@
-/* Tell HQ, docked under the questions. */
-/* Tell HQ, docked under the questions */
-.tell { display: grid; gap: 8px; padding: 12px 14px; }
-.tell .head { display: flex; align-items: baseline; gap: 10px; }
-.tell h2 { margin: 0; font: 10px/1.4 var(--pixel); }
-.tell .hint { color: var(--muted); font-size: 13px; }
-.tell .lastnote { font-size: 13px; color: #3a3a52; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tell .lastnote b { font: 7px/1 var(--pixel); color: var(--muted); margin-right: 6px; }
-.tell .lastnote button { background: none; border: 0; padding: 0 0 0 6px; font: 7px/1 var(--pixel); color: var(--blue); }
-.compose { display: grid; gap: 8px; }
+/* Tell HQ, docked at the foot of the question column: its head, the composer and the last note. */
+.tell { display: grid; gap: 6px; padding: 10px 10px 10px; border-top: 1px solid var(--hairline); background: var(--surface-2); }
+.tell .head { display: flex; align-items: center; gap: 8px; min-height: 22px; padding: 0 2px; }
+.tell h2 { margin: 0; font: 600 11px/1 var(--font); letter-spacing: 0.05em; color: var(--text); }
+.tell .hint { color: var(--text-3); font-size: 11px; }
+.tell .lastnote { padding: 0 2px; font-size: 12px; color: var(--text-2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tell .lastnote b { margin-right: 6px; font: 600 10.5px/1 var(--font); letter-spacing: 0.04em; color: var(--text-3); }
+.tell .lastnote button { background: none; border: 0; padding: 0 0 0 6px; font: 600 11px/1 var(--font); color: var(--st-blue-text); }
+.tell .lastnote:empty { display: none; }
+.compose { display: grid; gap: 6px; }

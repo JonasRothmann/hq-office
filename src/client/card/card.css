@@ -1,15 +1,18 @@
-/* The worker card. */
-/* worker card */
-.card h3 { margin: 0 0 4px; font: 12px/1.4 var(--pixel); }
-.card .sub { color: #3a3a52; }
-.card .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.card .note { margin-top: 8px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
-.status { font: 8px/1 var(--pixel); padding: 5px 7px; border-radius: 4px; color: #fff; }
+/* The worker card: a glass popover on the stage, never over the question column; shown once a worker is selected. */
+.card { padding: 12px 14px; }
+/* nothing selected (the "click a worker" hint has no status row) or closed with Esc: no popover */
+.card:not(:has(.row)), .card[data-closed] { display: none; }
+.card h3 { margin: 0 0 2px; font: 600 15px/1.3 var(--font); color: var(--text); overflow-wrap: anywhere; }
+.card .sub { color: var(--text-2); font-size: 13px; }
+.card .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.card .note { margin-top: 8px; color: var(--text); opacity: .86; font-size: 13px; overflow-wrap: anywhere; }
+.status { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; color: #fff; font: 600 11px/1 var(--font); letter-spacing: 0.03em; }
 /* the lane's place in the tree: its level and the chain up to HQ */
-.card .path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; color: #3a3a52; overflow-wrap: anywhere; }
-.card .path .level { background: var(--ink); color: #fff; }
-.card .path .up { border: 0; background: none; padding: 0; font: inherit; color: var(--blue); cursor: pointer; text-decoration: underline; }
+.card .path { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.card .path .level { background: var(--text); color: var(--surface-solid); }
+.card .path .up { border: 0; background: none; padding: 0; font: inherit; color: var(--st-blue-text); cursor: pointer; }
+.card .path .up:hover { text-decoration: underline; }
 /* blocked on a prompt: what it asks, and where to go to answer it */
-.card .prompt { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border: 2px solid var(--red); border-radius: 8px; background: #fff0f0; }
-.card .prompt .k { font: 8px/1.5 var(--pixel); color: var(--red); }
-.card .prompt pre { margin: 0; font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.card .prompt { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-s); background: var(--st-red-fill); box-shadow: inset 0 0 0 1px rgba(229, 72, 77, 0.35); }
+.card .prompt .k { color: var(--st-red-text); line-height: 1.4; }
+.card .prompt pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }

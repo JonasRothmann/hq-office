@@ -1,14 +1,14 @@
 /* The ask ledger on a question card: the EDITED tag, the checklist and HQ's comments. Compact, so the answer stays in view. */
-.tag.edited { background: #fff3d6; color: #8a5a10; }
+.tag.edited { background: var(--st-amber-fill); color: var(--st-amber-text); }
 .ledger { display: grid; gap: 6px; }
-.lchk { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.lchk li { display: flex; align-items: baseline; gap: 8px; font: 700 13px/1.35 var(--text); color: var(--ink); }
-.lchk li.done .lt { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
-.ltick { flex: none; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid var(--ink); border-radius: 2px; font: 8px/8px var(--pixel); text-align: center; color: #fff; align-self: center; }
-.lchk li.done .ltick { background: var(--green); border-color: var(--green); }
+.lchk { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lchk li { display: flex; align-items: baseline; gap: 8px; font: 500 13px/1.4 var(--font); color: var(--text); }
+.lchk li.done .lt { color: var(--text-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.ltick { flex: none; align-self: center; width: 13px; height: 13px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--hairline-2); font: 700 9px/13px var(--font); text-align: center; color: #fff; }
+.lchk li.done .ltick { background: var(--st-green); box-shadow: none; }
 .lt { overflow-wrap: anywhere; }
-.lpr { font: 7px/1 var(--pixel); margin-left: 4px; }
-.lcom { display: grid; gap: 2px; border-left: 3px solid var(--edge-2); padding-left: 8px; }
-.lc { font-size: 13px; line-height: 1.35; color: #3a3a52; white-space: pre-wrap; overflow-wrap: anywhere; }
-.lat { font: 7px/1 var(--pixel); color: var(--muted); margin-right: 6px; }
-.lmore { justify-self: start; background: none; border: 0; padding: 2px 0; font: 7px/1 var(--pixel); color: var(--blue); cursor: pointer; }
+.lpr { margin-left: 4px; font: 600 10.5px/1 var(--mono); }
+.lcom { display: grid; gap: 2px; padding-left: 8px; border-left: 2px solid var(--hairline-2); }
+.lc { font-size: 12.5px; line-height: 1.4; color: var(--text); opacity: .86; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lat { margin-right: 6px; font: 500 11px/1 var(--mono); color: var(--text-3); }
+.lmore { justify-self: start; background: none; border: 0; padding: 2px 0; font: 600 11px/1 var(--font); letter-spacing: 0.03em; color: var(--st-blue-text); cursor: pointer; }

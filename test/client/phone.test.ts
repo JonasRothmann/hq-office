@@ -73,7 +73,7 @@ test.skipIf(!chromeFound)("MESSAGES has a bounded height, scrolls itself and ope
   expect(await scrollTopOf("msgs")).toBeGreaterThan(0);
   expect(await lastInView()).toBe(true);
   expect(await page.evaluate(`document.getElementById("msgs").dataset.more`)).toBe("up");
-  // the tabs and Tell HQ show with the thread, and the page still scrolls on to the room
+  // the tabs and Tell HQ show with the thread, and the page still scrolls on to the feed
   expect(await topOf("#qtabs")).toBeGreaterThanOrEqual(0);
   expect(await page.evaluate(`document.querySelector(".tell").getBoundingClientRect().bottom`)).toBeLessThanOrEqual(664);
   expect(await page.evaluate(`document.scrollingElement.scrollHeight > innerHeight`)).toBe(true);
@@ -106,8 +106,8 @@ test.skipIf(!chromeFound)("at the newest message, a new one stays in view", asyn
   expect(await page.evaluate(`scrollY`)).toBe(pageY);
 });
 
-test.skipIf(!chromeFound)("FROM HQ has a bounded height and scrolls itself, and fits on one screen with the room", async () => {
-  await page.evaluate(`document.querySelector(".room").scrollIntoView({ block: "start" })`);
+test.skipIf(!chromeFound)("FROM HQ has a bounded height and scrolls itself, and fits on one screen", async () => {
+  await page.evaluate(`document.getElementById("feed").scrollIntoView({ block: "start" })`);
   await settle();
   const b = await bounded("feedBody");
   expect(b.overflowY).toBe("auto");

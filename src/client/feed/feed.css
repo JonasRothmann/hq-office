@@ -1,17 +1,29 @@
-/* The box under the room: FROM HQ updates and the sent log. */
-/* FROM HQ and your sent log share the box under the room, as two tabs */
-.feed { display: grid; gap: 8px; }
-.feed .tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.feed .body { display: grid; gap: 8px; align-content: start; }
+/* The feed, bottom right of the stage: FROM HQ updates, the sent log and SECRETS, as tabs; it folds to its tab row. */
+.feed { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0; overflow: hidden; }
+.feed .fhead { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 6px 6px 6px 8px; border-bottom: 1px solid var(--hairline); }
+.feed .tabs { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.feed .tabs::-webkit-scrollbar { display: none; }
+.feed .tabs .tab { padding: 0 7px; letter-spacing: 0.03em; }
+.feed .tabs .btn-s { margin-left: 4px; height: 22px; padding: 0 7px; font-size: 10.5px; }
+.fold { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-2); }
+.fold:hover { background: var(--surface-3); color: var(--text); }
+.fold svg { transition: transform .15s; }
+.feed.folded .fold svg { transform: rotate(180deg); }
+.feed.folded { grid-template-rows: auto; }
+.feed.folded .fhead { border-bottom: 0; }
+.feed.folded > .body { display: none; }
+.feed .body { display: grid; gap: 6px; align-content: start; padding: 8px; }
 .feed.flash { animation: flash .9s ease 2; }
-.updates { display: grid; gap: 10px; }
+.updates { display: grid; gap: 8px; }
 .updates .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.updates h2 { margin: 0; font: 11px/1.4 var(--pixel); }
-.upd { padding: 10px 12px; border-radius: 8px; border: 2px solid transparent; display: grid; gap: 4px; }
-.upd.unread { background: #fff8e6; border-color: #f0d080; }
+.updates h2 { margin: 0; font: 600 13px/1.4 var(--font); }
+.upd { display: grid; gap: 4px; padding: 8px 10px; border-radius: var(--radius-s); background: var(--surface); box-shadow: var(--card-shadow); }
+.upd.unread { box-shadow: inset 3px 0 0 var(--st-amber), var(--card-shadow); cursor: pointer; }
 .upd .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.upd h3 { margin: 2px 0 0; font: 800 15px/1.3 var(--text); }
-.upd .text { font-size: 14px; color: #3a3a52; white-space: pre-wrap; overflow-wrap: anywhere; }
-.log { display: grid; gap: 6px; margin-top: 10px; max-height: 220px; overflow: auto; }
-.log div { font-size: 13px; color: #3a3a52; overflow-wrap: anywhere; }
-.log b { font: 7px/1 var(--pixel); color: var(--muted); margin-right: 6px; }
+.upd .meta .tag { height: 18px; font-size: 10.5px; }
+.upd h3 { margin: 2px 0 0; font: 600 13px/1.35 var(--font); color: var(--text); }
+.upd .text { font-size: 12.5px; color: var(--text); opacity: .82; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log { display: grid; gap: 4px; margin-top: 4px; max-height: 220px; overflow: auto; }
+.log div { padding: 4px 2px; font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; border-bottom: 1px solid var(--hairline); }
+.log div:last-child { border-bottom: 0; }
+.log b { margin-right: 6px; font: 600 10.5px/1 var(--font); letter-spacing: 0.04em; color: var(--text-3); }

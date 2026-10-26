@@ -1,40 +1,78 @@
-/* The top bar: the waiting count, the office strip, FROM HQ, machines, the SETTINGS and SOUND buttons. */
-.stat { display: grid; gap: 6px; padding: 10px 14px; }
-.stat .k { font: 8px/1 var(--pixel); color: var(--muted); }
-.stat .v { font: 16px/1 var(--pixel); }
-.title { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
-.title b { font: 12px/1 var(--pixel); }
-/* HERO and SOUND stacked, so the top bar keeps its height */
-.btns { display: grid; gap: 4px; }
-.btns .btn { padding: 4px 8px; font-size: 8px; white-space: nowrap; }
+/* The status pill, top right: waiting on you and the oldest wait, working, on HQ, the bank, FROM HQ, machines, SETTINGS, the theme and SOUND. */
+.top { display: flex; align-items: center; gap: 2px; height: var(--pill-h); padding: 0 6px; border-radius: 12px; }
+.top .right { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.top .box { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text); white-space: nowrap; }
+.top .k { font-size: 10.5px; color: var(--text-2); }
+.top .v { font: 600 12px/1 var(--mono); color: var(--text); }
+/* a hairline between the groups */
+.top .right > * { position: relative; }
+.top .right > *::before, .top > .right::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 1px; background: var(--hairline-2); }
+.top > .right { position: relative; padding-left: 4px; }
+.top .right > .strip::before { display: none; }
 /* the one number that matters: how many questions wait on you, and for how long */
-.urgent { display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
-.urgent .count { font: 24px/1 var(--pixel); }
-.urgent .k { font: 9px/1.5 var(--pixel); color: var(--muted); }
-.urgent .old { margin-left: auto; display: grid; gap: 6px; justify-items: end; }
-.urgent .old .k { font-size: 8px; line-height: 1; }
-.urgent .old .v { font: 13px/1 var(--pixel); color: var(--blue); }
-.urgent .old.warm .v { color: var(--amber); }
-.urgent .old.hot .v { color: var(--red); }
-.urgent.alert { border-color: var(--red); }
-.urgent.alert .count { color: var(--red); }
-.urgent.ok .count { color: var(--green); }
-/* everything else about the office, quiet, in one box */
-.strip { display: flex; gap: 18px; padding: 10px 14px; }
-.strip > div { display: grid; gap: 6px; }
-.strip .k { font: 8px/1 var(--pixel); color: var(--muted); }
-.strip .v { font: 13px/1 var(--pixel); }
-.fromhq { display: grid; gap: 6px; padding: 10px 14px; text-align: left; font: inherit; color: inherit; }
-.fromhq:hover { background: #fff; }
-.fromhq .k { font: 8px/1 var(--pixel); color: var(--muted); }
-.fromhq .v { font: 13px/1 var(--pixel); color: var(--muted); }
-.fromhq.unread { border-color: var(--amber); }
-.fromhq.unread .v { color: var(--amber); }
-.health { display: grid; gap: 6px; padding: 10px 14px; cursor: default; }
-.health .k { font: 8px/1 var(--pixel); color: var(--muted); }
-.health .v { display: flex; align-items: center; gap: 6px; font: 11px/1 var(--pixel); }
-.health i { width: 9px; height: 9px; border-radius: 2px; background: var(--green); box-shadow: 0 0 0 2px var(--ink); }
-.health i.bad { background: var(--red); }
-.health i.off { background: var(--amber); }
-.health.bad .v { color: var(--red); }
-.health.off .v { color: var(--amber); }
+.urgent { gap: 8px; }
+.urgent .count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--surface-3); color: var(--text); font: 700 12px/1 var(--mono); }
+.urgent .k { color: var(--text); font-size: 11px; }
+.urgent .old { display: inline-flex; align-items: baseline; gap: 5px; margin-left: 4px; }
+.urgent .old .k { color: var(--text-2); font-size: 10.5px; }
+.urgent .old .v { color: var(--st-blue-text); }
+.urgent .old.warm .v { color: var(--st-amber-text); }
+.urgent .old.hot .v { color: var(--st-red-text); }
+.urgent.alert { background: var(--st-red-fill) !important; }
+.urgent.alert .count { background: var(--st-red); color: #fff; }
+.urgent.alert .k:not(.old .k) { color: var(--st-red-text); }
+.urgent.ok .count { background: var(--st-green-fill); color: var(--st-green-text); }
+.urgent.ok .old { display: none; }
+/* the office, quiet, in one group */
+.strip { gap: 12px !important; }
+.strip > div { display: inline-flex; align-items: baseline; gap: 5px; }
+.fromhq { font: inherit; text-align: left; }
+.fromhq:hover { background: var(--surface-3) !important; }
+.fromhq .v { color: var(--text-2); }
+.fromhq.unread .v { color: var(--st-amber-text); }
+.fromhq.unread .v::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--st-amber); vertical-align: 1px; }
+.health { cursor: default; }
+.health .v { display: inline-flex; align-items: center; gap: 4px; font: 600 11px/1 var(--font); letter-spacing: 0.03em; }
+.health i { width: 7px; height: 7px; border-radius: 50%; background: var(--st-green); box-shadow: 0 0 0 2px var(--st-green-fill); }
+.health i.bad { background: var(--st-red); box-shadow: 0 0 0 2px var(--st-red-fill); }
+.health i.off { background: var(--st-amber); box-shadow: 0 0 0 2px var(--st-amber-fill); }
+.health.bad .v { color: var(--st-red-text); }
+.health.off .v { color: var(--st-amber-text); }
+.btns { display: flex; align-items: center; gap: 0; padding-left: 4px; }
+.btns .btn { height: 28px; padding: 0 8px; color: var(--text-2); font-size: 10.5px; }
+.btns .btn:hover { color: var(--text); }
+.btns .btn svg { width: 14px; height: 14px; flex: none; }
+/* SETTINGS as a gear (its label stays in the text, for screen readers and tooltips) */
+#settingsBtn::before { content: ""; width: 14px; height: 14px; flex: none; background: currentColor; -webkit-mask: var(--gear) center / contain no-repeat; mask: var(--gear) center / contain no-repeat; }
+:root { --gear: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.6 1h2.8l.4 1.9 1.3.7 1.8-.7 1.4 2.4-1.4 1.3v1.6l1.4 1.3-1.4 2.4-1.8-.7-1.3.7-.4 1.9H6.6l-.4-1.9-1.3-.7-1.8.7L1.7 10.6l1.4-1.3V7.7L1.7 6.4l1.4-2.4 1.8.7 1.3-.7zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z' fill='black' fill-rule='evenodd'/%3E%3C/svg%3E"); }
+/* a narrow desktop: words give way where an icon or the tooltip says it */
+@media (min-width: 1151px) and (max-width: 1439px) {
+  .top .health .k, #settingsBtn .t, .btn.theme .lbl { display: none; }
+  #settingsBtn { font-size: 0; gap: 0; }
+  .top .box { padding: 0 8px; }
+  .strip { gap: 10px !important; }
+}
+/* stacked: the pill wraps and takes the width */
+@media (max-width: 1150px) {
+  .top { height: auto; min-height: var(--pill-h); flex-wrap: wrap; padding: 4px 6px; row-gap: 0; }
+  .top .right { flex-wrap: wrap; }
+  .top .right > *::before, .top > .right::before { display: none; }
+  .btns { margin-left: auto; }
+}
+@media (pointer: coarse) { .btns .btn, .top .box { height: 36px; } }
+/* a phone: the waiting count and the buttons on the first row, the office's numbers on the second */
+@media (max-width: 1150px) and (pointer: coarse), (max-width: 640px) {
+  .top { padding: 4px; }
+  .top .right { display: contents; }
+  .top .urgent { order: 0; }
+  .top .btns { order: 1; margin-left: auto; padding-left: 0; }
+  .top .right > :not(.btns) { order: 2; }
+  .top .strip { gap: 8px !important; }
+  .top .box { padding: 0 6px; }
+  .top .k { font-size: 10px; letter-spacing: 0; }
+  .top .v { font-size: 11.5px; }
+  .strip > div, .urgent .old { gap: 3px; }
+  .top .health .k, .top .old .k, .btn.theme .lbl { display: none; }
+  #settingsBtn { font-size: 0; gap: 0; }
+  .btns .btn { padding: 0 8px; }
+}
