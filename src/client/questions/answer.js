@@ -4,7 +4,7 @@ import { drafts, secretDrafts } from "./drafts.js";
 import { S } from "../core/state.js";
 import { copyCode } from "../core/text.js";
 import { post } from "../core/net.js";
-import { canSend, renderHud } from "./questions.js";
+import { canSend, PRIORITIES, renderHud } from "./questions.js";
 import { clearImages, notReady, withImages } from "../images/images.js";
 
 $("main").addEventListener("click", async (e) => {
@@ -23,6 +23,14 @@ $("main").addEventListener("click", async (e) => {
   if (!card) return;
   const id = Number(card.dataset.ask);
   const d = drafts.get(id) || {};
+  // The owner moves an unlocked ask between tiers; HQ is told on the server.
+  const tierBtn = e.target.closest(".tier-set");
+  if (tierBtn) {
+    tierBtn.disabled = true;
+    try { await post(`/api/asks/${id}/tier`, { tier: tierBtn.dataset.tier, by: "owner" }); }
+    catch (err) { toast(err.message); tierBtn.disabled = false; }
+    return;
+  }
   const opt = e.target.closest(".opt");
   if (opt) { d.opt = d.opt === opt.dataset.opt ? undefined : opt.dataset.opt; drafts.set(id, d); renderHud(); return; }
   if (e.target.closest(".send")) {
@@ -62,6 +70,14 @@ $("main").addEventListener("input", (e) => {
   d.text = e.target.value;
   drafts.set(id, d);
   card.querySelector(".send").disabled = !canSend(ask, d);
+});
+// The owner changes an ask's priority (any ask, locked or not).
+$("main").addEventListener("change", async (e) => {
+  const sel = e.target.closest(".prio-set");
+  if (!sel) return;
+  const id = Number(sel.closest("[data-ask]").dataset.ask);
+  try { await post(`/api/asks/${id}/tier`, { priority: sel.value, by: "owner" }); }
+  catch (err) { toast(err.message); sel.value = PRIORITIES[S.open.find((a) => a.id === id)?.priority ?? 2]; }
 });
 $("main").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.target.closest("[data-ask]")?.querySelector(".send")?.click();

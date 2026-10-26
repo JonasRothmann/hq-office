@@ -40,3 +40,19 @@
 .qtabs .tag[hidden] { display: none; }
 .tag.count { background: var(--red); color: #fff; }
 .hud[hidden], .msgs[hidden] { display: none; }
+/* tiers: a BLOCKING group above a NON-BLOCKING one, each with its count; a card's priority, lock and last move */
+.hud .tiergroup { display: flex; align-items: center; gap: 8px; margin: 2px 0 -4px; font: 9px/1 var(--pixel); color: var(--muted); }
+.hud .tiergroup.blocking { color: var(--red); }
+.tiergroup.nonblocking .n { background: #e8e8f4; color: var(--ink); }
+.ask.blocking { border-left-color: var(--red); }
+.tierrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.prio-set { font: 8px/1 var(--pixel); padding: 4px 5px; border-radius: 4px; border: 0; background: #e8e8f4; color: var(--ink); }
+.prio-set.p0 { background: var(--red); color: #fff; }
+.prio-set.p1 { background: var(--amber); color: #fff; }
+.prio-set.p3 { color: var(--muted); }
+.tag.locked { display: inline-flex; align-items: center; gap: 4px; background: var(--red); color: #fff; }
+.tag.tier-set { cursor: pointer; }
+.tag.tier-set:disabled { opacity: .5; }
+.moved { font: 7px/1 var(--pixel); color: var(--muted); }
+/* On a phone a picker under 16px makes iOS zoom in when it gets focus (see core/layout.css). */
+@media (max-width: 1150px) and (pointer: coarse) { html .prio-set { font: 700 16px/1 var(--text); padding: 2px 4px; } }

@@ -92,6 +92,13 @@ teaches it without any setup per session:
 
 Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
 
+Every question has a tier and a priority. The panel shows a **BLOCKING** group above a **NON-BLOCKING** group, each with its count, and orders each group by priority, then due time, then age. Every card is shown in full; nothing collapses.
+
+- `hud ask ... --blocking`: the lane cannot go on with that piece of work until you answer. The question is locked (a lock on its card): nobody can move it to non-blocking, only answer it. The lane can still work on other things, so a lane can be working and blocked on a question at once; its `blocking` count in the state says so.
+- `hud ask ...` with no flag (or `--nonblocking`) is the default: the lane goes on without the answer. You (with the card's tier button) or HQ (`hud tier ID blocking|nonblocking`) can move it between tiers; it stays unlocked.
+- `--priority urgent|high|normal|low` (default normal) orders a question within its tier. It can always change: the picker on the card, or `hud tier ID --priority P`.
+- A card moved by you or by HQ says who moved it and when. When you move one, HQ is told in one line so it can tell the lane.
+
 HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read. `hud guide` prints how HQ should reach you.
 
 ## Secrets
