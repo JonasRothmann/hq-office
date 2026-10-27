@@ -1,12 +1,15 @@
-// The office on the @hq/world engine, behind the OFFICE setting (D18): mountOffice(canvas, opts) answers the same calls
-// as the classic renderer's mountWorld (world/world.js), so world/index.js drives either one the same way. Each state
-// change builds the doc again with officeDoc (office/plan.js) and hands it to world.apply, which rebuilds only what
-// changed. It binds itself to world/api.js, so the desk chips, the subagent balls and addToWorld work unchanged. The
-// OUTSIDE setting puts the garden and the valley or the town round it as the engine's scenery (office/outside/).
+// The office on the @hq/world engine (D18): mountOffice(canvas, opts) is what world/index.js mounts and drives. Each
+// state change builds the doc again with officeDoc (office/plan.js) and hands it to world.apply, which rebuilds only
+// what changed. It binds itself to world/api.js, so the desk chips and addToWorld reach the engine through one door.
+// On top of the engine's own: the subagent balls (balls.js), a status light on each desk and a badge over a worker
+// (marks.js), and each room's lamp at night (lamps.js). The OUTSIDE setting puts the garden and the valley or the
+// town round it as the engine's scenery (office/outside/).
 import { createWorld } from "@hq/world";
 import { fromJSON } from "@hq/world/model";
 import { THREE, bindWorld, runFrame } from "../world/api.js";
 import { Balls } from "./balls.js";
+import { Marks, ACTIVE } from "./marks.js";
+import { roomLamps } from "./lamps.js";
 import { emit } from "../core/bus.js";
 import japandi from "../office/japandi/index.js";
 import land from "../office/outside/land/index.js";
@@ -22,7 +25,7 @@ const PACKS = [japandi, land];
 const BALL_CENTRE = new THREE.Vector3(0, 0, 0.8); // round the chair, in the desk's frame (its worker toward +z)
 const CHEST = 0.3;                                // metres above the hips: where a worker is clicked
 const RING = { light: "#b9832f", dark: "#e0b25c" };
-// The camera's side of what it looks at, per rotation, as the classic renderer reports it.
+// The camera's side of what it looks at, per rotation.
 const SIDES = [{ sx: 1, sz: 1 }, { sx: 1, sz: -1 }, { sx: -1, sz: -1 }, { sx: -1, sz: 1 }];
 const laneIn = (id) => /^(?:desk|chair|lane):(.+)$/.exec(id ?? "")?.[1] ?? null;
 
@@ -31,12 +34,13 @@ export function mountOffice(canvas, opts = {}) {
   let theme = opts.theme === "dark" ? "dark" : "light";
   let insets = opts.insets ?? { left: 0, top: 0, right: 0, bottom: 0 };
   let hqName = opts.hq ?? "hq", hqStatus = "moving";
-  let lanes = [], vitals = {}, live = new Set(), statusOf = new Map(), layoutKey = "";
+  let lanes = [], vitals = {}, live = new Set(), statusOf = new Map(), blockingOf = new Map(), layoutKey = "";
   let selected = null, hovered = null, mode = "smooth", paused = false, fitting = true;
   let outside = MODES.includes(opts.outside) ? opts.outside : "nature", outsideSeed = opts.outsideSeed || "hq", landNow = null;
   const balls = new Balls();
   const deskFrames = new Map(); // lane -> a group attached to its desk: the frame its balls hop in
   const ring = selectionRing();
+  let marks = null, lamps = null; // made with the world
 
   // The pace: a host system that keeps the view drawing at the PERFORMANCE rate while workers type and balls hop.
   // Motion (a walk, a turn, an edit) draws at display rate whatever this says.
@@ -53,7 +57,9 @@ export function mountOffice(canvas, opts = {}) {
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    balls.update(now);
+    const ppm = world.camera.state.ppm; // a zoom draws, so the sizes follow it
+    balls.update(now, ppm);
+    marks.update(now, ppm);
     runFrame(now, dt);
   }
 
@@ -80,8 +86,11 @@ export function mountOffice(canvas, opts = {}) {
     res = officeDoc(lanes, res, { hq: hqName, hqStatus });
     live = new Set([...res.layout.desks.filter((d) => !d.vacant).map((d) => d.lane), ...(res.layout.hq ? [hqName] : [])]);
     statusOf = new Map([...lanes.map((l) => [l.name, l.status]), [hqName, hqStatus]]);
+    blockingOf = new Map(lanes.map((l) => [l.name, l.blocking]));
     if (!world) {
-      world = createWorld(canvas, docOf(res.doc), { theme, time: TIME[theme], insets, systems: [pace], idleFps: FPS[mode], scenery: sceneryFor() });
+      world = createWorld(canvas, docOf(res.doc), { theme, time: TIME[theme], insets, systems: [pace], idleFps: FPS[mode], scenery: sceneryFor(), hoverTarget });
+      marks = new Marks(world);
+      lamps = roomLamps(world);
       world.three.scene.add(balls.mesh);
       world.on("frame", frame);
       if (opts.controls !== false) bindControls();
@@ -100,7 +109,20 @@ export function mountOffice(canvas, opts = {}) {
     const key = [...live].filter((l) => l !== hqName).join("\n");
     if (key !== layoutKey) { layoutKey = key; emit("world:layout", key ? key.split("\n") : []); }
     setSelected(selected);
+    applyStatus();
     applyVitals();
+  }
+
+  // The desks' lights, the badges and the rooms' lamps for the lanes' statuses. A change the doc does not carry (a
+  // question that starts blocking a working lane) still asks for a frame.
+  function applyStatus() {
+    const changed = marks.sync(new Map([...live].map((l) => [l, { status: statusOf.get(l), blocking: blockingOf.get(l) ?? 0 }])));
+    if (changed) world.invalidate();
+    const o = res.origin, L = res.layout;
+    const middle = (r) => ({ x: r.x + r.w / 2 + o.x, z: r.z + r.d / 2 + o.z });
+    const rooms = L.teamRooms.map((r) => ({ id: r.id, ...middle(r), lit: r.seats.some((s) => !s.vacant && ACTIVE.has(statusOf.get(s.lane))) }));
+    if (L.hq) rooms.push({ id: L.hq.id, ...middle(L.hq), lit: ACTIVE.has(statusOf.get(hqName)) });
+    lamps.sync(rooms);
   }
 
   // Each lane's subagents as balls round its desk. A frame is asked for only when they changed.
@@ -192,6 +214,7 @@ export function mountOffice(canvas, opts = {}) {
   }
 
   const rotate = (dir) => world?.camera.rotate(dir);
+  // level: a stop on the engine's zoom ladder (an index into ZOOMS, camera/rig.js; ZOOM_STOPS names far, mid, near).
   function zoom(level) { fitting = false; world?.camera.zoom(level); }
   function fit() { fitting = true; world?.camera.fit({ ease: true }); }
 
@@ -217,6 +240,14 @@ export function mountOffice(canvas, opts = {}) {
     if (!lane || !live.has(lane) || !world.attach(obj, deskId(lane))) world.three.scene.add(obj);
     world.invalidate({ shadows: true });
     return true;
+  }
+
+  // What the pointer lights up: a live lane's desk or chair itself, its worker's desk; nothing else (other furniture,
+  // empty desks, the floor, the land), so a highlight always means a lane to click.
+  function hoverTarget(hit) {
+    const lane = laneIn(hit?.id);
+    if (!lane || !live.has(lane)) return null;
+    return hit.kind === "character" ? deskId(lane) : hit.id;
   }
 
   // A pick as a lane: a worker, or its desk or chair. Empty desks and the rest of the furniture are no one's.
@@ -254,14 +285,18 @@ export function mountOffice(canvas, opts = {}) {
     });
   }
 
-  // What the office shows, for tests and the lab: the classic renderer's read-only shape, and the engine's numbers.
+  // What the office shows, for tests and the lab, and the engine's numbers.
   function inspect() {
     const e = world?.inspect();
     const L = res?.layout;
     const rot = e?.rot ?? 0;
     return {
-      renderer: "new",
-      rooms: L ? L.teamRooms.map((r) => ({ id: r.id, team: r.team, lanes: [...r.lanes] })) : [],
+      // each team room, and whether its lamp is on (lit by night while one of its lanes is active)
+      rooms: L ? L.teamRooms.map((r) => ({ id: r.id, team: r.team, lanes: [...r.lanes], lit: !!lamps?.lit(r.id) })) : [],
+      suite: L?.hq ? { id: L.hq.id, lit: !!lamps?.lit(L.hq.id) } : null,
+      lamps: lamps?.count ?? 0, // the host lamps: one per team room and the suite
+      // the sizes for the zoom now: 1 is true size, more is grown so they stay readable far out
+      scale: { balls: balls.scale, lights: marks?.scale.lights ?? 1, markers: marks?.scale.markers ?? 1 },
       desks: L ? L.desks.filter((d) => !d.vacant).map((d) => d.lane) : [],
       vacant: L ? L.desks.filter((d) => d.vacant).map((d) => d.lane) : [],
       stage: L?.stageName ?? null,
@@ -317,7 +352,8 @@ export function mountOffice(canvas, opts = {}) {
     if (!c || !head) return null;
     // the engine's character anchor stands 0.95 m over the hips
     const at = world.project([c.x, head[1] - 0.95 + CHEST, c.z]);
-    return { x: at.x, y: at.y, at: { x: c.x, z: c.z }, step: c.step, visible: at.visible, pose: c.clip, out: rowOf(statusOf.get(lane)).place === "break", marker: null, selected: selected === lane && !!ring.parent };
+    const m = marks.of(lane);
+    return { x: at.x, y: at.y, at: { x: c.x, z: c.z }, step: c.step, visible: at.visible, pose: c.clip, out: rowOf(statusOf.get(lane)).place === "break", marker: m?.marker ?? null, light: m?.light ?? null, selected: selected === lane && !!ring.parent };
   }
 
   const api = {
@@ -328,6 +364,7 @@ export function mountOffice(canvas, opts = {}) {
     get engine() { return world; },
     dispose() {
       cleanups.forEach((f) => f());
+      lamps?.dispose(); marks?.dispose();
       if (world) { world.dispose(); world = null; }
       balls.dispose();
       ring.geometry.dispose(); ring.material.dispose();
