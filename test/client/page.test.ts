@@ -69,8 +69,12 @@ test.skipIf(!chromeFound)("tabs, worker card, settings and sound respond", async
   expect(await page.evaluate(`document.querySelector("#feed .log").textContent.includes("Ship the thing?")`)).toBe(true);
   await page.evaluate(`document.getElementById("settingsBtn").click()`);
   expect(await page.evaluate(`!document.getElementById("settings").hidden`)).toBe(true);
-  // Only what still does something: PERFORMANCE and LEVEL NAMES (the pixel room's hero, season, hat and theme are gone).
-  expect(await page.evaluate(`[...new Set([...document.querySelectorAll("#settings [data-set]")].map((b) => b.dataset.set))]`)).toEqual(["performance"]);
+  // Only what still does something: PERFORMANCE, OUTSIDE and LEVEL NAMES (the pixel room's hero, season, hat and theme
+  // are gone).
+  expect(await page.evaluate(`[...new Set([...document.querySelectorAll("#settings [data-set]")].map((b) => b.dataset.set))]`)).toEqual(["performance", "outside"]);
+  // REROLL grows another land: a new seed, kept with the settings
+  await page.evaluate(`document.querySelector("#settings [data-reroll]").click()`);
+  expect(await page.evaluate(`typeof JSON.parse(localStorage.getItem("hq-settings")).outsideSeed`)).toBe("string");
   expect(await page.evaluate(`!!document.querySelector("#settings [data-levels]")`)).toBe(true);
   await page.evaluate(`document.querySelector('[data-set="performance"][data-val="saver"]').click()`);
   expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).performance`)).toBe("saver");
