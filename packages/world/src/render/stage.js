@@ -1,0 +1,117 @@
+// The stage: the renderer (MSAA, sRGB, Neutral tone mapping), the light rig and time of day, and one sun shadow
+// fitted to the lot and snapped to whole shadow texels. The shadow map redraws only when told something moved.
+import * as THREE from "three";
+
+const MAX_DPR = 2;
+const SHADOW_MAP = 2048;
+const SHADOW_RADIUS = 1.5; // texels; the taps are world-fixed (materials.js), so a soft edge stays still
+
+// Sun colour through the day (outside light, after the Sims 1 reference): sunrise and sunset #D96D32, day white,
+// dusk #575757, night #3E5898.
+const SKY = [
+  [0, "#3e5898", 0.35], [5, "#3e5898", 0.35], [6.5, "#d96d32", 0.75], [8, "#fff1dc", 1], [12, "#ffffff", 1],
+  [17, "#fff1dc", 1], [19, "#d96d32", 0.75], [20, "#575757", 0.45], [21, "#3e5898", 0.35], [24, "#3e5898", 0.35],
+];
+const _a = new THREE.Color(), _b = new THREE.Color();
+
+export function parseTime(t) {
+  if (typeof t === "number") return ((t % 24) + 24) % 24;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t));
+  return m ? (Number(m[1]) + Number(m[2]) / 60) % 24 : 14;
+}
+
+// { color, level (0..1 of daylight), sun: unit vector toward the sun, day: whether the sun is up }
+export function skyAt(hours) {
+  let i = 0;
+  while (i < SKY.length - 2 && SKY[i + 1][0] <= hours) i++;
+  const [h0, c0, l0] = SKY[i], [h1, c1, l1] = SKY[i + 1];
+  const k = h1 > h0 ? (hours - h0) / (h1 - h0) : 0;
+  const color = _a.set(c0).lerp(_b.set(c1), k).clone();
+  const level = l0 + (l1 - l0) * k;
+  // the sun rises in the east (+x) at 6:00, stands south (+z) at 12:30 and sets in the west at 19:00
+  const day = hours > 6 && hours < 19;
+  const phi = day ? (Math.PI * (hours - 6)) / 13 : Math.PI * 0.62;
+  const elev = day ? Math.max(0.35, Math.sin((Math.PI * (hours - 6)) / 13) * 1.05) : 0.9; // the moon stays high
+  const sun = new THREE.Vector3(Math.cos(elev) * Math.cos(phi), Math.sin(elev), Math.cos(elev) * Math.sin(phi)).normalize();
+  return { color, level, sun, day };
+}
+
+export function createStage(canvas, { antialias = true } = {}) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias, alpha: false, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+
+  const scene = new THREE.Scene();
+  const ambient = new THREE.AmbientLight("#ffffff", 1);
+  const hemi = new THREE.HemisphereLight("#fff6e8", "#b9a58a", 1);
+  const sun = new THREE.DirectionalLight("#ffffff", 1.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+  sun.shadow.radius = SHADOW_RADIUS;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.015;
+  scene.add(ambient, hemi, sun, sun.target);
+
+  let box = { min: [0, 0, 0], max: [10, 3, 10] }, sunDir = new THREE.Vector3(0, 1, 0);
+
+  // Fit the sun's shadow camera to the box, centred on it and snapped to whole texels in the light's frame, so the
+  // same world point always falls on the same texel: shadows never swim when the lot is refitted or the sun returns.
+  function fitShadow() {
+    const centre = new THREE.Vector3((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2);
+    const fwd = sunDir.clone().negate();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    let half = 0, depth = 0;
+    for (const x of [box.min[0], box.max[0]]) for (const y of [box.min[1], box.max[1]]) for (const z of [box.min[2], box.max[2]]) {
+      const v = new THREE.Vector3(x, y, z).sub(centre);
+      half = Math.max(half, Math.abs(v.dot(right)), Math.abs(v.dot(up)));
+      depth = Math.max(depth, Math.abs(v.dot(fwd)));
+    }
+    half = Math.ceil(half + 0.5); // whole metres: the texel size only changes when the lot does
+    const texel = (2 * half) / SHADOW_MAP;
+    const snap = (axis) => { const d = centre.dot(axis); return axis.clone().multiplyScalar(Math.round(d / texel) * texel - d); };
+    centre.add(snap(right)).add(snap(up));
+    const dist = depth + 20;
+    sun.position.copy(centre).addScaledVector(sunDir, dist);
+    sun.target.position.copy(centre);
+    const c = sun.shadow.camera;
+    c.left = -half; c.right = half; c.top = half; c.bottom = -half;
+    c.near = 1; c.far = dist + depth + 20;
+    c.updateProjectionMatrix();
+    sun.updateMatrixWorld();
+    sun.target.updateMatrixWorld();
+    renderer.shadowMap.needsUpdate = true;
+  }
+
+  function setShadowBox(b) { box = b; fitShadow(); }
+
+  function setTime(t, palette) {
+    const s = skyAt(parseTime(t));
+    sunDir = s.sun;
+    const night = 1 - s.level;
+    sun.color.copy(s.color);
+    sun.intensity = 1.7 * s.level;
+    sun.castShadow = true;
+    sun.shadow.intensity = 0.55 + 0.25 * s.level;
+    ambient.color.copy(s.color).lerp(new THREE.Color("#ffffff"), 0.4);
+    ambient.intensity = 0.55 + 0.75 * s.level;
+    hemi.color.set(palette?.sky ?? "#fff6e8").lerp(s.color, 0.5);
+    hemi.groundColor.set("#b9a58a");
+    hemi.intensity = 0.4 + 0.8 * s.level;
+    scene.background = new THREE.Color(palette?.bg ?? "#dfe6ea");
+    fitShadow();
+    return { night };
+  }
+
+  function resize(w, h, dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)) {
+    renderer.setPixelRatio(dpr);
+    renderer.setSize(w, h, false);
+  }
+
+  return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };
+}
