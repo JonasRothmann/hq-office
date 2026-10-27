@@ -31,15 +31,27 @@ const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) 
  * @property {[number, number]} focus   ground x, z the view centres on
  * @property {{ minX: number, minZ: number, maxX: number, maxZ: number }|null} bounds   the focus is clamped to these
  * @property {{ x: number, y: number }} offset   where the focus sits on screen, CSS px from the viewport's centre
+ * @property {Insets|null} insets   the edges of the viewport that a host's panels cover; the view fits the rest
  * @property {boolean} snap
  * @property {{ from: number, to: number, t: number }|null} turn         a turn in progress
  * @property {{ from: number, to: number, t: number }|null} zooming      a zoom in progress
  * @property {{ from: number[], to: number[], t: number }|null} moving   an eased focus move in progress
  */
 
+/** @typedef {{ left: number, top: number, right: number, bottom: number }} Insets   CSS px */
+
 /** @stability stable  @returns {CameraState} */
-export function createCamera({ w = 800, h = 600, dpr = 1, rot = 0, zoom = 1, focus = [0, 0], bounds = null, offset = { x: 0, y: 0 }, snap = true } = {}) {
-  return { w, h, dpr, rot, az: azimuth(rot), zoom, ppm: ZOOMS[zoom], focus: [...focus], bounds, offset: { ...offset }, snap, turn: null, zooming: null, moving: null };
+export function createCamera({ w = 800, h = 600, dpr = 1, rot = 0, zoom = 1, focus = [0, 0], bounds = null, offset = { x: 0, y: 0 }, insets = null, snap = true } = {}) {
+  const cam = { w, h, dpr, rot, az: azimuth(rot), zoom, ppm: ZOOMS[zoom], focus: [...focus], bounds, offset: { ...offset }, insets: null, snap, turn: null, zooming: null, moving: null };
+  if (insets) insetCamera(cam, insets);
+  return cam;
+}
+
+// The part of the viewport a host's panels leave free: the focus sits at its centre (the offset follows), and
+// fitCamera fits a box into it. Nothing moves or refits on its own; the host calls fit again if it wants to.
+export function insetCamera(cam, { left = 0, top = 0, right = 0, bottom = 0 } = {}) {
+  cam.insets = { left, top, right, bottom };
+  cam.offset = { x: (left - right) / 2, y: (top - bottom) / 2 };
 }
 
 /** @stability stable */
@@ -96,8 +108,10 @@ export function fitCamera(cam, b, { height = 3.01, margin = 24, ease = false } =
       needH = Math.max(needH, Math.abs(v) * 2);
     }
   }
+  const i = cam.insets ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  const freeW = cam.w - i.left - i.right, freeH = cam.h - i.top - i.bottom;
   let step = 0;
-  for (let s = ZOOMS.length - 1; s >= 0; s--) if (needW * ZOOMS[s] <= cam.w - margin * 2 && needH * ZOOMS[s] <= cam.h - margin * 2) { step = s; break; }
+  for (let s = ZOOMS.length - 1; s >= 0; s--) if (needW * ZOOMS[s] <= freeW - margin * 2 && needH * ZOOMS[s] <= freeH - margin * 2) { step = s; break; }
   if (ease) { focusCamera(cam, focus, { zoom: step }); return step; }
   cam.focus = focus;
   cam.moving = null;
