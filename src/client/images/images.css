@@ -84,6 +84,7 @@ dialog.preview figcaption { font: 500 12px/1.4 var(--font); color: rgba(255, 255
   .chip .cx span { width: 22px; height: 22px; }
   .aplus { width: 44px; height: 44px; }
   .aitem, .ashelf .aroom, .ashelf .aback { min-height: 44px; }
+  .alink input { height: 40px; font-size: 16px; }
   .reply textarea { min-height: calc(1.4em + 9px); max-height: calc(7em + 9px); padding: 9px 12px 0; }
   .reply .acts .send { min-height: 40px; }
 }
