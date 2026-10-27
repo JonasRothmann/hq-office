@@ -20,7 +20,8 @@ import { facingAngle, poseOf } from "./motion.js";
  *   stand | walk | turn | enter | wait | then | loop | ...   the step in progress, one at a time
  *
  * Events (opts.emit and on()): "act" { who, clip } when an act is done; "cancel" { who, problem } when an act could
- * not go on; "error" { system, message } when a system threw and was switched off.
+ * not go on, or { who, problem, act, refused: true } when an act from the doc could not start; "error"
+ * { system, message } when a system threw and was switched off.
  *
  * @param {object} lot   from buildLot
  * @param {object} nav   from createNav
@@ -92,10 +93,14 @@ export function createSim(lot, nav, opts = {}) {
     if (body && !ctx.nav.walkable(...tileOf(body))) stepOff(id, body);
   }
 
-  /** Plan an act and queue its steps; resolves when the character is in place, rejects with a WorldError. */
-  function act(id, a) {
+  /**
+   * Plan an act and queue its steps; resolves when the character is in place, rejects with a WorldError. An act from
+   * the doc ({ doc: true }) has no caller holding its promise, so a refusal is also a `cancel` event.
+   */
+  function act(id, a, { doc = false } = {}) {
     if (!ecs.has(id, "body") || !ecs.has(id, "character")) return Promise.reject(new WorldError([problem("act.who", "act", `no character '${id}'`, `use one of: ${ecs.query("character").map(([c]) => c).join(", ")}`)]));
     const p = start(id, a);
+    if (p && doc) emit("cancel", { who: id, problem: p, act: a, refused: true });
     if (p) return Promise.reject(new WorldError([p], "act"));
     settle(id); // the act this one replaces is over
     return new Promise((resolve, reject) => waiting.set(id, { resolve, reject }));

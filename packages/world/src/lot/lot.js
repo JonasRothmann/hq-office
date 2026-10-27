@@ -7,7 +7,7 @@ import { detectRooms } from "../model/rooms.js";
 import { problem, WorldError, errorsOf } from "../model/problems.js";
 import { createCatalog, suggest, checkPack } from "../catalog/define.js";
 import { createNav } from "../nav/nav.js";
-import { planAct } from "../nav/act.js";
+import { planAct, checkAct } from "../nav/act.js";
 
 const isInt = (n) => Number.isInteger(n);
 const tileText = ([x, z]) => `(${x},${z})`;
@@ -37,8 +37,13 @@ const tileText = ([x, z]) => `(${x},${z})`;
  * @property {{ id: string, tile: [number, number], facing: string, look: object }[]} characters
  */
 
-/** @returns {{ lot: Lot|null, problems: import("../model/problems.js").Problem[], catalog: object }} */
-export function analyse(world) {
+/**
+ * @param {{ live?: Set<string> }} [opts]   live: characters that already exist at run time (an edit): their `at` is
+ *   only a spawn tile, so it is not checked, and their acts are checked without a position or holds (checkAct); the
+ *   sim plans them from where they are and reports a refusal as a `cancel` event
+ * @returns {{ lot: Lot|null, problems: import("../model/problems.js").Problem[], catalog: object }}
+ */
+export function analyse(world, { live = new Set() } = {}) {
   const { doc } = world;
   const catalog = createCatalog(world.packs ?? []);
   const P = [...catalog.problems];
@@ -163,6 +168,7 @@ export function analyse(world) {
     if (!c.id || cids.has(c.id)) P.push(problem("character.id", `${at}.id`, c.id ? `id '${c.id}' is used twice` : "a character needs an id", "give each character its own id"));
     cids.add(c.id);
     const [x, z] = c.at ?? [];
+    if (live.has(c.id)) { characters.push({ id: c.id, tile: [x, z], facing: c.facing, look: c.look ?? {} }); return; }
     if (!isInt(x) || !isInt(z) || !inLot(x, z)) { P.push(problem("character.at", `${at}.at`, `at ${JSON.stringify(c.at)} is not a tile in the lot`, `use [x, z] with 0 <= x < ${w} and 0 <= z < ${d}`)); return; }
     if (blocked.has(tileKey(x, z))) P.push(problem("character.blocked", `${at}.at`, `${c.id} starts on tile ${tileText([x, z])}, inside '${objects.find((o) => o.tiles.some(([tx, tz]) => tx === x && tz === z))?.id}'`, `start on a free tile such as ${freeNear([x, z], [1, 1], occupied, inLot, walls).map(tileText).join(", ")}`));
     if (!SIDES.includes(c.facing)) P.push(problem("character.facing", `${at}.facing`, `facing '${c.facing}' is not n, e, s or w`, "use n, e, s or w"));
@@ -186,6 +192,7 @@ export function analyse(world) {
   doc.acts.forEach((a, i) => {
     const who = characters.find((c) => c.id === a.who);
     if (!who) { P.push(problem("act.who", `acts[${i}].who`, `no character '${a.who}'`, `use one of: ${characters.map((c) => c.id).join(", ") || "(no characters)"}`)); return; }
+    if (live.has(a.who)) { const p = checkAct(lot, a, `acts[${i}]`); if (p) P.push(p); return; }
     const r = planAct(lot, nav, who, a, { at: `acts[${i}]`, holder: (o, s) => held.get(`${o}:${s}`) ?? null });
     if (r.problem) { P.push(r.problem); return; }
     for (const [k, v] of held) if (v === a.who) held.delete(k);

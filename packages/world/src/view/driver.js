@@ -104,7 +104,7 @@ export function createDriver(world, opts = {}) {
     sim, cam, stats,
 
     /** Run the world's own acts (createWorld does, unless startActs is false). */
-    startActs() { for (const a of current.doc.acts) sim.act(a.who, a).catch(report); },
+    startActs() { for (const a of current.doc.acts) sim.act(a.who, a, { doc: true }).catch(report); },
 
     /**
      * One frame of dtMs at time now (ms): step the camera and the sim, then say what to draw.
@@ -140,7 +140,8 @@ export function createDriver(world, opts = {}) {
       const k = JSON.stringify(nextWorld.doc);
       const samePacks = nextWorld.packs.length === current.packs.length && nextWorld.packs.every((p, i) => p === current.packs[i]);
       if (k === key && samePacks) return null;
-      const r = analyse(nextWorld);
+      // characters that exist already are where the sim has them: their doc `at` and acts are not checked by position
+      const r = analyse(nextWorld, { live: new Set(sim.characters()) });
       if (errorsOf(r.problems).length) throw new WorldError(r.problems, `world '${nextWorld.doc.id}'`);
       const diff = diffWorld(current.doc, nextWorld.doc);
       if (!samePacks) diff.packs = true;
@@ -158,7 +159,7 @@ export function createDriver(world, opts = {}) {
         cam.focus = [Math.min(cam.focus[0], lot.w), Math.min(cam.focus[1], lot.d)]; // a lot that shrank; no refit
       }
       current = nextWorld; key = k;
-      for (const a of diff.acts) sim.act(a.who, a).catch(report);
+      for (const a of diff.acts) sim.act(a.who, a, { doc: true }).catch(report);
       invalidate({ shadows: true });
       return diff;
     },

@@ -26,11 +26,8 @@ const ENTER = { sit: "sit-down" };
  */
 export function planAct(lot, nav, who, act, { at = "acts", holder = () => null } = {}) {
   const path = at;
-  if (!ACTS.includes(act?.do)) {
-    const near = closest(String(act?.do), ACTS);
-    return { problem: problem("act.do", `${path}.do`, `'${act?.do}' is not an act`, `use ${near.length ? near.join(" or ") : ACTS.join(", ")}`) };
-  }
-  if (act.clip !== undefined && !CLIPS[act.clip]) return { problem: clipProblem(act.clip, `${path}.clip`) };
+  const bad = checkAct(lot, act, path);
+  if (bad) return { problem: bad };
   const from = who.tile;
   if (act.do === "walk") {
     const tiles = nav.path(from, [act.to]);
@@ -39,10 +36,8 @@ export function planAct(lot, nav, who, act, { at = "acts", holder = () => null }
   }
   if (act.do === "visit") return planVisit(lot, nav, who, act, path, holder);
   const o = lot.objects.find((x) => x.id === act.target);
-  if (!o) return { problem: problem("act.target", path, `no object '${act.target}'`, `use one of: ${lot.objects.filter((x) => Object.keys(x.slots).length).map((x) => x.id).join(", ") || "(none with slots)"}`) };
   const slotName = act.slot ?? Object.keys(o.slots)[0];
   const slot = o.slots[slotName];
-  if (!slot) return { problem: problem("act.slot", path, `${o.id} (${o.type}) has no slot '${act.slot}'`, `its slots: ${Object.keys(o.slots).join(", ") || "none"}`) };
   const held = holder(o.id, slotName);
   if (held && held !== who.id) return { problem: problem("act.taken", path, `${o.id}'s ${slotName} is held by ${held}`, "pick another object or wait until it is free") };
   const stands = slot.stand.filter(([x, z]) => nav.walkable(x, z));
@@ -56,6 +51,28 @@ export function planAct(lot, nav, who, act, { at = "acts", holder = () => null }
   return { steps, hold: { object: o.id, slot: slotName }, stand: tiles[tiles.length - 1] };
 }
 
+/**
+ * What an act needs that does not depend on where the character stands or who holds what: a known act and clip, an
+ * object that exists and the slot it names, and the same for a visit's `then`. The problem, or null.
+ */
+export function checkAct(lot, act, path = "acts") {
+  if (!ACTS.includes(act?.do)) {
+    const near = closest(String(act?.do), ACTS);
+    return problem("act.do", `${path}.do`, `'${act?.do}' is not an act`, `use ${near.length ? near.join(" or ") : ACTS.join(", ")}`);
+  }
+  if (act.clip !== undefined && !CLIPS[act.clip]) return clipProblem(act.clip, `${path}.clip`);
+  if (act.do === "walk") return null;
+  const o = lot.objects.find((x) => x.id === act.target);
+  if (act.do === "visit") {
+    if (!o) return problem("act.target", path, `no object '${act.target}'`, `use one of: ${lot.objects.map((x) => x.id).join(", ")}`);
+    return act.then ? checkAct(lot, act.then, `${path}.then`) : null;
+  }
+  if (!o) return problem("act.target", path, `no object '${act.target}'`, `use one of: ${lot.objects.filter((x) => Object.keys(x.slots).length).map((x) => x.id).join(", ") || "(none with slots)"}`);
+  const slotName = act.slot ?? Object.keys(o.slots)[0];
+  if (!o.slots[slotName]) return problem("act.slot", path, `${o.id} (${o.type}) has no slot '${act.slot}'`, `its slots: ${Object.keys(o.slots).join(", ") || "none"}`);
+  return null;
+}
+
 // Visit: walk to a free tile beside an object, face it, wait, then do `then` (another act) from there, or stand idle.
 // { do: "visit", target: "desk-3", wait: 4, then: { do: "sit", target: "chair-1", clip: "type" } }
 // `then` is checked now (and its slot held from now on), but planned when the wait ends, from where the visitor
@@ -63,7 +80,6 @@ export function planAct(lot, nav, who, act, { at = "acts", holder = () => null }
 const SIDE_OF = { "1,0": "w", "-1,0": "e", "0,1": "n", "0,-1": "s" };
 function planVisit(lot, nav, who, act, path, holder) {
   const o = lot.objects.find((x) => x.id === act.target);
-  if (!o) return { problem: problem("act.target", path, `no object '${act.target}'`, `use one of: ${lot.objects.map((x) => x.id).join(", ")}`) };
   const own = new Set(o.tiles.map(([x, z]) => `${x},${z}`));
   const beside = o.tiles.flatMap(([x, z]) => [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]]).filter(([x, z]) => !own.has(`${x},${z}`) && nav.walkable(x, z));
   const tiles = beside.length ? nav.path(who.tile, beside) : null;
