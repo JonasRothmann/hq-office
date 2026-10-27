@@ -2,6 +2,14 @@
 
 All notable changes to `@hq/world`'s public API (the names in `api.txt` and the world format).
 
+## [Unreleased]
+
+### Changed
+
+- `lintCoplanar` skips two faces in one plane when their bounding boxes are apart, before it clips them. The
+  findings are the same; linting a lot with many like objects (an office of 24 desks, in 24 views) takes 3 s
+  instead of 16 s. No export changed, so `api.txt` did not.
+
 ## [0.2.1] - 2026-10-27
 
 ### Added

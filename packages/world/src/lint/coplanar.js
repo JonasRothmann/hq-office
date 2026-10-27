@@ -89,7 +89,7 @@ export function lintCoplanar(prims) {
   const named = new Map(), nth = [];
   for (const p of prims) { const k = `${p.owner ?? ""}|${p.part}`; named.set(k, (named.get(k) ?? 0) + 1); nth.push(named.get(k)); }
   const part = (i) => { const p = prims[i]; return { owner: p.owner, part: p.part, ...(named.get(`${p.owner ?? ""}|${p.part}`) > 1 ? { n: nth[i] } : {}) }; };
-  prims.forEach((p, i) => { for (const f of facesOf(p)) faces.push({ ...f, i, key: f.n.map((x) => Math.round(x * 1e4)).join(",") }); });
+  prims.forEach((p, i) => { for (const f of facesOf(p)) faces.push({ ...f, i, key: f.n.map((x) => Math.round(x * 1e4)).join(","), box: boxOf(f.pts) }); });
   const groups = new Map();
   for (const f of faces) { if (!groups.has(f.key)) groups.set(f.key, []); groups.get(f.key).push(f); }
   const pairs = [];
@@ -98,7 +98,8 @@ export function lintCoplanar(prims) {
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < group.length && group[j].d - group[i].d < COPLANAR_EPS; j++) {
         const A = group[i], B = group[j];
-        if (A.i === B.i) continue;
+        // every desk top in a lot lies in one plane: faces whose boxes are apart cannot overlap, so skip the clip
+        if (A.i === B.i || apart(A.box, B.box)) continue;
         const pa = flatten(A.pts, A.n), pb = flatten(B.pts, A.n);
         const o = clipPoly(ccw(pa), ccw(pb));
         const ar = o.length >= 3 ? area(o) : 0;
@@ -110,6 +111,15 @@ export function lintCoplanar(prims) {
   }
   return pairs;
 }
+
+// A face's bounding box, [min, max]; two boxes are apart when they miss each other on some axis by more than the
+// plane tolerance (faces that touch along an edge still go to the clip, which finds no area).
+function boxOf(pts) {
+  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  for (const p of pts) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
+  return [min, max];
+}
+const apart = ([amin, amax], [bmin, bmax]) => [0, 1, 2].some((k) => amax[k] < bmin[k] - COPLANAR_EPS || bmax[k] < amin[k] - COPLANAR_EPS);
 
 function ccw(poly) {
   let s = 0;
