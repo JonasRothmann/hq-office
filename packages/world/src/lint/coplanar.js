@@ -1,6 +1,6 @@
 // The coplanar lint: faces that lie in the same plane, face the same way and overlap. The GPU cannot tell which is
 // in front, so they z-fight (flicker as the camera moves). Pure: it reads primitive lists, never three.js.
-import { corners, apply3 } from "../catalog/kit.js";
+import { corners, apply3, BOX_FACES } from "../catalog/kit.js";
 
 export const COPLANAR_EPS = 0.001;   // faces closer than 1 mm count as one plane
 const MIN_AREA = 1e-6;               // m²: touching along an edge is not overlapping
@@ -8,12 +8,10 @@ const MIN_AREA = 1e-6;               // m²: touching along an edge is not overl
 // Every planar face of a primitive: { n: [x, y, z] outward, d: n·p, pts: [[x, y, z], ...] }.
 export function facesOf(p) {
   if (p.shape === "box") {
-    const c = corners(p); // index = xi * 4 + yi * 2 + zi
-    const quads = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]];
-    const local = [[-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1], [0, -1, 0], [0, 1, 0]];
-    return quads.map((q, i) => {
-      const n = apply3(p.m, local[i]);
-      const pts = q.map((k) => c[k]);
+    const c = corners(p);
+    return BOX_FACES.filter((f) => !p.omit?.includes(f.key)).map((f) => {
+      const n = apply3(p.m, f.n);
+      const pts = f.quad.map((k) => c[k]);
       return { n, d: dot(n, pts[0]), pts };
     });
   }

@@ -13,7 +13,8 @@ const T = WALL_T, HALF = WALL_T / 2;
 const PAD = 8;          // the land drawn round the lot, metres
 const LAND_DROP = 0.03; // the land round the lot sits this much lower: the lot's edge is a small kerb, never a shared plane
 
-const box = (part, size, at, color, extra = {}) => ({ shape: "box", part, size, at, m: IDENTITY, color, finish: "matte", ...extra });
+// Bottoms are never seen (they stand on the ground or a slab), so they are not emitted: no hidden coplanar faces.
+const box = (part, size, at, color, extra = {}) => ({ shape: "box", part, size, at, m: IDENTITY, color, finish: "matte", omit: ["-y"], ...extra });
 
 // faces: per-face colour and pattern by the box's local face ("+x", "-x", "+y", "-y", "+z", "-z").
 /** @stability stable */
@@ -25,8 +26,7 @@ export function buildArchitecture(lot, catalog, cut = new Set()) {
   // ground: the lot, and lower land round it
   prims.push(box("lot", [lot.w, 0.04, lot.d], [lot.w / 2, -0.04, lot.d / 2], "ground", { owner: "ground" }));
   prims.push(box("land", [lot.w + PAD * 2, 0.04, lot.d + PAD * 2], [lot.w / 2, -0.04 - LAND_DROP, lot.d / 2], "ground-dark", { owner: "ground" }));
-  // the land's top face would lie under the lot's bottom face: opposite facing, so never a fight; and the lot box's
-  // sides show as a 3 cm kerb round the lot.
+  // the land's top face is 3 cm under the lot's, so the lot's sides show as a small kerb round it.
 
   // floor slabs, one box per run of same-finish tiles along x
   for (let z = 0; z < lot.d; z++) {

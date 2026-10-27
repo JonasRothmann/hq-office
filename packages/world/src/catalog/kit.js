@@ -6,7 +6,8 @@
 // Euler order "YXZ").
 
 /** @typedef {{ shape: "box"|"cyl", part: string, size: number[], at: number[], m: number[], color: string,
- *              finish: "matte"|"glow"|"glass", r?: number, top?: number, seg?: number, owner?: string }} Primitive */
+ *              finish: "matte"|"glow"|"glass", r?: number, top?: number, seg?: number, owner?: string,
+ *              omit?: string[], faces?: Record<string, { color: string, pattern?: string }> }} Primitive */
 
 // 3×3 rotation matrices, row-major.
 export const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
@@ -29,9 +30,9 @@ export class Kit {
     this.prims = [];
   }
 
-  // A box w × h × d standing on `at`.
-  box(part, [w, h, d], at, color, { rot, finish = "matte" } = {}) {
-    this.prims.push({ shape: "box", part, size: [w, h, d], at: [...at], m: eulerYXZ(rot), color, finish });
+  // A box w × h × d standing on `at`. omit: faces never seen (["-y"] for a part standing on another), not drawn.
+  box(part, [w, h, d], at, color, { rot, finish = "matte", omit } = {}) {
+    this.prims.push({ shape: "box", part, size: [w, h, d], at: [...at], m: eulerYXZ(rot), color, finish, ...(omit ? { omit } : {}) });
     return this;
   }
 
@@ -58,7 +59,18 @@ export function place(p, m, t, owner) {
   return { ...p, at: [a[0] + t[0], a[1] + t[1], a[2] + t[2]], m: mul3(m, p.m), owner: owner ?? p.owner };
 }
 
-// The eight corners of a box primitive (or the bounding box of a cylinder), in its parent's frame.
+// A box's faces: their key (for per-face colours and `omit`), their corners (indices into corners()) counter-clockwise
+// seen from outside, and their outward normal in the box's frame.
+export const BOX_FACES = [
+  { key: "-x", quad: [0, 1, 3, 2], n: [-1, 0, 0] },
+  { key: "+x", quad: [4, 6, 7, 5], n: [1, 0, 0] },
+  { key: "-y", quad: [0, 4, 5, 1], n: [0, -1, 0] },
+  { key: "+y", quad: [2, 3, 7, 6], n: [0, 1, 0] },
+  { key: "-z", quad: [0, 2, 6, 4], n: [0, 0, -1] },
+  { key: "+z", quad: [1, 5, 7, 3], n: [0, 0, 1] },
+];
+
+// The eight corners of a box primitive (or the bounding box of a cylinder), in its parent's frame; index = xi·4 + yi·2 + zi.
 export function corners(p) {
   const [w, h, d] = p.size;
   const out = [];
