@@ -10,7 +10,7 @@ const DAY = {
   // metal
   steel: "#2b2b2e", "steel-light": "#3a3a3c", brushed: "#a9a7a1",
   // cloth, paper, stone and clay
-  linen: "#e6ddcc", oat: "#ded3bf", sand: "#d3c7b2", wool: "#b9b1a4", felt: "#a39b8c", cord: "#d3c39c",
+  linen: "#e6ddcc", "rug-field": "#d3cdc0", oat: "#ded3bf", sand: "#d3c7b2", wool: "#b9b1a4", felt: "#a39b8c", cord: "#d3c39c",
   paper: "#f6efe0", "paper-edge": "#e2d8c2", charcoal: "#3a3937", ink: "#26272a", stone: "#a8a196", "stone-light": "#c9c1b1",
   clay: "#b98a6a", ceramic: "#ece6db", "ceramic-grey": "#8a7a68",
   sofa: "#c9c0ae", "sofa-cushion": "#d8d0bf", counter: "#f2efe8",
@@ -34,7 +34,15 @@ const DAY = {
 
 const NIGHT = {
   ...DAY,
-  "washi-glow": "#ffe2b0", "bulb-glow": "#ffd9a0", "screen-glow": "#a9cbd2", "sign-glow": "#ffc47a",
+  // lit paper and bulbs by night: amber, deep enough that the tone curve keeps the colour instead of clipping to white
+  "washi-glow": "#f4c483", "bulb-glow": "#f2b56e", "screen-glow": "#a9cbd2", "sign-glow": "#f7b76a",
 };
 
 export const PALETTE = { light: DAY, dark: NIGHT };
+
+// The engine's own colours, recoloured for this office: smoked oak wall tops instead of ochre, a muted moss ground
+// instead of a bright lawn, and a warm lamp light.
+export const OVERRIDES = {
+  light: { cap: "#4a3b2f", ground: "#a2a58b", "ground-dark": "#8f957a", foundation: "#7d746a", lamp: "#ffd29a" },
+  dark: { cap: "#3d3128", ground: "#79806a", "ground-dark": "#6a715d", foundation: "#5e574f", lamp: "#ffbf78" },
+};
