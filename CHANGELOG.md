@@ -5,6 +5,11 @@ All notable changes to HQ Office are listed here, newest first. The format follo
 
 ## [Unreleased]
 
+### Added
+
+- **The new office has the land round it.** The OUTSIDE setting puts the garden and the valley or the town round the
+  building, and REROLL draws new land. Switching keeps the page. POWER SAVER holds the town still.
+
 ### Fixed
 
 - **A second ⌘Enter, or a held one, no longer answers the next question.** After the reader moves on to the next

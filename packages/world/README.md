@@ -64,6 +64,8 @@ too, takes no light from lamps (they are indoors, and shine through walls) and f
 `k.light(...)`: it adds its colour to the ground, fading out 0.5 m from the piece's origin (scale it to size it), so a
 token that is black by day and warm by night lights the street only by night.
 
+A mover with `bob` rises, falls and rolls in place. At speed 0 it stays put, like a boat at its mooring.
+
 ## Finishes
 
 A floor or wall finish is `defineObject({ id, kind: "floor" | "wall", color, pattern })`. Patterns are `plain`,

@@ -1124,6 +1124,21 @@ done; step 4 has not started.
      181 calls and 362k triangles (without a shadow redraw 112 and 302k), the valley 159 and 318k (90 and 258k);
      the office alone is 109 and 112k. A town has about 7,400 windows, so a pane and its frame draw only their
      fronts. Tested in `test/client/office-outside.test.ts` and the package's `test/scenery.test.ts`.
+   - The look, after the first shots against the old renderer: each walker and rider has hair of its own (a `hair`
+     piece tinted `hair-0` to `hair-6`; the old office gave everyone the same). Boats are movers at speed 0 that bob
+     at their moorings (the engine's new `bob`). Shop windows take a warmer `pane-shop` by night, with their light on
+     the pavement, and the canal houses throw streaks of window light across the water. The sun's shadows reach 10 m
+     past the land's lot, and the trees within it cast them (the street trees by the office and the nearest meadow).
+   - Cost after the light pools and these: the town 186 calls and 364k triangles with a shadow redraw (116 and 302k
+     without), the valley 164 and 323k (93 and 258k). `check.ts` passes on the land pack.
+   - The page: with OFFICE new, `office-view/view.js` takes the OUTSIDE setting. Nature, city or off, and REROLL's
+     seed, go to the engine with `setScenery`. The doc always lists the land pack, and while the land shows, the
+     lot's ground takes the lawn (`LAWN`). Switching keeps the page and the WebGL context. A lot that changes lays the
+     land again round it, keeping the last land (`landFor`'s `prev`). PERFORMANCE sets `setIdleFps` (smooth 30,
+     balanced 15, saver 0), so in a power saver the town holds still. `test/client/office-view.test.ts` checks city
+     under 220 calls and the switch to nature.
+   - Left for later: traffic behaviour (cars wait at no junction or zebra, and walkers' legs do not swing) and paving
+     textures (setts, slabs and asphalt are flat colours).
 
 The page switches for good only when step 4's world is the default, and that change deletes
 `src/client/world/{camera,scene,rooms,kit,walk}.js` and `plan.js`'s `wallCuts` and `cameraSide`. Golden numbers in

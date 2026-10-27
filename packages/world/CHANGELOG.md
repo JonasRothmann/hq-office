@@ -37,6 +37,12 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   its own). `checkScenery(scenery, catalog)` names each mistake with its path and a fix; `createWorld` and
   `setScenery` throw a `WorldError` on one. `planScenery` and `moverPlaces(mover, t)` are the pure plan and where
   each mover is at a time. New in `api.txt`: `checkScenery`, `planScenery`, `moverPlaces`.
+- `bob` on a scenery mover: the mover rises and falls by `h` over `period`, and `roll` (about its length) and `pitch`
+  (about its width) take slower periods of their own, so a boat can bob at its mooring. Every field is optional:
+  `{ h, roll, pitch, period, phase }`, with defaults of 0.035 m, 0.03 rad, 0.012 rad, 5.7 s and 0 s. Each copy after
+  the first runs 1.7 s further ahead. At speed 0 the copies stay where `at` puts them, facing along the route (a
+  two-point route gives a boat its heading). `moverPlaces` returns `[x, y, z, ry, roll, pitch]` for a mover that
+  bobs, and `[x, y, z, ry]` otherwise. `checkScenery` names a bad `bob` with the code `scenery.bob`. No new exports.
 - `k.light(part, size, at, color)` and the finish `"light"`: a soft pool of light on the ground. It is unlit and
   added to what lies under it, brightest at its object's origin and gone 0.5 m from it (scale the object to size the
   pool), and casts and takes no shadow. Black adds nothing, so a token that is black by day shows only by night.
