@@ -89,9 +89,9 @@ test.skipIf(!chromeFound)("the filters, the reader, the pills, the worker card, 
   await page.evaluate(`document.querySelector('[data-filter="needs"]').click()`);
   await page.evaluate(`document.getElementById("settingsBtn").click()`);
   expect(await page.evaluate(`!document.getElementById("settings").hidden`)).toBe(true);
-  // Only what still does something: PERFORMANCE, OUTSIDE and LEVEL NAMES (the pixel room's hero, season, hat and theme
+  // Only what still does something: PERFORMANCE, OFFICE, OUTSIDE and LEVEL NAMES (the pixel room's hero, season, hat and theme
   // are gone).
-  expect(await page.evaluate(`[...new Set([...document.querySelectorAll("#settings [data-set]")].map((b) => b.dataset.set))]`)).toEqual(["performance", "outside"]);
+  expect(await page.evaluate(`[...new Set([...document.querySelectorAll("#settings [data-set]")].map((b) => b.dataset.set))]`)).toEqual(["performance", "office", "outside"]);
   // REROLL grows another land: a new seed, kept with the settings
   await page.evaluate(`document.querySelector("#settings [data-reroll]").click()`);
   expect(await page.evaluate(`typeof JSON.parse(localStorage.getItem("hq-settings")).outsideSeed`)).toBe("string");
