@@ -6,7 +6,7 @@
 import { createWorld } from "@hq/world";
 import { fromJSON } from "@hq/world/model";
 import { THREE, bindWorld, runFrame } from "../world/api.js";
-import { Balls } from "../world/balls.js";
+import { Balls } from "./balls.js";
 import { emit } from "../core/bus.js";
 import japandi from "../office/japandi/index.js";
 import land from "../office/outside/land/index.js";

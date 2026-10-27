@@ -8,7 +8,7 @@ import { createScene } from "./scene.js";
 import { buildRooms } from "./rooms.js";
 import { buildDesk, buildTeamRoom, buildSuite, buildBreak, DESK_SPOTS, SUITE_SPOTS, localSize } from "./furniture.js";
 import { Worker } from "./people.js";
-import { Balls } from "./balls.js";
+import { Balls } from "../office-view/balls.js";
 import { route } from "./walk.js";
 import { screen as screenTexture, glow } from "./textures.js";
 import { bindWorld, runFrame } from "./api.js";

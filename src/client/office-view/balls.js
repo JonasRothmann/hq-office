@@ -1,6 +1,15 @@
 // Subagent balls: one small sphere per running subagent, hopping round its lane's desk, coloured by model family.
-import { THREE } from "./kit.js";
-import { MODEL, modelFamily } from "./look.js";
+import { THREE } from "../world/api.js";
+
+// A subagent's colour by model family.
+const MODEL = { opus: "#8e4ec6", sonnet: "#12a594", haiku: "#f5a524", other: "#8b8d98" };
+
+// A subagent's family: the server's own word when it sent one, else read from the model id.
+function modelFamily(model = "", family = null) {
+  if (family && family in MODEL) return family;
+  const m = String(model).toLowerCase();
+  return m.includes("opus") ? "opus" : m.includes("sonnet") ? "sonnet" : m.includes("haiku") ? "haiku" : "other";
+}
 
 const MAX_PER_DESK = 8;
 const R = 0.075;
