@@ -4,8 +4,8 @@
 // walkers and riders step up and down with the ground (road, bike track, pavement, quay, the arch of a footbridge).
 import { THREE, instanced } from "./parts.js";
 import { bike, boat, bus, car, carLights, cargoBike, kei, personBody, personHead, personLeg } from "./models.js";
-import { LEVEL } from "./gen.js";
-import { BOATS } from "./city.js";
+import { LEVEL } from "../../office/outside/gen.js";
+import { BOATS } from "../../office/outside/city.js";
 
 const STUCK = 5;   // seconds stopped before a vehicle stops waiting (so nothing can lock up for good)
 const STEP = 0.5;  // metres between samples of the ground along a loop

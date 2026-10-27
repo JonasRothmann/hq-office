@@ -90,7 +90,7 @@ export const LOADS_USER_FILES: Record<string, string> = {
 // that cannot be changed through the read (a string); any other mention (an alias, a write, a call) breaks the rule.
 const SHARED_THREE = /\b(?:THREE\s*\.\s*)?(?:ShaderChunk|ShaderLib|UniformsLib|ColorManagement|Cache|DefaultLoadingManager|DEFAULT_UP|DEFAULT_MATRIX_AUTO_UPDATE|DEFAULT_MATRIX_WORLD_AUTO_UPDATE)\b(?:\s*\.\s*\w+)*|\bTHREE\s*\[/g;
 export const SHARED_READS: Record<string, string[]> = {
-  "src/render/materials.js": ["THREE.ShaderChunk.shadowmap_pars_fragment"], // a string: copied into the engine's own shaders
+  "src/render/materials.js": ["THREE.ShaderChunk.shadowmap_pars_fragment", "THREE.ShaderChunk.lights_fragment_begin"], // strings: copied into the engine's own shaders
 };
 function sharedState(rel: string, code: string): string[] {
   const bad: string[] = [];

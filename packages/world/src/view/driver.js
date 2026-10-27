@@ -6,7 +6,9 @@
 // invalidated (an edit, a theme or time change, a hover, a resize). The step that ends a motion is drawn too: the
 // camera's snapped pose at rest and the clip a cross-fade ends on. Redraw the shadow map only when a character moved
 // or changed pose, the cut walls changed, or an edit, theme or time change asked for it. A clip looping in place (breathing,
-// typing) is not motion: it draws at idleFps (default 0, never) and never redraws shadows. Nothing else draws.
+// typing) is not motion: it draws at idleFps (default 0, never) and never redraws shadows. Scenery that moves (cars,
+// boats) is ambient motion too: it draws at idleFps, and its clock runs only while idleFps is above 0, so at 0 the
+// land holds still (a power saver) instead of jumping ahead on the next frame something else draws. Nothing else draws.
 import { analyse } from "../lot/lot.js";
 import { WorldError, errorsOf } from "../model/problems.js";
 import { fromJSON } from "../model/world.js";
@@ -49,7 +51,8 @@ export function createDriver(world, opts = {}) {
   if (opts.zoom !== undefined && ZOOMS[opts.zoom]) { cam.zoom = opts.zoom; cam.ppm = ZOOMS[opts.zoom]; }
   let wallMode = WALL_MODES.includes(opts.walls) ? opts.walls : "cutaway";
   let focusRoom = opts.focusRoom ?? null;
-  const idleFps = opts.idleFps ?? 0;
+  let idleFps = opts.idleFps ?? 0;
+  let sceneryMoving = false, sceneryT = 0; // seconds on the scenery's clock
   let paused = false;
 
   const pending = { render: true, shadows: true };
@@ -123,7 +126,8 @@ export function createDriver(world, opts = {}) {
       const busy = sim.step(dtMs / 1000);
       const moved = bodiesMoved() || fading(dtMs / 1000);
       const cutChanged = cutNow();
-      const ambient = idleFps > 0 && last.size > 0 && now - lastDraw >= 1000 / idleFps - 1;
+      if (idleFps > 0 && sceneryMoving) sceneryT += dtMs / 1000;
+      const ambient = idleFps > 0 && (last.size > 0 || sceneryMoving) && now - lastDraw >= 1000 / idleFps - 1;
       if (!(moving || busy || moved || cutChanged || pending.render || ambient)) return NONE;
       const shadows = moved || cutChanged || pending.shadows;
       lastDraw = now;
@@ -185,6 +189,12 @@ export function createDriver(world, opts = {}) {
     pause(on) { paused = !!on; if (!paused) invalidate(); },
     setWalls(mode, room = null) { if (WALL_MODES.includes(mode)) wallMode = mode; focusRoom = room; invalidate(); },
     invalidate,
+    /** How often ambient motion (clips looping in place, moving scenery) draws while nothing else moves; 0: never. */
+    setIdleFps(fps) { idleFps = Math.max(0, Number(fps) || 0); },
+    get idleFps() { return idleFps; },
+    /** Whether the scenery has movers; its clock (sceneryTime, seconds) runs only while idleFps is above 0. */
+    setScenery({ moving = false } = {}) { sceneryMoving = !!moving; invalidate({ shadows: true }); },
+    get sceneryTime() { return sceneryT; },
     /** A room's tiles as a box, for fitBox; null for an unknown room. */
     roomBox(id) {
       const r = lot.rooms.find((x) => x.id === id);

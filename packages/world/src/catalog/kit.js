@@ -6,9 +6,11 @@
 // Euler order "YXZ").
 
 /** @typedef {{ shape: "box"|"cyl", part: string, size: number[], at: number[], m: number[], color: string,
- *              finish: "matte"|"glow"|"glass", r?: number, top?: number, seg?: number, owner?: string,
- *              omit?: string[], faces?: Record<string, { color: string, pattern?: string }>, base?: number }} Primitive
- *  base: the height the foot darkening counts from (default at[1]). */
+ *              finish: "matte"|"glow"|"glass"|"light", r?: number, top?: number, seg?: number, owner?: string,
+ *              omit?: string[], faces?: Record<string, { color: string, pattern?: string }>, base?: number,
+ *              outdoor?: boolean }} Primitive
+ *  base: the height the foot darkening counts from (default at[1]). outdoor: drawn outdoors (the ground): the lamps,
+ *  which are indoors, never light it, and it fades with the scenery. */
 
 // 3×3 rotation matrices, row-major.
 export const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
@@ -51,6 +53,13 @@ export class Kit {
   // A thin pane that lets light through (window glass).
   glass(part, size, at, color = "glass", opts = {}) {
     return this.box(part, size, at, color, { ...opts, finish: "glass" });
+  }
+
+  // A soft pool of light on the ground (under a street lamp): unlit and added to what is under it, brightest at the
+  // object's origin and gone 0.5 m from it, so scale the object to size the pool. Its colour is what it adds: black
+  // adds nothing (a pool that shows only by night).
+  light(part, size, at, color, opts = {}) {
+    return this.box(part, size, at, color, { ...opts, finish: "light" });
   }
 }
 

@@ -3,7 +3,7 @@
 // stepped gables, windows, awnings, dormers), lamps hung on wires, trees, and the movers (movers.js).
 import { THREE, Parts, instanced, color, at, poolTexture } from "./parts.js";
 import { awning, gableEnds, gableSlopes, hangingLamp, hipRoof, spire, stepGable, tree, unitBox, windowPane } from "./models.js";
-import { LEVEL, ROAD, STOREY } from "./gen.js";
+import { LEVEL, ROAD, STOREY } from "../../office/outside/gen.js";
 import { Movers } from "./movers.js";
 
 const tint = new THREE.Color();

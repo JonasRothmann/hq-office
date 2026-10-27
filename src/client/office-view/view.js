@@ -1,20 +1,24 @@
 // The office on the @hq/world engine, behind the OFFICE setting (D18): mountOffice(canvas, opts) answers the same calls
 // as the classic renderer's mountWorld (world/world.js), so world/index.js drives either one the same way. Each state
 // change builds the doc again with officeDoc (office/plan.js) and hands it to world.apply, which rebuilds only what
-// changed. It binds itself to world/api.js, so the desk chips, the subagent balls and addToWorld work unchanged.
+// changed. It binds itself to world/api.js, so the desk chips, the subagent balls and addToWorld work unchanged. The
+// OUTSIDE setting puts the garden and the valley or the town round it as the engine's scenery (office/outside/).
 import { createWorld } from "@hq/world";
 import { fromJSON } from "@hq/world/model";
 import { THREE, bindWorld, runFrame } from "../world/api.js";
 import { Balls } from "../world/balls.js";
 import { emit } from "../core/bus.js";
 import japandi from "../office/japandi/index.js";
+import land from "../office/outside/land/index.js";
+import { outsideScenery, landFor, MODES, LAWN } from "../office/outside/scenery.js";
 import { officeDoc, deskId, workerId } from "../office/plan.js";
 import { rowOf } from "../office/acts.js";
 
-// Frames a second per PERFORMANCE choice while nothing moves (workers typing, balls hopping). POWER SAVER: none, so
-// the engine draws only when something changes or moves.
+// Frames a second per PERFORMANCE choice while nothing moves (workers typing, balls hopping, the town's traffic).
+// POWER SAVER: none, so the engine draws only when something changes or moves, and the town holds still.
 const FPS = { smooth: 30, balanced: 15, saver: 0 };
 const TIME = { light: "14:00", dark: "21:00" };
+const PACKS = [japandi, land];
 const BALL_CENTRE = new THREE.Vector3(0, 0, 0.8); // round the chair, in the desk's frame (its worker toward +z)
 const CHEST = 0.3;                                // metres above the hips: where a worker is clicked
 const RING = { light: "#b9832f", dark: "#e0b25c" };
@@ -29,6 +33,7 @@ export function mountOffice(canvas, opts = {}) {
   let hqName = opts.hq ?? "hq", hqStatus = "moving";
   let lanes = [], vitals = {}, live = new Set(), statusOf = new Map(), layoutKey = "";
   let selected = null, hovered = null, mode = "smooth", paused = false, fitting = true;
+  let outside = MODES.includes(opts.outside) ? opts.outside : "nature", outsideSeed = opts.outsideSeed || "hq", landNow = null;
   const balls = new Balls();
   const deskFrames = new Map(); // lane -> a group attached to its desk: the frame its balls hop in
   const ring = selectionRing();
@@ -52,13 +57,31 @@ export function mountOffice(canvas, opts = {}) {
     runFrame(now, dt);
   }
 
+  // The doc as the engine takes it: the land pack always (so OUTSIDE changes no packs), and while the land shows, the
+  // lot's ground in the garden's lawn.
+  function docOf(doc) {
+    const palette = outside === "off" ? doc.palette : { light: { ...doc.palette?.light, ...LAWN.light }, dark: { ...doc.palette?.dark, ...LAWN.dark } };
+    return fromJSON({ ...doc, packs: [...doc.packs, "land"], ...(palette ? { palette } : {}) }, PACKS);
+  }
+
+  // The land round this layout, or null when OUTSIDE is off. The last land is kept, so an office that grows a room
+  // keeps the land round it.
+  function sceneryFor() {
+    if (outside === "off") { landNow = null; return null; }
+    landNow = landFor(res.layout, { mode: outside, seed: outsideSeed, prev: landNow });
+    return outsideScenery(res.layout, { mode: outside, seed: outsideSeed, land: landNow });
+  }
+  function setScenery(next) {
+    try { world.setScenery(next); } catch (e) { console.error("the land round the office could not change", e); }
+  }
+
   function build() {
     // HQ's own lane, when it is one, sits in the suite, not at a team desk (layout.js leaves it out)
     res = officeDoc(lanes, res, { hq: hqName, hqStatus });
     live = new Set([...res.layout.desks.filter((d) => !d.vacant).map((d) => d.lane), ...(res.layout.hq ? [hqName] : [])]);
     statusOf = new Map([...lanes.map((l) => [l.name, l.status]), [hqName, hqStatus]]);
     if (!world) {
-      world = createWorld(canvas, fromJSON(res.doc, [japandi]), { theme, time: TIME[theme], insets, systems: [pace] });
+      world = createWorld(canvas, docOf(res.doc), { theme, time: TIME[theme], insets, systems: [pace], idleFps: FPS[mode], scenery: sceneryFor() });
       world.three.scene.add(balls.mesh);
       world.on("frame", frame);
       if (opts.controls !== false) bindControls();
@@ -68,7 +91,9 @@ export function mountOffice(canvas, opts = {}) {
       if (fitting) world.camera.fit();
     } else {
       let diff = null;
-      try { diff = world.apply(res.doc); } catch (e) { console.error("the office could not change", e); return; }
+      try { diff = world.apply(docOf(res.doc)); } catch (e) { console.error("the office could not change", e); return; }
+      // the garden follows the building: lay the land again round a lot that changed
+      if (diff?.lot && outside !== "off") setScenery(sceneryFor());
       // the office grew or shrank: fit it again, unless the owner has panned or zoomed since
       if (diff?.lot && fitting) world.camera.fit({ ease: true });
     }
@@ -135,7 +160,20 @@ export function mountOffice(canvas, opts = {}) {
 
   function setPerformance(m) {
     mode = m in FPS ? m : "smooth";
+    world?.setIdleFps(FPS[mode]); // the town's traffic and boats move at this rate, and hold still at 0
     world?.invalidate();
+  }
+
+  // OUTSIDE: nature, city or off, and the seed REROLL changes. The same page, the same canvas: the engine swaps the
+  // scenery and recolours the lot's ground. Off first drops the land, so the recolour does not redraw it.
+  function setOutside(m, seed) {
+    const nextMode = MODES.includes(m) ? m : outside, nextSeed = seed || outsideSeed;
+    if (nextMode === outside && nextSeed === outsideSeed) return;
+    outside = nextMode; outsideSeed = nextSeed;
+    if (!world) return;
+    if (outside === "off") setScenery(null);
+    build();
+    if (outside !== "off") setScenery(sceneryFor());
   }
 
   // While the reader covers the office on a phone, nothing steps or draws.
@@ -240,7 +278,7 @@ export function mountOffice(canvas, opts = {}) {
       mode,
       paused,
       fitting,
-      outside: null,
+      outside: outside === "off" ? null : { mode: outside, seed: outsideSeed, ...(e?.scenery ?? {}) },
       balls: balls.mesh.count, // subagent balls drawn in the last frame
       // the engine's own: draws and shadow redraws, the canvas's size, the zoom step, the cut walls, the characters
       engine: e ? { stats: e.stats, draws: e.draws, triangles: e.triangles, size: e.size, zoom: e.zoom, walls: e.walls, cut: e.cut.length, characters: e.characters.length } : null,
@@ -284,7 +322,7 @@ export function mountOffice(canvas, opts = {}) {
 
   const api = {
     setLanes, setHq, setTheme, setSelected, setPerformance, setPaused, rotate, zoom, fit, focusLanes, setInsets,
-    setOutside() {}, // the land round the office comes to the engine later (step 6): the new office shows its plain lot
+    setOutside,
     renderNow: () => world?.invalidate(),
     deskAnchor, project, addToWorld, pick, inspect, roomWalls, workerOf,
     get engine() { return world; },

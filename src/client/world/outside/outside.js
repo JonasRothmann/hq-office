@@ -3,7 +3,7 @@
 // again when the mode, the seed or the lot (beyond a step, see growLot) changes. It owns the scene's background while
 // mounted, so the soft edge it fades into is the colour behind it.
 import { THREE, uniforms } from "./parts.js";
-import { generate, growLot } from "./gen.js";
+import { generate, growLot } from "../../office/outside/gen.js";
 import { paletteFor } from "./palette.js";
 import { buildOutside } from "./build.js";
 
