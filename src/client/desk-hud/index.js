@@ -208,14 +208,22 @@ function frame() {
   }
 }
 
-on("world:ready", () => { ready = true; layer.hidden = false; layer.dataset.live = "1"; for (const c of chips.values()) c.size = null; });
+// The world's api is loaded only once the world is ready (it is the module the world already loaded), so a page with
+// the world off, or without WebGL, never fetches three.js and the chips simply never show.
+let loading = false;
+function worldReady() {
+  ready = true; layer.hidden = false; layer.dataset.live = "1";
+  for (const c of chips.values()) c.size = null;
+  if (loading) return;
+  loading = true;
+  import("../world/api.js").then((api) => {
+    world = api;
+    up = new api.THREE.Vector3();
+    api.onFrame(frame);
+  }, () => {});
+}
+on("world:ready", worldReady);
 on("state", render);
 if (S) render(S);
-// The world's module is loaded on its own: a page that has no world (or cannot load three.js) still has its panels,
-// and the chips simply never show. Frames run only once the world is mounted.
-import("../world/api.js").then((api) => {
-  world = api;
-  up = new api.THREE.Vector3();
-  api.onFrame(frame);
-}, () => {});
+if (window.__world && !window.__world.unavailable) worldReady(); // the world was ready before this module ran
 document.fonts?.ready.then(() => { for (const c of chips.values()) c.size = null; });
