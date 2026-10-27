@@ -7,6 +7,7 @@ import { version } from "./push.ts";
 import { addStatePart } from "./state.ts";
 import { kindOf, roomsView } from "./rooms.ts";
 import type { Ask } from "./types.ts";
+import { HOP_COLUMNS, HOP_JOIN } from "./lead-router.ts";
 
 export type InboxLink = {
   url: string;
@@ -21,7 +22,7 @@ export type InboxItem = {
   key: string; // "ask:12", "update:5", "room:ope-7"
   kind: "question" | "update" | "room";
   ref: number | string; // the ask's id, the update's id or the room's slug
-  group: "blocking" | "open" | "updates" | "rooms";
+  group: "blocking" | "open" | "leads" | "updates" | "rooms"; // leads: a question a lead holds (decision D20)
   lane: string | null;
   title: string;
   preview: string; // the body's first words, as plain text
@@ -33,6 +34,8 @@ export type InboxItem = {
   short: boolean; // a question the owner can answer from the stack, without reading more
   shape: { lines: number; tables: number; code: number };
   links: InboxLink[];
+  holder: string | null; // the lead holding a question (null: the owner, or not a question)
+  escalateAt: number | null; // when a question a lead holds goes to the owner on its own
 };
 
 const FENCE = /^\s*```/;
@@ -125,18 +128,20 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       key: `ask:${a.id}`,
       kind: "question",
       ref: a.id,
-      group: a.tier === "blocking" ? "blocking" : "open",
+      group: a.holder ? "leads" : a.tier === "blocking" ? "blocking" : "open",
       lane: a.lane,
       title: a.title,
       preview: previewOf(a.body),
       at: a.created_at,
-      needsYou: true,
+      needsYou: !a.holder,
       unread: true,
       priority: a.priority ?? 2,
       locked: !!a.tier_locked,
       short: isShort(a),
       shape: shapeOf(a.body),
       links: linksOf([a.link, a.body], shelves, roomTitles),
+      holder: a.holder ?? null,
+      escalateAt: a.holder ? (a.escalate_at ?? null) : null,
     })),
     ...updates.map((u): InboxItem => ({
       key: `update:${u.id}`,
@@ -154,6 +159,8 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       short: false,
       shape: shapeOf(u.body),
       links: linksOf([u.title, u.body], shelves, roomTitles),
+      holder: null,
+      escalateAt: null,
     })),
     ...rooms.map((r): InboxItem => ({
       key: `room:${r.slug}`,
@@ -171,13 +178,15 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       short: false,
       shape: { lines: 0, tables: 0, code: 0 },
       links: [],
+      holder: null,
+      escalateAt: null,
     })),
   ];
 }
 
 // GET /api/owner-inbox: the same, loaded on its own.
 export function ownerInbox(): InboxItem[] {
-  const asks = (db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY tier = 'blocking' DESC, priority, COALESCE(due, 9e15), created_at").all() as Ask[])
+  const asks = (db.query(`SELECT a.*, ${HOP_COLUMNS} FROM asks a ${HOP_JOIN} WHERE a.status = 'open' ORDER BY a.holder IS NULL DESC, a.tier = 'blocking' DESC, a.priority, COALESCE(a.due, 9e15), a.created_at`).all() as Ask[])
     .map((a) => ({ ...a, options: a.options ? JSON.parse(a.options) : [], secrets: a.secrets ? JSON.parse(a.secrets) : [] }));
   return inboxOf(asks, db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 40").all() as Update[], roomsView());
 }
