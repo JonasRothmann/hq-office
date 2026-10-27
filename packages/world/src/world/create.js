@@ -1,0 +1,395 @@
+// createWorld: a world file on a canvas. The driver (view/driver.js, pure) owns the lot, the sim, the camera and
+// the frame policy; this file is the three.js side. It builds the architecture for the cut walls, one group per
+// object and one mesh per character, mirrors the sim onto them, and draws only when the driver says so: nothing while
+// the view is still, and the shadow map only when a character moved or an edit asked. apply() takes an edited doc
+// and rebuilds only what changed. The canvas's backing store matches its device pixels (view/size.js).
+import * as THREE from "three";
+import { FLOOR_Y, tileKey } from "../model/grid.js";
+import { buildPrims } from "../catalog/define.js";
+import { floorAt as floorOf } from "../sim/motion.js";
+import { buildArchitecture } from "../arch/build.js";
+import { cameraPose, project as projectPose, unproject } from "../camera/rig.js";
+import { createDriver } from "../view/driver.js";
+import { canvasSize } from "../view/size.js";
+import { createStage } from "../render/stage.js";
+import { createMaterials } from "../render/materials.js";
+import { primsToGroup } from "../render/meshes.js";
+import { buildCharacter } from "../render/character.js";
+
+const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
+
+/**
+ * @typedef {object} WorldOptions
+ * @property {"light"|"dark"} [theme]
+ * @property {string} [time]                 "hh:mm"; default 14:00 (light) or 21:00 (dark)
+ * @property {"up"|"cutaway"|"down"} [walls]
+ * @property {string|null} [focusRoom]       cut only the walls in front of this room
+ * @property {number} [rot]
+ * @property {number} [zoom]                 0..2; default: the nearest step that fits the lot at every rotation
+ * @property {"raf"|"manual"} [clock]        manual: nothing moves until advance(ms) (tests, shots)
+ * @property {number} [idleFps]              draw clips looping in place (breathing, typing) this often while nothing
+ *                                           else moves; default 0: a still view draws nothing
+ * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's own box, in device pixels
+ * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
+ * @property {boolean} [startActs]           run the world's acts at once (default true)
+ * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
+ * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number, oldSizing?: boolean }} [debug]
+ *   reproduce the old defects, for comparisons
+ */
+
+/** @stability stable */
+export function createWorld(canvas, world, opts = {}) {
+  const debug = opts.debug ?? {};
+  const events = new Map();
+  let hovered = null, night = 0;
+  const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
+
+  // --- size: the backing store is the canvas's device-pixel box exactly
+  const deviceBoxes = typeof ResizeObserverEntry !== "undefined" && "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
+  const hostStyle = { w: canvas.style.width, h: canvas.style.height };
+  function measure(entry) {
+    if (opts.size) return canvasSize({ css: opts.size, dpr: opts.size.dpr ?? 1 });
+    const dpr = window.devicePixelRatio || 1;
+    if (debug.oldSizing) { const w = canvas.clientWidth || 800, h = canvas.clientHeight || 600, d = Math.min(dpr, 2); return { w, h, dpr: d, bw: Math.floor(w * d), bh: Math.floor(h * d), style: null }; }
+    const box = entry?.contentBoxSize?.[0], dev = entry?.devicePixelContentBoxSize?.[0];
+    let css;
+    if (box && deviceBoxes) css = { w: box.inlineSize, h: box.blockSize };
+    else {
+      if (!deviceBoxes) { canvas.style.width = hostStyle.w; canvas.style.height = hostStyle.h; } // measure the host's box, not ours
+      const r = canvas.getBoundingClientRect();
+      css = { w: r.width, h: r.height };
+    }
+    if (!(css.w > 0 && css.h > 0)) css = { w: 800, h: 600 }; // not laid out yet
+    return canvasSize({ css, dpr, device: dev ? { w: dev.inlineSize, h: dev.blockSize } : null });
+  }
+  const s0 = measure(null);
+
+  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
+  const { sim, cam } = driver;
+  let theme = opts.theme === "dark" ? "dark" : "light";
+  let time = opts.time ?? (theme === "dark" ? "21:00" : "14:00");
+  let palette = driver.catalog.palette(theme);
+
+  const stage = createStage(canvas);
+  if (debug.shadowRadius) stage.sun.shadow.radius = debug.shadowRadius;
+  const materials = createMaterials({ screenNoise: !!debug.screenNoise });
+  const { scene, renderer } = stage;
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
+  const shadowBox = () => ({ min: [-2, 0, -2], max: [driver.lot.w + 2, 3.2, driver.lot.d + 2] });
+  stage.setShadowBox(shadowBox());
+  function applySize(s) {
+    if (s.style && !deviceBoxes && !opts.size) { canvas.style.width = `${s.style.w}px`; canvas.style.height = `${s.style.h}px`; }
+    stage.resize(s.bw, s.bh);
+    driver.resize({ w: s.w, h: s.h, dpr: s.dpr });
+  }
+  applySize(s0);
+
+  // --- architecture: one group per cut set and theme, cached; walls never scale, an edge is full or kerb
+  const archCache = new Map();
+  let arch = null, archKey = "";
+  function syncArch() {
+    const cut = driver.cut;
+    const key = `${theme}|${driver.cutText}`;
+    if (key === archKey) return;
+    if (!archCache.has(key)) {
+      if (archCache.size > 24) clearArch();
+      archCache.set(key, primsToGroup(buildArchitecture(driver.lot, driver.catalog, cut), palette, materials, { name: "architecture" }));
+    }
+    if (arch) scene.remove(arch);
+    arch = archCache.get(key);
+    arch.userData.cut = cut;
+    scene.add(arch);
+    archKey = key;
+    stage.invalidateShadows();
+  }
+  function clearArch() { for (const g of archCache.values()) { if (g !== arch) disposeGroup(g); } if (arch) { scene.remove(arch); disposeGroup(arch); arch = null; } archCache.clear(); archKey = ""; }
+
+  // --- objects: one group per object, in its own frame (attach() parents app objects to it)
+  const objectsGroup = new THREE.Group();
+  objectsGroup.name = "objects";
+  scene.add(objectsGroup);
+  const objectGroups = new Map(), lamps = new Map();
+  function dropObject(id) {
+    const g = objectGroups.get(id);
+    const kept = g ? g.children.filter((c) => !c.userData.engine) : [];
+    if (g) { for (const c of kept) g.remove(c); objectsGroup.remove(g); disposeGroup(g); objectGroups.delete(id); }
+    const l = lamps.get(id);
+    if (l) { scene.remove(l); l.dispose(); lamps.delete(id); }
+    return kept;
+  }
+  function buildObject(id) {
+    const kept = dropObject(id);
+    const o = driver.lot.objects.find((x) => x.id === id);
+    if (!o) return;
+    const g = primsToGroup(buildPrims(o.def), palette, materials, { name: `object:${o.id}` });
+    g.position.set(...o.pos);
+    g.rotation.y = o.q * (Math.PI / 2);
+    g.userData.entity = o.id;
+    for (const m of g.children) m.userData.engine = true;
+    g.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
+    for (const c of kept) g.add(c);
+    objectsGroup.add(g);
+    objectGroups.set(o.id, g);
+    if (o.anchors.light) {
+      const l = new THREE.PointLight(palette.lamp ?? "#ffe3ad", 2.2 * night, 5, 1.6);
+      l.position.set(...o.anchors.light);
+      scene.add(l);
+      lamps.set(o.id, l);
+    }
+    if (hovered === o.id) { hovered = null; highlight(o.id); }
+  }
+
+  // --- characters: the sim owns their state; the meshes only mirror it (renderSync)
+  const charGroup = new THREE.Group();
+  charGroup.name = "characters";
+  scene.add(charGroup);
+  const meshes = new Map();
+  const floorAt = (x, z) => floorOf(driver.lot, x, z);
+  function dropCharacter(id) {
+    const m = meshes.get(id);
+    if (!m) return [];
+    const kept = m.root.children.filter((c) => !c.userData.engine);
+    for (const c of kept) m.root.remove(c);
+    charGroup.remove(m.root);
+    m.dispose();
+    meshes.delete(id);
+    return kept;
+  }
+  function buildCharacterMesh(id) {
+    const kept = dropCharacter(id);
+    const c = sim.ecs.get(id, "character");
+    if (!c) return;
+    const mesh = buildCharacter(id, c.look, palette, materials);
+    for (const j of mesh.root.children) j.userData.engine = true;
+    for (const k of kept) mesh.root.add(k);
+    charGroup.add(mesh.root);
+    meshes.set(id, mesh);
+  }
+  function renderSync() {
+    for (const [id, , b] of sim.ecs.query("character", "body")) {
+      const m = meshes.get(id);
+      if (!m) continue;
+      m.root.position.set(b.x, floorAt(b.x, b.z), b.z);
+      m.root.rotation.y = b.ry;
+      m.setHips(b.hips);
+      m.setPose(sim.pose(id));
+    }
+  }
+
+  // --- drawing
+  const stats = { renders: 0, shadowRedraws: 0 };
+  let pose = cameraPose(cam);
+  function render() {
+    pose = cameraPose(cam);
+    camera.position.set(...pose.position);
+    camera.up.set(...pose.up);
+    camera.lookAt(...pose.target);
+    const f = pose.frustum;
+    camera.left = f.left; camera.right = f.right; camera.top = f.top; camera.bottom = f.bottom;
+    camera.near = 1; camera.far = 400;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    renderSync();
+    emit("frame", { pose });
+    stats.renders++;
+    if (renderer.shadowMap.needsUpdate) stats.shadowRedraws++;
+    renderer.render(scene, camera);
+  }
+  // What the driver decided for one frame (or several, merged, for advance).
+  function draw(f) {
+    if (!f.render) return;
+    syncArch();
+    if (f.shadows) stage.invalidateShadows();
+    render();
+  }
+
+  // Every animation frame: the driver steps and decides; most frames of a still view draw nothing. A frame that
+  // throws is logged once; the loop goes on (a throwing system is already switched off by the sim).
+  let raf = 0, last = 0, running = false, failed = false;
+  function loop(now) {
+    if (!running) return;
+    raf = requestAnimationFrame(loop);
+    const dt = last ? Math.min(100, now - last) : STEP;
+    last = now;
+    try { draw(driver.tick(now, dt)); } catch (e) { if (!failed) console.error("@hq/world: a frame failed", e); failed = true; }
+  }
+  const manual = (opts.clock ?? "raf") !== "raf";
+  function start() { if (running || manual) return; running = true; last = 0; raf = requestAnimationFrame(loop); }
+
+  function applyTime() {
+    night = stage.setTime(time, palette).night;
+    for (const l of lamps.values()) { l.intensity = 2.2 * night; l.color.set(palette.lamp); }
+    driver.invalidate({ shadows: true });
+  }
+
+  applyTime();
+  for (const o of driver.lot.objects) buildObject(o.id);
+  for (const id of sim.characters()) buildCharacterMesh(id);
+  syncArch();
+  if (opts.startActs !== false) driver.startActs();
+  draw(driver.tick(0, 0));
+  start();
+
+  let ro = null;
+  if (!opts.size && typeof ResizeObserver !== "undefined") {
+    ro = new ResizeObserver((entries) => {
+      const entry = entries.find((e) => e.target === canvas);
+      applySize(measure(deviceBoxes ? entry : null));
+      if (!running) render();
+    });
+    if (deviceBoxes) ro.observe(canvas, { box: "device-pixel-content-box" });
+    else { ro.observe(canvas); if (canvas.parentElement) ro.observe(canvas.parentElement); }
+  }
+
+  // --- picking and hover
+  const ray = new THREE.Raycaster();
+  function pick(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    const x = clientX - r.left, y = clientY - r.top;
+    ray.setFromCamera(new THREE.Vector2((x / r.width) * 2 - 1, -(y / r.height) * 2 + 1), camera);
+    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity);
+    const ground = unproject(pose, [x, y], FLOOR_Y);
+    const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
+    const lot = driver.lot;
+    if (hit) return { kind: meshes.has(hit.object.userData.entity) ? "character" : "object", id: hit.object.userData.entity, tile };
+    if (tile[0] < 0 || tile[1] < 0 || tile[0] >= lot.w || tile[1] >= lot.d) return null;
+    return { kind: "tile", tile, room: lot.roomAt.get(tileKey(...tile)) };
+  }
+  function highlight(id) {
+    if (id === hovered) return;
+    const swap = (gid, on) => objectGroups.get(gid)?.traverse((m) => {
+      if (!m.isMesh || m.userData.finish !== "matte") return;
+      if (on) { m.userData.mat = m.material; m.material = materials.highlight; } else if (m.userData.mat) m.material = m.userData.mat;
+    });
+    if (hovered) swap(hovered, false);
+    hovered = id;
+    if (id) swap(id, true);
+    driver.invalidate();
+    if (!running) render();
+  }
+
+  const view = {
+    get lot() { return driver.lot; },
+    get catalog() { return driver.catalog; },
+    get nav() { return driver.nav; },
+    camera: {
+      rotate(dir) { driver.rotate(dir); emit("camera", { rot: cam.rot }); },
+      zoom(step) { driver.zoom(step); },
+      pan(dx, dy) { driver.pan(dx, dy); },
+      /** Centre on a ground point, eased unless { ease: false }. */
+      focusOn(x, z, o) { driver.focusOn(x, z, o); },
+      /** Centre on a box ({ minX, minZ, maxX, maxZ }, a room's for example) at the nearest zoom that fits it, eased. */
+      fitBox(box, o) { driver.fitBox(box, o); },
+      fit(o) { driver.fit(o); },
+      pose: () => cameraPose(cam),
+      get state() { return { rot: cam.rot, az: cam.az, zoom: cam.zoom, ppm: cam.ppm, focus: [...cam.focus], turning: !!cam.turn, moving: !!cam.moving }; },
+    },
+    /** A room's tiles as a box, for camera.fitBox. */
+    roomBox: (id) => driver.roomBox(id),
+    setWalls(mode, room = null) { driver.setWalls(mode, room); if (!running) draw(driver.tick(0, 0)); },
+    setTheme(t) {
+      theme = t === "dark" ? "dark" : "light";
+      palette = driver.catalog.palette(theme);
+      clearArch();
+      for (const o of driver.lot.objects) buildObject(o.id);
+      for (const id of sim.characters()) buildCharacterMesh(id);
+      applyTime();
+      if (!running) draw(driver.tick(0, 0));
+    },
+    setTime(t) { time = t; applyTime(); if (!running) draw(driver.tick(0, 0)); },
+    /**
+     * Change the world without a restart: a World or a doc (validated whole; a WorldError changes nothing). Only what
+     * changed is rebuilt, the sim keeps running, and the same doc twice is a no-op. Returns the diff, or null.
+     */
+    apply(next) {
+      const diff = driver.apply(next);
+      if (!diff) return null;
+      if (diff.packs) palette = driver.catalog.palette(theme);
+      if (diff.lot || diff.packs) { clearArch(); stage.setShadowBox(shadowBox()); }
+      const ids = diff.packs ? driver.lot.objects.map((o) => o.id) : [...diff.objects.added, ...diff.objects.changed];
+      for (const id of diff.objects.removed) dropObject(id);
+      for (const id of ids) buildObject(id);
+      for (const id of diff.characters.removed) dropCharacter(id);
+      for (const id of diff.packs ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
+      if (!running) draw(driver.tick(0, 0));
+      return diff;
+    },
+    act: (id, a) => sim.act(id, a),
+    character: (id) => sim.character(id),
+    sim,
+    pick,
+    hover(clientX, clientY) { const p = pick(clientX, clientY); highlight(p?.kind === "object" ? p.id : null); emit("hover", p); return p; },
+    project(p) { const q = projectPose(pose, p); const d = pose.dpr; return { x: Math.round(q.x * d) / d, y: Math.round(q.y * d) / d, visible: q.x >= 0 && q.y >= 0 && q.x <= pose.w && q.y <= pose.h }; },
+    anchor(id, name) {
+      const o = driver.lot.objects.find((x) => x.id === id);
+      if (o) return o.anchors[name] ?? null;
+      const c = sim.ecs.get(id, "body");
+      return c ? [c.x, floorAt(c.x, c.z) + c.hips + 0.95, c.z] : null;
+    },
+    /** Parent an app object to an object's or character's group; it stays through edits that rebuild that entity. */
+    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); driver.invalidate({ shadows: true }); return true; },
+    on(name, fn) { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(fn); return () => events.get(name).delete(fn); },
+    /** With clock "manual": step by ms, then draw once. */
+    advance(ms) {
+      const f = { render: true, shadows: false };
+      let left = ms;
+      while (left > 1e-6) { const d = Math.min(STEP, left); f.shadows = driver.tick(0, d).shadows || f.shadows; left -= d; }
+      draw(f);
+      return view.inspect();
+    },
+    render() { syncArch(); render(); },
+    /** Request a frame (the host changed something the engine cannot see, such as an attached object). */
+    invalidate(o) { driver.invalidate(o); },
+    bindInput(el = canvas) { return bindInput(view, el, emit); },
+    inspect() {
+      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
+        camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
+        size: { w: cam.w, h: cam.h, dpr: cam.dpr, buffer: [canvas.width, canvas.height] },
+        stats: { ...stats, frames: driver.stats.frames },
+        characters: sim.characters().map((id) => sim.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+    },
+    three: { renderer, scene, camera },
+    dispose() {
+      running = false; cancelAnimationFrame(raf); ro?.disconnect();
+      clearArch();
+      for (const id of [...objectGroups.keys()]) dropObject(id);
+      for (const id of [...meshes.keys()]) dropCharacter(id);
+      materials.dispose(); renderer.dispose();
+    },
+  };
+  return view;
+}
+
+function disposeGroup(g) {
+  g.traverse((o) => { if (o.userData.engine !== false) o.geometry?.dispose(); });
+}
+
+// Drag to pan, wheel to step the zoom, click to pick (emits "pick"), move to hover. Returns a function that unbinds.
+function bindInput(view, el, emit) {
+  let drag = null, wheelAt = 0;
+  const down = (e) => { drag = { x: e.clientX, y: e.clientY, moved: false }; el.setPointerCapture?.(e.pointerId); };
+  const move = (e) => {
+    if (!drag) { view.hover(e.clientX, e.clientY); return; }
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    view.camera.pan(dx, dy);
+    drag.x = e.clientX; drag.y = e.clientY;
+  };
+  const up = (e) => {
+    if (drag && !drag.moved) emit("pick", view.pick(e.clientX, e.clientY));
+    drag = null;
+  };
+  const wheel = (e) => {
+    e.preventDefault();
+    const now = performance.now();
+    if (now - wheelAt < 220) return;
+    wheelAt = now;
+    view.camera.zoom(view.camera.state.zoom + (e.deltaY < 0 ? 1 : -1));
+  };
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("wheel", wheel, { passive: false });
+  return () => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("wheel", wheel); };
+}

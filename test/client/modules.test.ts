@@ -31,8 +31,17 @@ function importsOf(code: string): Import[] {
 // A dynamic import with a literal path (the world's modules are loaded this way, only when the world starts).
 const dynamicOf = (code: string) => [...code.matchAll(/\bimport\(\s*(["'])([^"']+)\1\s*\)/g)].map((m) => m[2]);
 
+// A module's exported names, read when first asked: page modules, and a package's public entry reached through the
+// import map (packages/world), following its `export * from`.
 const exportsOf = new Map<string, Set<string>>();
-for (const f of modules) exportsOf.set(f, new Set(transpiler.scan(readFileSync(f, "utf8")).exports));
+function exportsFor(f: string): Set<string> {
+  if (exportsOf.has(f)) return exportsOf.get(f)!;
+  const code = readFileSync(f, "utf8");
+  const names = new Set(transpiler.scan(code).exports);
+  exportsOf.set(f, names);
+  for (const m of code.matchAll(/^export\s+\*\s+from\s+["']([^"']+)["']/gm)) for (const n of exportsFor(resolve(dirname(f), m[1]))) if (n !== "default") names.add(n);
+  return names;
+}
 
 describe("client modules", () => {
   test("there are modules, and main.js is one of them", () => {
@@ -49,7 +58,7 @@ describe("client modules", () => {
         const to = target(f, imp.spec);
         expect({ from: name(f), spec: imp.spec, mapped: !!to }).toEqual({ from: name(f), spec: imp.spec, mapped: true });
         expect({ from: name(f), spec: imp.spec, exists: existsSync(to!) }).toEqual({ from: name(f), spec: imp.spec, exists: true });
-        const exported = exportsOf.get(to!)!;
+        const exported = exportsFor(to!);
         for (const n of imp.names) expect({ from: name(f), to: name(to!), name: n, exported: exported.has(n) }).toEqual({ from: name(f), to: name(to!), name: n, exported: true });
         if (imp.def) expect({ from: name(f), to: name(to!), default: exported.has("default") }).toEqual({ from: name(f), to: name(to!), default: true });
       }

@@ -1,0 +1,131 @@
+<!doctype html>
+<!-- The world lab: loads any world file (?world=/path.world.js) and drives the engine for people, the shot CLI and the proof. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World lab</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #dfe6ea; font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1d2430; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  .bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; background: rgba(255,255,255,.82); padding: 6px 8px; border-radius: 8px; }
+  .bar button { font: inherit; padding: 3px 8px; border: 1px solid #b8c0c8; border-radius: 6px; background: #fff; cursor: pointer; }
+  .bar button[aria-pressed="true"] { background: #1d2430; color: #fff; }
+  .info { position: fixed; left: 12px; bottom: 12px; background: rgba(255,255,255,.82); padding: 6px 8px; border-radius: 8px; white-space: pre; }
+  .err { position: fixed; inset: 40px; background: #fff; color: #a01818; padding: 16px; white-space: pre-wrap; overflow: auto; border-radius: 8px; }
+  body.clean .bar, body.clean .info { display: none; }
+</style>
+<!-- importmap -->
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="bar">
+  <button data-rot="-1" title="Q">⟲</button><button data-rot="1" title="E">⟳</button>
+  <button data-zoom="0">far</button><button data-zoom="1">mid</button><button data-zoom="2">near</button>
+  <button data-walls="up">walls up</button><button data-walls="cutaway">cutaway</button><button data-walls="down">walls down</button>
+  <button data-theme="light">day</button><button data-theme="dark">night</button>
+</div>
+<div class="info" id="info"></div>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  const lab = (window.__lab = { ready: false, error: null });
+  try {
+    const { createWorld } = await import("@hq/world");
+    const mod = await import(q.get("world") ?? "/@hq/world/examples/tiny-house.world.js");
+    const num = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
+    if (q.has("clean")) document.body.classList.add("clean");
+    const canvas = document.getElementById("c");
+    // ?box=WxH&at=X,Y: a canvas of that CSS size and place (fractions allowed), to prove the sizing
+    if (q.has("box")) {
+      const [bw, bh] = q.get("box").split("x").map(Number), [bx, by] = (q.get("at") ?? "0,0").split(",").map(Number);
+      Object.assign(canvas.style, { position: "absolute", left: `${bx}px`, top: `${by}px`, width: `${bw}px`, height: `${bh}px` });
+    }
+    const world = createWorld(canvas, mod.default, {
+      theme: q.get("theme") ?? "light", time: q.get("time") ?? undefined, walls: q.get("walls") ?? "cutaway", focusRoom: q.get("focus"),
+      rot: num("rot") ?? 0, zoom: num("zoom"), clock: q.has("manual") ? "manual" : "raf",
+      idleFps: num("idleFps"),
+      debug: { screenNoise: q.has("screenNoise"), noSnap: q.has("noSnap"), shadowRadius: num("shadowRadius"), oldSizing: q.has("oldSizing") },
+    });
+    if (q.has("focusOn")) { const [x, z] = q.get("focusOn").split(",").map(Number); world.camera.focusOn(x, z, { ease: false }); }
+    world.bindInput(canvas);
+    world.on("pick", (p) => console.log("pick", JSON.stringify(p)));
+    const info = document.getElementById("info");
+    world.on("frame", ({ pose }) => {
+      const s = world.camera.state;
+      info.textContent = `rot ${((s.rot % 4) + 4) % 4}  zoom ${s.zoom}  ppm ${s.ppm.toFixed(2)}  camera y ${pose.position[1].toFixed(6)}  snapped ${pose.snapped}`;
+    });
+    document.querySelector(".bar").addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.rot) world.camera.rotate(Number(b.dataset.rot));
+      if (b.dataset.zoom) world.camera.zoom(Number(b.dataset.zoom));
+      if (b.dataset.walls) world.setWalls(b.dataset.walls);
+      if (b.dataset.theme) world.setTheme(b.dataset.theme);
+    });
+    addEventListener("keydown", (e) => { if (e.key === "q") world.camera.rotate(-1); if (e.key === "e") world.camera.rotate(1); });
+
+    // For the proof: the drawing buffer's pixels right after a render (RGBA, rows bottom-up).
+    const gl = world.three.renderer.getContext();
+    const read = () => {
+      world.render();
+      const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return { w, h, px };
+    };
+    // Pan by (dx, dy) CSS px, then compare the new frame with the old one moved by the shift the camera reports.
+    // A still scene panned by whole pixels renders identically: what differs is shimmer.
+    lab.panDiff = (dx, dy, threshold = 8) => {
+      const probe = [5, 0, 5];
+      const a = read(), ra = rawProject(probe);
+      world.camera.pan(dx, dy);
+      const b = read(), rb = rawProject(probe);
+      const dpr = world.camera.pose().dpr;
+      const sx = (rb.x - ra.x) * dpr, sy = (rb.y - ra.y) * dpr;
+      const ix = Math.round(sx), iy = Math.round(sy);
+      const m = Math.max(Math.abs(ix), Math.abs(iy)) + 4;
+      let n = 0, bad = 0, sum = 0;
+      for (let y = m; y < a.h - m; y++) for (let x = m; x < a.w - m; x++) {
+        // screen y grows down, GL rows grow up
+        const ia = (y * a.w + x) * 4, ib = ((y - iy) * a.w + (x + ix)) * 4;
+        let d = 0;
+        for (let c = 0; c < 3; c++) d = Math.max(d, Math.abs(a.px[ia + c] - b.px[ib + c]));
+        n++; sum += d; if (d > threshold) bad++;
+      }
+      return { shift: [sx, sy], wholePixels: Math.abs(sx - ix) < 1e-3 && Math.abs(sy - iy) < 1e-3, pixels: n, changed: bad, changedPct: (100 * bad) / n, meanDiff: sum / n };
+    };
+    const rawProject = (p) => { const pose = world.camera.pose(); const d = [p[0] - pose.position[0], p[1] - pose.position[1], p[2] - pose.position[2]];
+      const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]; return { x: pose.w / 2 + dot(d, pose.right) * pose.ppm, y: pose.h / 2 - dot(d, pose.up) * pose.ppm }; };
+    // A strip of frames: each step runs fn(i), renders, and draws the canvas scaled into one image with a caption.
+    lab.strip = (frames, fn, { scale = 0.5, caption = () => "" } = {}) => {
+      const W = Math.round(canvas.width * scale), H = Math.round(canvas.height * scale), pad = 30;
+      const out = document.createElement("canvas");
+      out.width = W * frames; out.height = H + pad;
+      const g = out.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, out.width, out.height);
+      const log = [];
+      for (let i = 0; i < frames; i++) {
+        const row = fn(i);
+        world.render();
+        g.drawImage(canvas, i * W, 0, W, H);
+        g.fillStyle = "#1d2430"; g.font = "13px Menlo, monospace";
+        g.fillText(caption(i, row), i * W + 8, H + 20);
+        g.fillStyle = "#c8ccd2"; g.fillRect(i * W, 0, 1, H + pad);
+        log.push(row);
+      }
+      return { png: out.toDataURL("image/png"), log };
+    };
+    // The canvas's backing store against its device-pixel box (as the browser reports it) and its CSS box.
+    let deviceBox = null;
+    try { new ResizeObserver((e) => { const d = e[0].devicePixelContentBoxSize?.[0]; if (d) deviceBox = [d.inlineSize, d.blockSize]; }).observe(canvas, { box: "device-pixel-content-box" }); } catch {}
+    lab.sizing = () => { const r = canvas.getBoundingClientRect(); return { dpr: devicePixelRatio, buffer: [canvas.width, canvas.height], deviceBox, rect: [r.left, r.top, r.width, r.height], camera: world.inspect().size }; };
+    lab.frames = (n) => new Promise((ok) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : ok()); f(); });
+    // Pan by (dx, dy) CSS px and draw: the picture's shift in device px (screenshots before and after compare it).
+    lab.panShift = (dx, dy) => { const a = rawProject([5, 0, 5]); world.camera.pan(dx, dy); world.render(); const b = rawProject([5, 0, 5]); const d = world.camera.pose().dpr; return [(b.x - a.x) * d, (b.y - a.y) * d]; };
+    lab.world = world;
+    lab.ready = true;
+  } catch (e) {
+    lab.error = String(e?.stack ?? e);
+    const pre = document.createElement("pre"); pre.className = "err"; pre.textContent = lab.error; document.body.append(pre);
+  }
+</script>
+</body>
+</html>

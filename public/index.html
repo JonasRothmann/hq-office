@@ -11,8 +11,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <!-- styles: every .css under src/client, linked by the server (core/ first, then by path) -->
 <!-- styles -->
-<!-- three.js, vendored (src/client/vendor/three): the bare "three" its addons import resolves here -->
-<script type="importmap">{ "imports": { "three": "/src/client/vendor/three/three.module.min.js" } }</script>
+<!-- three.js, vendored (src/client/vendor/three): the bare "three" its addons import resolves here. "@hq/world" is the
+     3D world engine (packages/world), reached only through its public entries. -->
+<script type="importmap">{ "imports": { "three": "/src/client/vendor/three/three.module.min.js", "@hq/world": "/packages/world/src/index.js", "@hq/world/model": "/packages/world/src/model/index.js" } }</script>
 </head>
 <body>
 <!-- The 3D office (src/client/world/) draws here, behind every panel. -->

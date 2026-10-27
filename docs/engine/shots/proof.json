@@ -1,0 +1,202 @@
+{
+  "turn": {
+    "log": [
+      {
+        "frame": 0,
+        "cameraY": 49.99999999999999,
+        "azDeg": 45,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": true
+      },
+      {
+        "frame": 1,
+        "cameraY": 49.99999999999999,
+        "azDeg": 47.88,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": true
+      },
+      {
+        "frame": 2,
+        "cameraY": 49.99999999999999,
+        "azDeg": 68.04,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": true
+      },
+      {
+        "frame": 3,
+        "cameraY": 49.99999999999999,
+        "azDeg": 111.96,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": true
+      },
+      {
+        "frame": 4,
+        "cameraY": 49.99999999999999,
+        "azDeg": 132.12,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": true
+      },
+      {
+        "frame": 5,
+        "cameraY": 49.99999999999999,
+        "azDeg": 135,
+        "ppm": 45.3,
+        "focusScreen": [
+          640,
+          400
+        ],
+        "turning": false
+      }
+    ]
+  },
+  "pan": {
+    "engine": {
+      "shift": [
+        7.999999999999886,
+        2.999999999999716
+      ],
+      "wholePixels": true,
+      "pixels": 974656,
+      "changed": 0,
+      "changedPct": 0,
+      "meanDiff": 0.005330085691772277
+    },
+    "engine, shadow radius 4": {
+      "shift": [
+        7.999999999999886,
+        2.999999999999716
+      ],
+      "wholePixels": true,
+      "pixels": 974656,
+      "changed": 0,
+      "changedPct": 0,
+      "meanDiff": 0.005295201589073479
+    },
+    "no pixel snap": {
+      "shift": [
+        7.370000000000687,
+        3.1100000000003547
+      ],
+      "wholePixels": false,
+      "pixels": 978724,
+      "changed": 16661,
+      "changedPct": 1.7023185290235041,
+      "meanDiff": 0.6420870439470168
+    },
+    "screen-space shadow dither, radius 4": {
+      "shift": [
+        7.999999999999886,
+        2.999999999999716
+      ],
+      "wholePixels": true,
+      "pixels": 974656,
+      "changed": 618,
+      "changedPct": 0.06340698667016875,
+      "meanDiff": 0.08194891325760063
+    },
+    "old: no snap + screen dither + radius 4": {
+      "shift": [
+        7.370000000000687,
+        3.1100000000003547
+      ],
+      "wholePixels": false,
+      "pixels": 978724,
+      "changed": 16702,
+      "changedPct": 1.7065076569083828,
+      "meanDiff": 0.6469740192332056
+    }
+  },
+  "walls": [
+    {
+      "walls": "up",
+      "focus": null,
+      "cut": 0
+    },
+    {
+      "walls": "cutaway",
+      "focus": null,
+      "cut": 24
+    },
+    {
+      "walls": "down",
+      "focus": null,
+      "cut": 41
+    },
+    {
+      "walls": "cutaway",
+      "focus": "lounge",
+      "cut": 12
+    }
+  ],
+  "walk": [
+    {
+      "t": 0,
+      "clip": "idle",
+      "step": null,
+      "x": 9.5,
+      "z": 7.5,
+      "hips": 0.62
+    },
+    {
+      "t": 1.2,
+      "clip": "walk",
+      "step": "walk",
+      "x": 8.4,
+      "z": 6.4,
+      "hips": 0.62
+    },
+    {
+      "t": 2.4,
+      "clip": "walk",
+      "step": "walk",
+      "x": 7.21,
+      "z": 5.5,
+      "hips": 0.62
+    },
+    {
+      "t": 3.6,
+      "clip": "walk",
+      "step": "walk",
+      "x": 5.65,
+      "z": 5.5,
+      "hips": 0.62
+    },
+    {
+      "t": 4.8,
+      "clip": "walk",
+      "step": "walk",
+      "x": 4.5,
+      "z": 4.5,
+      "hips": 0.62
+    },
+    {
+      "t": 7,
+      "clip": "type",
+      "step": "loop",
+      "x": 3.5,
+      "z": 4.47,
+      "hips": 0.44
+    }
+  ],
+  "errors": []
+}
