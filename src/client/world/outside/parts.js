@@ -55,8 +55,11 @@ varying vec2 vOutXZ;${water ? "\nvarying vec2 vFlow;" : ""}`);
   {
     float wob = sin(vFlow.y * 5.3 + vFlow.x * 0.37 + uTime * 0.5) * 0.7 + sin(vFlow.x * 0.13 - vFlow.y * 2.0) * 1.3;
     float band = sin(vFlow.x * 1.7 - uTime * 1.3 + wob);
-    float glint = smoothstep(0.93, 1.0, band) * (1.0 - smoothstep(0.35, 0.8, abs(vFlow.y)));
-    diffuseColor.rgb = mix(diffuseColor.rgb, uSheen, glint * 0.22);
+    float patchy = smoothstep(0.2, 0.8, sin(vFlow.x * 0.23 + vFlow.y * 1.9 - uTime * 0.35) * 0.5 + sin(vFlow.x * 0.071 + 1.3) * 0.5);
+    float glint = smoothstep(0.94, 1.0, band) * patchy * (1.0 - smoothstep(0.3, 0.75, abs(vFlow.y)));
+    // darker mid-stream, lighter over the shallows
+    diffuseColor.rgb *= 0.9 + 0.14 * smoothstep(0.2, 0.95, abs(vFlow.y));
+    diffuseColor.rgb = mix(diffuseColor.rgb, uSheen, glint * 0.2);
   }`);
     }
     f = f.replace("#include <opaque_fragment>", `#include <opaque_fragment>
@@ -90,8 +93,9 @@ export class Parts {
     return this;
   }
   box(w, h, d, hex, x, y, z, ry = 0, o = {}) { const g = new THREE.BoxGeometry(w, h, d); g.translate(0, h / 2, 0); return this.add(g, hex, at(x, y, z, ry, o.rx ?? 0, o.rz ?? 0)); }
-  cyl(r, h, hex, x, y, z, seg = 6, top = r) { const g = new THREE.CylinderGeometry(top, r, h, seg, 1, false); g.translate(0, h / 2, 0); return this.add(g, hex, at(x, y, z)); }
-  cone(r, h, hex, x, y, z, seg = 7, o = {}) { const g = new THREE.ConeGeometry(r, h, seg, 1, false); g.translate(0, h / 2, 0); return this.add(g, hex, at(x, y, z, o.ry ?? 0, o.rx ?? 0, o.rz ?? 0)); }
+  cyl(r, h, hex, x, y, z, seg = 6, top = r) { const g = new THREE.CylinderGeometry(top, r, h, seg, 1, true); g.translate(0, h / 2, 0); return this.add(g, hex, at(x, y, z)); }
+  // cones and cylinders are open at the base: nothing here is ever seen from below
+  cone(r, h, hex, x, y, z, seg = 7, o = {}) { const g = new THREE.ConeGeometry(r, h, seg, 1, true); g.translate(0, h / 2, 0); return this.add(g, hex, at(x, y, z, o.ry ?? 0, o.rx ?? 0, o.rz ?? 0)); }
   ico(r, hex, x, y, z, sy = 1, sx = 1, sz = 1, ry = 0) { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(sx, sy, sz); return this.add(g, hex, at(x, y, z, ry)); }
   // A flat quad at height y, from (x0, z0) to (x1, z1), facing up.
   quad(x0, z0, x1, z1, y, hex) {

@@ -57,6 +57,7 @@ describe("outside: nothing reaches into the lot", () => {
         for (const r of L.rocks) circle("rock", r.x, r.z, 0.8 * r.s);
         for (const f of L.flowers) circle("flower", f.x, f.z, 0.1);
         for (const r of L.reeds) circle("reed", r.x, r.z, 0.3);
+        for (const t of L.tufts) circle("tuft", t.x, t.z, 0.2);
         for (const p of L.water.river) circle("river", p.x, p.z, p.w + WATER.bank);
         const pond = L.water.pond;
         if (pond) circle("pond", pond.x, pond.z, Math.max(pond.rx, pond.rz) + WATER.bank);
@@ -167,6 +168,7 @@ describe("outside: caps and the view over the lot", () => {
         expect(L.rocks.length).toBeLessThanOrEqual(CAPS.rocks);
         expect(L.flowers.length).toBeLessThanOrEqual(CAPS.flowers);
         expect(L.reeds.length).toBeLessThanOrEqual(CAPS.reeds);
+        expect(L.tufts.length).toBeLessThanOrEqual(CAPS.tufts);
         expect(L.trees.length).toBeGreaterThan(100);
       }
       const TALL: Record<string, number> = { conifer: 5.2, birch: 4.6, maple: 4.2, "maple-red": 4.2, shrub: 1.3, round: 4.2, street: 4.2 };

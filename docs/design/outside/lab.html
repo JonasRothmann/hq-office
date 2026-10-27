@@ -64,10 +64,12 @@ sc.scene.add(office);
 let L = lookFor(theme);
 function stand() {
   office.clear();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 120, D + 120).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: L.ground.base }));
+  // the office lights everything outdoors with the moon at night (kit.js roomMaterial): emissive = colour × moon
+  const outdoor = (hex) => new THREE.MeshLambertMaterial({ color: hex, emissive: new THREE.Color(hex).multiply(new THREE.Color(L.moon ?? "#000000")) });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 120, D + 120).rotateX(-Math.PI / 2), outdoor(L.ground.base));
   ground.position.y = -0.12;
   ground.receiveShadow = true;
-  const plot = new THREE.Mesh(new THREE.PlaneGeometry(lot.maxX - lot.minX, lot.maxZ - lot.minZ).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: L.ground.alt }));
+  const plot = new THREE.Mesh(new THREE.PlaneGeometry(lot.maxX - lot.minX, lot.maxZ - lot.minZ).rotateX(-Math.PI / 2), outdoor(L.ground.alt));
   plot.position.set((lot.minX + lot.maxX) / 2, -0.118, (lot.minZ + lot.maxZ) / 2);
   plot.receiveShadow = true;
   const box = new THREE.Mesh(new THREE.BoxGeometry(W, 2.95, D), [L.wall.face, L.wall.face, L.cap, L.wall.face, L.wall.face, L.wall.face].map((c) => new THREE.MeshLambertMaterial({ color: c })));

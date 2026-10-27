@@ -45,8 +45,21 @@ export function rock(hex) {
   return new Parts().ico(0.55, hex, 0, 0.18, 0, 0.62, 1, 0.8).ico(0.32, hex, 0.42, 0.1, 0.18, 0.6).geometry();
 }
 
-export function flower() {
-  return new Parts().add(new THREE.OctahedronGeometry(0.09, 0), W, at(0, 0.14, 0)).geometry();
+// A few blooms on short stems; white takes the flower's colour.
+export function flower(stem) {
+  const p = new Parts();
+  for (const [x, z, h] of [[0, 0, 0.2], [0.2, 0.1, 0.15], [-0.12, 0.18, 0.17]]) {
+    p.cone(0.018, h, stem, x, 0, z, 3);
+    p.add(new THREE.OctahedronGeometry(0.085, 0), W, at(x, h + 0.02, z));
+  }
+  return p.geometry();
+}
+
+// A tuft of long grass: a few blades leaning out.
+export function tuft(a, b) {
+  const p = new Parts();
+  for (const [x, z, h, rx, rz, c] of [[0, 0, 0.5, 0.1, 0.15, a], [0.09, 0.05, 0.4, -0.3, 0.35, b], [-0.08, 0.06, 0.44, 0.35, -0.3, a], [0.03, -0.09, 0.36, -0.4, -0.1, b], [-0.05, -0.05, 0.3, 0.2, 0.4, b]]) p.cone(0.06, h, c, x, 0, z, 3, { rx, rz });
+  return p.geometry();
 }
 
 export function reed(hex, tip) {

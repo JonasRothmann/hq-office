@@ -4,9 +4,9 @@
 const DAY = {
   nature: {
     bg: "#b4c0a2",
-    ground: ["#a8b98c", "#a3b487", "#b8bd8c", "#8f9f74", "#c2b894", "#8c8f7a", "#b9b78f"], // lawn grass meadow forest bank bed dry
+    ground: ["#a8b98c", "#a3b487", "#afb98a", "#8f9f74", "#c2b894", "#8c8f7a", "#b5b78f"], // lawn grass meadow forest bank bed dry
     water: "#86a7ad", sheen: "#eef4f0", path: "#cfc2a3", pathEdge: "#c4b694",
-    rock: "#a9a59b", flowers: ["#f2efe6", "#e8d27a", "#d9a8b4", "#a9a3cf", "#e6b07a"], reed: "#8f9a62",
+    rock: "#a9a59b", flowers: ["#f2efe6", "#e8d27a", "#d9a8b4", "#a9a3cf", "#e6b07a"], reed: "#8f9a62", tuft: "#93a777", tuft2: "#a2b07c",
     bridge: { deck: "#a8875f", rail: "#a5533f", post: "#6b4f3a" },
   },
   trees: {
@@ -23,12 +23,12 @@ const DAY = {
     road: "#8e9094", mark: "#e9e6dc", walk: "#d2cdc3", kerb: "#bab4a8", pit: "#6d5d4c",
     shade: "#00000018",
     walls: {
-      timber: ["#a97b56", "#8a5d42", "#9a4f3e", "#c4a27a", "#3f3a36", "#b48a62"],
+      timber: ["#a58263", "#8a6650", "#93594b", "#c1a580", "#45403c", "#ad8d6c"],
       plaster: ["#ece6da", "#e6d8be", "#d9ddd0", "#e9d5c6", "#d6dee1", "#efe9df"],
       concrete: ["#c2c0b9", "#b0b0ab", "#c9c5bb", "#a9aba7", "#bdb7ad", "#cfcbc2"],
     },
     base: { timber: "#6d5444", plaster: "#b9b1a3", concrete: "#8f8e89" },
-    roofs: ["#5b5e64", "#46484e", "#9c6a52", "#6c7a73"],
+    roofs: ["#5d6066", "#4a4c52", "#977059", "#6e7a74"],
     flatRoof: "#9b988f", glass: "#93a7b2", frame: "#eeebe4", door: "#6b4f3a", shopGlass: "#a9bcc4",
     awnings: ["#5f8a87", "#c9a24a", "#a8553f", "#3f5170", "#7b8b5a"],
     noren: "#3f5170",
@@ -48,8 +48,8 @@ const NIGHT = {
   nature: {
     bg: "#24324a",
     ground: ["#6a8a80", "#66857c", "#6f8a80", "#4f6b66", "#7a8484", "#46596a", "#748680"],
-    water: "#3f5f86", sheen: "#c9dcff", path: "#8a8f96", pathEdge: "#80868e",
-    rock: "#7d8590", flowers: ["#c9d2e6", "#b8bd9a", "#a993b6", "#8f8fc4", "#b39b8f"], reed: "#5a6e66",
+    water: "#34506e", sheen: "#9fb6d8", path: "#8a8f96", pathEdge: "#80868e",
+    rock: "#7d8590", flowers: ["#c9d2e6", "#b8bd9a", "#a993b6", "#8f8fc4", "#b39b8f"], reed: "#5a6e66", tuft: "#5c7a72", tuft2: "#66837a",
     bridge: { deck: "#7a6a5c", rail: "#7d4a48", post: "#4a3d36" },
   },
   trees: {
@@ -92,5 +92,7 @@ export function paletteFor(theme = "light") {
   const out = { night, nature: { ...P.nature, ground: [...P.nature.ground] }, trees: P.trees, city: { ...P.city, ground: { ...P.city.ground } }, moon: P.moon, glow: P.glow ?? {} };
   const lawn = typeof theme === "object" && theme?.ground?.base;
   if (lawn) { out.nature.ground[0] = lawn; out.city.ground.lot = lawn; }
+  // the office's own moon, so the lawn round it lights the same as its garden
+  if (typeof theme === "object" && "moon" in (theme ?? {})) out.moon = theme.moon ?? "#000000";
   return out;
 }

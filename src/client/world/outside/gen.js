@@ -10,7 +10,7 @@ export const PAD = 64;
 export const FADE = { from: 34, to: 60 };
 export const GROUND = -0.115;
 export const CELL = 2;
-export const CAPS = { cars: 40, people: 60, trees: 1000, flowers: 520, rocks: 140, reeds: 280 };
+export const CAPS = { cars: 40, people: 60, trees: 1000, flowers: 420, rocks: 140, reeds: 280, tufts: 900 };
 // Sims scale (a person is 1.35 m): two lanes of 3 m, a 3 m pavement, a car 3.3 m long.
 export const ROAD = { w: 6, walk: 3, lane: 1.5 };
 export const LEVEL = { road: -0.11, walk: -0.05 };
@@ -300,7 +300,7 @@ function nature(R, s, lot, ext) {
     const valley = smooth(2, 20, Math.min(dr, pd + 2));
     const hill = Math.max(0, fbm(x / 34, z / 34, s + 1, 4) - 0.36) * 2.4;
     const detail = (fbm(x / 9, z / 9, s + 3, 2) - 0.5) * 0.35 * smooth(4, 14, dl);
-    const land = 0.42 + Math.min(sight(dl) * 0.8, 8 * hill * smooth(6, 30, dl)) * valley + detail;
+    const land = 0.42 + Math.min(sight(dl) * 0.8, 13 * hill * smooth(6, 34, dl)) * valley + detail;
     let h = GROUND + (land - GROUND) * smooth(0.5, 7.5, dl);
     const dw = Math.min(dr, pd);
     if (dw < WATER.bank) h = WATER.bed + (h - WATER.bed) * smooth(-0.8, WATER.bank, dw);
@@ -354,7 +354,7 @@ function nature(R, s, lot, ext) {
   trees = thin(trees, CAPS.trees, rng(s + 17));
 
   // Rocks by the water and on the hills, flowers in the meadows, reeds along the banks.
-  const rocks = [], flowers = [], reeds = [];
+  const rocks = [], flowers = [], reeds = [], tufts = [];
   for (let i = 0; i < 900 && rocks.length < CAPS.rocks; i++) {
     const x = ext.minX + R() * (ext.maxX - ext.minX), z = ext.minZ + R() * (ext.maxZ - ext.minZ), k = R(), sc = R();
     const dl = dLot(x, z);
@@ -371,7 +371,16 @@ function nature(R, s, lot, ext) {
     if (dl < 3 || dl > FADE.to - 4 || meadowAt(x, z) < 0.6) continue;
     const rv = halfAt(x, z);
     if (rv.d - rv.w < WATER.bank || pondD(x, z) < WATER.bank || pathD(x, z) < 1) continue;
-    flowers.push({ x: r2(x), z: r2(z), y: r3(heightAt(x, z)), c: Math.floor(c * 5) });
+    flowers.push({ x: r2(x), z: r2(z), y: r3(heightAt(x, z)), c: Math.floor(c * 5), ry: r2(R() * 6.28) });
+  }
+  // tufts of longer grass, in loose drifts, so the open ground is not a flat sheet
+  for (let i = 0; i < 9000 && tufts.length < CAPS.tufts; i++) {
+    const x = ext.minX + R() * (ext.maxX - ext.minX), z = ext.minZ + R() * (ext.maxZ - ext.minZ), k = R(), sc = R();
+    const dl = dLot(x, z);
+    if (dl < 1.5 || dl > FADE.to - 6 || fbm(x / 5, z / 5, s + 23, 2) < 0.5 + k * 0.12) continue;
+    const rv = halfAt(x, z);
+    if (rv.d - rv.w < WATER.bank - 0.5 || pondD(x, z) < WATER.bank - 0.5 || pathD(x, z) < 1.1 || bridgeD(x, z) < 1) continue;
+    tufts.push({ x: r2(x), z: r2(z), y: r3(heightAt(x, z) - 0.03), s: r2(0.9 + sc * 0.7), ry: r2(R() * 6.28) });
   }
   const shore = (pts, wOf) => {
     for (let i = 1; i < pts.length - 1 && reeds.length < CAPS.reeds; i++) {
@@ -407,7 +416,7 @@ function nature(R, s, lot, ext) {
     water: { level: WATER.level, river: riverPts, pond },
     path: { points: pathOut, all: path, width: 1.4, entry: { x: r2(start.x), z: r2(start.z) } },
     bridge,
-    trees, rocks, flowers, reeds,
+    trees, rocks, flowers, reeds, tufts,
   };
 }
 

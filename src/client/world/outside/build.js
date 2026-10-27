@@ -2,7 +2,7 @@
 // repeated (trees, building parts, windows, lamps, cars, people) as InstancedMeshes, water with a moving sheen.
 // buildOutside(layout, palette, uniforms) -> { group, update(now, dt), dispose(), counts }.
 import { THREE, Parts, material, instanced, color, at, poolTexture } from "./parts.js";
-import { awning, flower, gableEnds, gableSlopes, hipRoof, lampHead, lampPole, reed, rock, tree, unitBox, windowPane } from "./models.js";
+import { awning, flower, tuft, gableEnds, gableSlopes, hipRoof, lampHead, lampPole, reed, rock, tree, unitBox, windowPane } from "./models.js";
 import { TAG, LEVEL, ROAD, STOREY, WATER, sampleGrid } from "./gen.js";
 import { Movers } from "./movers.js";
 
@@ -45,10 +45,17 @@ function buildNature({ P, U, mat, add, layout }) {
     const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3);
     const base = N.ground.map((h) => new THREE.Color(h));
     const c = new THREE.Color();
+    const shadeAt = treeShade(layout.trees);
+    const H = (i, j) => t.h[Math.min(nz - 1, Math.max(0, j)) * nx + Math.min(nx - 1, Math.max(0, i))];
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const k = j * nx + i, h = t.h[k];
       pos.set([t.xs[i], h, t.zs[j]], k * 3);
-      c.copy(base[t.tag[k]] ?? base[1]).multiplyScalar(1 + t.tone[k] * 0.16 + Math.min(0.08, Math.max(0, h - 1.5) * 0.015));
+      // the sun's side of a hill a little lighter, the far side darker (the key light comes from the front left)
+      const gx = (H(i + 1, j) - H(i - 1, j)) / ((t.xs[Math.min(nx - 1, i + 1)] - t.xs[Math.max(0, i - 1)]) || 1);
+      const gz = (H(i, j + 1) - H(i, j - 1)) / ((t.zs[Math.min(nz - 1, j + 1)] - t.zs[Math.max(0, j - 1)]) || 1);
+      const nl = Math.hypot(gx, 1, gz), lit = (-gx * SUN[0] + SUN[1] - gz * SUN[2]) / nl - SUN[1];
+      const slope = Math.max(0.8, Math.min(1.16, 1 + lit * 1.1));
+      c.copy(base[t.tag[k]] ?? base[1]).multiplyScalar((1 + t.tone[k] * 0.16) * slope * shadeAt(t.xs[i], t.zs[j]));
       col.set([c.r, c.g, c.b], k * 3);
     }
     const idx = [];
@@ -128,7 +135,7 @@ function buildNature({ P, U, mat, add, layout }) {
       const C = [b.x + nx_ * w1, yAt(b.x + nx_ * w1, b.z + nz_ * w1), b.z + nz_ * w1], D = [b.x - nx_ * w1, yAt(b.x - nx_ * w1, b.z - nz_ * w1), b.z - nz_ * w1];
       const up = (B[0] - A[0]) * (D[2] - A[2]) - (B[2] - A[2]) * (D[0] - A[0]) < 0;
       if (up) s.pos.push(...A, ...B, ...D, ...A, ...D, ...C); else s.pos.push(...A, ...D, ...B, ...A, ...C, ...D);
-      const c = color((i * 7) % 5 ? N.path : N.pathEdge);
+      const c = color(N.path);
       for (let k = 0; k < 6; k++) s.col.push(c.r, c.g, c.b);
     }
     const br = layout.bridge;
@@ -143,9 +150,33 @@ function buildNature({ P, U, mat, add, layout }) {
     add(instanced(`trees:${kind}`, tree(kind, P.trees), mat("lit"), items, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
   }
   add(instanced("rocks", rock(N.rock), mat("lit"), layout.rocks, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
-  add(instanced("flowers", flower(), mat("lit"), layout.flowers, (x) => at(x.x, x.y, x.z), (x) => T(N.flowers[x.c % N.flowers.length])));
+  add(instanced("flowers", flower(N.reed), mat("lit"), layout.flowers, (x) => at(x.x, x.y, x.z, x.ry ?? 0), (x) => T(N.flowers[x.c % N.flowers.length])));
+  add(instanced("tufts", tuft(N.tuft, N.tuft2), mat("lit"), layout.tufts ?? [], (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s)));
   add(instanced("reeds", reed(N.reed, P.night ? "#4a4a40" : "#7a5a3a"), mat("lit"), layout.reeds, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s)));
   return null;
+}
+
+// Toward the key light (scene.js puts it at x - 16, y 24, z + 17 from the office).
+const SUN = (() => { const v = [-16, 24, 17], l = Math.hypot(...v); return v.map((a) => a / l); })();
+
+// How much the trees darken the ground under them: a soft patch per tree, a little away from the sun.
+function treeShade(trees) {
+  const cell = 4, grid = new Map(), key = (i, j) => i * 100003 + j;
+  for (const t of trees) {
+    const k = key(Math.floor(t.x / cell), Math.floor(t.z / cell));
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(t);
+  }
+  return (x, z) => {
+    let dark = 0;
+    const i0 = Math.floor(x / cell), j0 = Math.floor(z / cell);
+    for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) for (const t of grid.get(key(i, j)) ?? []) {
+      const r = (t.kind === "shrub" ? 1.0 : 2.0) * t.s + 0.6;
+      const d = Math.hypot(x - (t.x + 0.7 * t.s), z - (t.z - 0.55 * t.s));
+      if (d < r) dark += (1 - d / r) * 0.9;
+    }
+    return 1 - 0.26 * Math.min(1, dark);
+  };
 }
 
 // A small arched footbridge: deck planks rising to the middle, posts and a rail either side.
