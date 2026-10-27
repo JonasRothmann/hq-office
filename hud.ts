@@ -7,6 +7,11 @@
 //           [--blocking|--nonblocking]   blocking: the lane cannot go on with that work without the answer; it is
 //                                 locked there until answered. The default is non-blocking.
 //           [--priority urgent|high|normal|low]   orders the panel within a tier (default normal)
+//           [--to lead|owner]     lead: the asking lane's lead answers first and the owner gets it on a timeout;
+//                                 owner (the default): the owner answers
+//   hud answer ID TEXT --as LEAD             answer a question LEAD holds (the owner answers on the page)
+//   hud escalate ID --as LEAD [--reason R]   pass a question LEAD holds to the owner now
+//   hud held --as LEAD [--wait N] [--json]   the questions LEAD holds; --wait blocks until one comes
 //   hud tier ID blocking|nonblocking [--priority P]   move an open question between tiers (not a locked blocking
 //   hud tier ID --priority P                          one) or re-prioritise it; the owner can do the same on the page
 // ask ledger: change an open question instead of withdrawing and reposting it
@@ -151,8 +156,79 @@ switch (cmd) {
       due: dueAt(one("due")),
       secrets: flags.secret ?? [],
       items: flags.item,
+      to: one("to"),
     });
-    console.log(`ask #${out.id}`);
+    console.log(out.holder ? `ask #${out.id} with ${out.holder} (its lead) until ${new Date(out.escalateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, then the owner` : `ask #${out.id}`);
+    for (const s of out.skipped ?? []) console.log(`  skipped ${s.lane}: ${s.why}`);
+    break;
+  }
+  case "answer": {
+    // TEXT is the words after the ID, or stdin when it is piped. Checked before anything is read or sent.
+    const [id, ...words] = rest;
+    const lead = one("as");
+    const usage = () => {
+      console.error("usage: hud answer ID TEXT --as LEAD  (TEXT on stdin when piped)");
+      process.exit(2);
+    };
+    if (!/^\d+$/.test(id ?? "") || !lead) usage();
+    if (lead === "owner" || lead === "hq") {
+      console.error("the owner answers on the page; hud answer is for a lead");
+      usage();
+    }
+    const text = (await textArg(words.length ? words.join(" ") : undefined)).trim();
+    if (!text) usage();
+    await call("POST", `/api/asks/${id}/answer`, { answer: text, by: lead });
+    console.log(`ask #${id} answered as ${lead}`);
+    break;
+  }
+  case "escalate": {
+    const lead = one("as");
+    if (!/^\d+$/.test(rest[0] ?? "") || !lead) {
+      console.error("usage: hud escalate ID --as LEAD [--reason R]");
+      process.exit(2);
+    }
+    const out = await call("POST", `/api/asks/${rest[0]}/escalate`, { by: lead, reason: one("reason") });
+    console.log(out.escalated ? `ask #${out.id} escalated to the owner` : `ask #${out.id} is already with the owner`);
+    break;
+  }
+  case "held": {
+    // --json takes no value. --wait takes an optional N (seconds, at most 240): it is taken only when a number follows.
+    const json = argv.includes("--json");
+    let wait: string | undefined;
+    const args: string[] = [];
+    for (let i = 0; i < argv.length; i++) {
+      if (argv[i] === "--json") continue;
+      if (argv[i] === "--wait") {
+        wait = /^\d+$/.test(argv[i + 1] ?? "") ? argv[++i] : "";
+        continue;
+      }
+      args.push(argv[i]);
+    }
+    const lead = parse(args).one("as");
+    if (!lead) {
+      console.error("usage: hud held --as LEAD [--wait N] [--json]");
+      process.exit(2);
+    }
+    const secs = wait === undefined ? undefined : wait === "" ? 240 : Math.min(Number(wait), 240);
+    const q = new URLSearchParams({ lane: lead, ...(secs === undefined ? {} : { wait: String(secs) }) });
+    let out = await call("GET", `/api/asks/held?${q}`);
+    // With --wait, an empty list waits again, as hud wait does.
+    while (secs && !out.asks.length) out = await call("GET", `/api/asks/held?${q}`);
+    if (json) {
+      console.log(JSON.stringify(out, null, 2));
+      break;
+    }
+    if (!out.asks.length) {
+      console.log(`nothing held by ${lead}`);
+      break;
+    }
+    const PRIORITY = ["urgent", "high", "normal", "low"];
+    for (const a of out.asks) {
+      console.log(`#${a.id} from ${a.lane} · ${a.tier}, ${PRIORITY[a.priority]} · to the owner at ${new Date(a.escalate_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${a.title}`);
+      if (a.body) for (const line of a.body.split("\n")) console.log(`  | ${line}`);
+      if (a.options?.length) console.log(`  options: ${a.options.join(" / ")}${a.recommended ? ` (HQ pick: ${a.recommended})` : ""}`);
+    }
+    console.log(`answer: hud answer ID "<answer>" --as ${lead} · not yours to decide: hud escalate ID --as ${lead} --reason "<why>"`);
     break;
   }
   case "update":
@@ -283,7 +359,7 @@ switch (cmd) {
     await roomCmd(argv);
     break;
   default:
-    console.log("usage: hud ask|update|tier|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
+    console.log("usage: hud ask|answer|escalate|held|update|tier|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 
