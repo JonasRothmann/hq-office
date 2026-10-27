@@ -18,6 +18,9 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   its own). `checkScenery(scenery, catalog)` names each mistake with its path and a fix; `createWorld` and
   `setScenery` throw a `WorldError` on one. `planScenery` and `moverPlaces(mover, t)` are the pure plan and where
   each mover is at a time. New in `api.txt`: `checkScenery`, `planScenery`, `moverPlaces`.
+- `k.light(part, size, at, color)` and the finish `"light"`: a soft pool of light on the ground. It is unlit and
+  added to what lies under it, brightest at its object's origin and gone 0.5 m from it (scale the object to size the
+  pool), and casts and takes no shadow. Black adds nothing, so a token that is black by day shows only by night.
 - `defineObject({ kind: "scenery" })`: a piece of scenery. It has no footprint, slots or anchors, and its parts may
   be up to 40 m (a house) instead of 6. `checkPack` checks its colours, sizes and coplanar parts. Placed on the lot,
   it is refused with a fix that says where it goes.

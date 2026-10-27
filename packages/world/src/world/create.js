@@ -174,8 +174,8 @@ export function createWorld(canvas, world, opts = {}) {
         const mesh = new THREE.InstancedMesh(geo, materialFor(materials, key), ids.length);
         ids.forEach((id, i) => mesh.setMatrixAt(i, matrixOf(objectOf(id))));
         mesh.computeBoundingSphere(); // round every instance, hidden or not, so one shown later is never culled
-        mesh.castShadow = finish !== "glass";
-        mesh.receiveShadow = finish !== "glow";
+        mesh.castShadow = finish !== "glass" && finish !== "light";
+        mesh.receiveShadow = finish !== "glow" && finish !== "light";
         mesh.name = `batch:${type}`;
         mesh.userData = { finish, ids };
         objectsGroup.add(mesh);

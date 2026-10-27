@@ -60,7 +60,9 @@ Pieces of one type and params are one instanced mesh per material; a `tint` mult
 is white where its tint should show. Movers go round their closed loop at their speed and cast no shadows. They are
 ambient motion: they draw at `idleFps`, and at `idleFps` 0 they stand still. Everything outdoors, the lot's own ground
 too, takes no light from lamps (they are indoors, and shine through walls) and fades into the background past `fade`.
-`checkScenery(scenery, catalog)` names each mistake and its fix.
+`checkScenery(scenery, catalog)` names each mistake and its fix. A pool of lamp light is a piece built with
+`k.light(...)`: it adds its colour to the ground, fading out 0.5 m from the piece's origin (scale it to size it), so a
+token that is black by day and warm by night lights the street only by night.
 
 ## Finishes
 

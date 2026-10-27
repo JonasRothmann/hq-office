@@ -45,7 +45,7 @@ export function primsToGeometries(prims, palette) {
   };
   for (const p of prims) {
     const base = p.base ?? p.at[1]; // a wall cut at its bands darkens from the wall's foot, not each stretch's
-    const shade = (v, n) => (p.finish === "glow" || Math.abs(n[1]) > 0.5 ? 1 : FOOT_DARK + (1 - FOOT_DARK) * Math.min(1, (v[1] - base) / FOOT));
+    const shade = (v, n) => (p.finish === "glow" || p.finish === "light" || Math.abs(n[1]) > 0.5 ? 1 : FOOT_DARK + (1 - FOOT_DARK) * Math.min(1, (v[1] - base) / FOOT));
     if (p.shape === "box") {
       const c = corners(p);
       for (const f of BOX_FACES) {
@@ -94,8 +94,8 @@ export function primsToGroup(prims, palette, materials, { cast = true, receive =
   for (const [key, geo] of primsToGeometries(prims, palette)) {
     const [finish] = key.split("|");
     const mesh = new THREE.Mesh(geo, materialFor(materials, key));
-    mesh.castShadow = cast && finish !== "glass";
-    mesh.receiveShadow = receive && finish !== "glow";
+    mesh.castShadow = cast && finish !== "glass" && finish !== "light";
+    mesh.receiveShadow = receive && finish !== "glow" && finish !== "light";
     mesh.userData.finish = finish;
     group.add(mesh);
   }

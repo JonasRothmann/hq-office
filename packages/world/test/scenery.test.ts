@@ -3,7 +3,7 @@
 // along them; the driver draws moving scenery at idleFps only, never redraws shadows for it, and at idleFps 0 its
 // clock stands still (the land holds still in a power saver).
 import { describe, expect, test } from "bun:test";
-import { defineObject, definePack, createCatalog, checkPack, checkScenery, planScenery, moverPlaces, fromJSON, analyse } from "@hq/world/model";
+import { defineObject, definePack, createCatalog, checkPack, checkScenery, planScenery, moverPlaces, fromJSON, analyse, buildPrims } from "@hq/world/model";
 import starter from "@hq/world/packs/starter";
 import { createDriver } from "../src/view/driver.js";
 import house from "./fixtures/house.world.js";
@@ -24,6 +24,13 @@ describe("scenery pieces", () => {
     expect(checkPack(land)).toEqual([]);
     const huge = definePack({ id: "huge", objects: [defineObject({ id: "tower", kind: "scenery", build(k) { k.box("walls", [8, 50, 8], [0, 0, 0], "#888888"); } })] });
     expect(checkPack(huge).map((p) => p.code)).toEqual(["prim.units"]);
+  });
+
+  test("a pool of light is its own finish, so it never shares a material with the ground it lies on", () => {
+    const pool = defineObject({ id: "pool", kind: "scenery", build(k) { k.light("pool", [1, 0.01, 1], [0, 0, 0], "#8a6f45", { omit: ["-y"] }); } });
+    const prims = buildPrims(pool);
+    expect(prims.map((p: any) => p.finish)).toEqual(["light"]);
+    expect(checkPack(definePack({ id: "pools", objects: [pool] }))).toEqual([]);
   });
 
   test("a scenery piece placed on the lot is refused with where it goes instead", () => {

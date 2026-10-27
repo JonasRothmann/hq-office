@@ -26,12 +26,14 @@ export function worldFixedShadows(material, then = null) {
 // leave every spot light out (the lamps are the lot's own, indoors), and fade toward the fade colour from `from` to
 // `to` metres outside the fade box. The colour is in the output space, like the cleared background, so they meet.
 const SPOTS = "#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )";
-function outdoor(fade) {
+// A light (a pool of light) adds its colour, fading out from its object's origin to 0.5 m and past the fade box.
+function outdoor(fade, light = false) {
   return (shader) => {
     Object.assign(shader.uniforms, { hqFadeBox: fade.box, hqFadeRange: fade.range, hqFadeColor: fade.color });
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;")
+      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;\nvarying vec2 hqLocal;")
       .replace("#include <project_vertex>", `#include <project_vertex>
+  hqLocal = position.xz;
   {
     vec4 hqW = vec4( transformed, 1.0 );
   #ifdef USE_INSTANCING
@@ -43,11 +45,12 @@ function outdoor(fade) {
     let f = shader.fragmentShader;
     if (lights.includes(SPOTS)) f = f.replace("#include <lights_fragment_begin>", lights.replace(SPOTS, "#if 0"));
     shader.fragmentShader = f
-      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;\nuniform vec4 hqFadeBox;\nuniform vec2 hqFadeRange;\nuniform vec3 hqFadeColor;")
+      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;\nvarying vec2 hqLocal;\nuniform vec4 hqFadeBox;\nuniform vec2 hqFadeRange;\nuniform vec3 hqFadeColor;")
       .replace("#include <colorspace_fragment>", `#include <colorspace_fragment>
   {
     vec2 hqD = max( max( hqFadeBox.xy - hqXZ, hqXZ - hqFadeBox.zw ), 0.0 );
-    gl_FragColor.rgb = mix( gl_FragColor.rgb, hqFadeColor, smoothstep( hqFadeRange.x, hqFadeRange.y, length( hqD ) ) );
+    float hqFar = smoothstep( hqFadeRange.x, hqFadeRange.y, length( hqD ) );
+    ${light ? "gl_FragColor.rgb *= ( 1.0 - smoothstep( 0.0, 0.5, length( hqLocal ) ) ) * ( 1.0 - hqFar );" : "gl_FragColor.rgb = mix( gl_FragColor.rgb, hqFadeColor, hqFar );"}
   }`);
   };
 }
@@ -110,7 +113,11 @@ export function createMaterials({ screenNoise = false } = {}) {
     if (cache.has(key)) return cache.get(key);
     const then = out ? outdoor(fade) : null;
     let m;
-    if (finish === "glow") { m = new THREE.MeshBasicMaterial({ vertexColors: true }); if (then) { m.onBeforeCompile = then; m.customProgramCacheKey = () => "hq-world-outdoor"; } }
+    if (finish === "light") {
+      m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+      m.onBeforeCompile = outdoor(fade, true);
+      m.customProgramCacheKey = () => "hq-world-light";
+    } else if (finish === "glow") { m = new THREE.MeshBasicMaterial({ vertexColors: true }); if (then) { m.onBeforeCompile = then; m.customProgramCacheKey = () => "hq-world-outdoor"; } }
     else if (finish === "glass") m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: out ? 0.86 : 0.45, depthWrite: false }), then);
     else m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: pattern && pattern !== "plain" ? patternTexture(pattern) : null }), then);
     cache.set(key, m);

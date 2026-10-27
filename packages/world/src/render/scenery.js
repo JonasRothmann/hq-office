@@ -23,8 +23,9 @@ export function buildScenery(plan, catalog, palette, materials) {
       const finish = key.split("|")[0];
       const mesh = new THREE.InstancedMesh(geo, materialFor(materials, key, true), n);
       mesh.name = name;
-      mesh.castShadow = cast && finish !== "glass";
-      mesh.receiveShadow = finish !== "glow";
+      mesh.castShadow = cast && finish !== "glass" && finish !== "light";
+      mesh.receiveShadow = finish !== "glow" && finish !== "light";
+      if (finish === "light") mesh.renderOrder = 2; // over the water
       mesh.userData.finish = finish;
       geometries.push(geo);
       group.add(mesh);
