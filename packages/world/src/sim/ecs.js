@@ -14,10 +14,11 @@
 /** @typedef {ReturnType<typeof createEcs>} Ecs */
 
 /**
- * @param {{ onError?: (system: string, error: Error) => void }} [opts]   told once when a system throws (default: console.error)
+ * @param {{ onError?: (system: string, error: Error) => void, onLoad?: () => void }} [opts]
+ *   onError: told once when a system throws (default: console.error); onLoad: told after load(), to check the save
  * @stability experimental
  */
-export function createEcs({ onError } = {}) {
+export function createEcs({ onError, onLoad } = {}) {
   /** @type {Map<string, Map<string, any>>} */
   const kinds = new Map();
   /** @type {System[]} */
@@ -69,7 +70,7 @@ export function createEcs({ onError } = {}) {
       }
       return out;
     },
-    load(json) { kinds.clear(); for (const [k, byId] of Object.entries(json)) for (const [id, data] of Object.entries(byId)) store(k).set(id, structuredClone(data)); },
+    load(json) { kinds.clear(); for (const [k, byId] of Object.entries(json)) for (const [id, data] of Object.entries(byId)) store(k).set(id, structuredClone(data)); onLoad?.(); },
   };
   return ecs;
 }

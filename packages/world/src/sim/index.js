@@ -38,7 +38,7 @@ export function createSim(lot, nav, opts = {}) {
   const ecs = createEcs({ onError: (system, e) => {
     console.error(`@hq/world: system '${system}' threw and is switched off: ${e?.message ?? e}`);
     emit("error", { system, message: String(e?.message ?? e) });
-  } });
+  }, onLoad: () => reconcile(new Set()) });
   for (const s of [...STEP_SYSTEMS, ...(opts.systems ?? []), ...LAST_SYSTEMS]) ecs.system(s);
   const ctx = { lot, nav, emit, replan: (id, a) => { const p = start(id, a); if (p) cancel(id, p); }, cancel: (id, p) => cancel(id, p) };
 
@@ -77,7 +77,8 @@ export function createSim(lot, nav, opts = {}) {
     return null;
   }
 
-  // Stop an act that cannot go on: stand up where it is, let go of the slot, idle, and reject the act's promise.
+  // Stop an act that cannot go on: stand up, let go of the slot, idle, and reject the act's promise. A character left
+  // inside an object (a seat that became something else) walks off it.
   function cancel(id, p) {
     const body = ecs.get(id, "body");
     stopSteps(id);
@@ -88,6 +89,7 @@ export function createSim(lot, nav, opts = {}) {
     if (body) ecs.add(id, "queue", { steps });
     settle(id, new WorldError([p], "act"));
     emit("cancel", { who: id, problem: p });
+    if (body && !ctx.nav.walkable(...tileOf(body))) stepOff(id, body);
   }
 
   /** Plan an act and queue its steps; resolves when the character is in place, rejects with a WorldError. */
@@ -127,27 +129,40 @@ export function createSim(lot, nav, opts = {}) {
     for (const id of diff.characters.changed) { const c = nextLot.characters.find((x) => x.id === id); if (c) ecs.get(id, "character").look = c.look; }
     const touched = new Set([...diff.objects.removed, ...diff.objects.changed]);
     if (!diff.lot && !diff.objects.added.length && !touched.size) return;
+    reconcile(touched);
+  }
+
+  // Bring every character in line with the lot: inside it, its act's objects there and untouched, its route open, and
+  // not inside an object. After an edit (touched: the objects it changed) or a load (a save may name objects this
+  // lot does not have).
+  function reconcile(touched) {
+    const has = new Map(ctx.lot.objects.map((o) => [o.id, o]));
+    const lost = (o, slot) => touched.has(o) || !has.has(o) || (slot !== undefined && !has.get(o).slots[slot]);
     for (const [id, body] of ecs.query("body")) {
-      if (body.x < 0 || body.z < 0 || body.x >= nextLot.w || body.z >= nextLot.d) {
-        body.x = Math.min(Math.max(body.x, 0.5), nextLot.w - 0.5);
-        body.z = Math.min(Math.max(body.z, 0.5), nextLot.d - 0.5);
+      if (body.x < 0 || body.z < 0 || body.x >= ctx.lot.w || body.z >= ctx.lot.d) {
+        body.x = Math.min(Math.max(body.x, 0.5), ctx.lot.w - 0.5);
+        body.z = Math.min(Math.max(body.z, 0.5), ctx.lot.d - 0.5);
       }
       const doing = ecs.get(id, "doing")?.act;
       const hold = ecs.get(id, "holding");
-      const hit = (hold && touched.has(hold.object)) || targets(doing).some((t) => touched.has(t));
+      const hit = (hold && lost(hold.object, hold.slot)) || targets(doing).some((t) => lost(t));
       if (hit || (busy(id) && !routeOpen(id))) { if (doing) ctx.replan(id, doing); else cancel(id, problem("act.blocked", "act", `${id}'s way is shut`, "give it a new act")); continue; }
-      if (!hold && !nextNav.walkable(...tileOf(body))) stepOff(id, body);
+      if (!hold && !ctx.nav.walkable(...tileOf(body))) stepOff(id, body);
     }
   }
 
-  // Walk to the nearest free tile (a character standing where an object now is).
+  // Walk to the nearest free tile (a character standing where an object now is). Not an act: no "act" event at the end.
   function stepOff(id, body) {
     const [x, z] = tileOf(body);
     for (let r = 1; r <= 6; r++) {
       const ring = [];
       for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r && ctx.nav.walkable(x + dx, z + dz)) ring.push([x + dx, z + dz]);
       const tiles = ring.length ? ctx.nav.path([x, z], ring) : null;
-      if (tiles) { const p = start(id, { do: "walk", to: tiles[tiles.length - 1] }); if (!p) return; }
+      if (tiles && !start(id, { do: "walk", to: tiles[tiles.length - 1] })) {
+        ecs.remove(id, "doing");
+        for (const s of ecs.get(id, "queue").steps) if (s.kind === "loop") s.done = true;
+        return;
+      }
     }
   }
 
