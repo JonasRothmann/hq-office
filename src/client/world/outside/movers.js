@@ -2,7 +2,7 @@
 // give way at junctions (the lower number goes first when two wait on each other) and stop for people on a zebra;
 // people step down onto the zebras and swing their legs as they walk.
 import { THREE, instanced, at } from "./parts.js";
-import * as M from "./models.js";
+import { car, carLights, kei, personBody, personHead, personLeg } from "./models.js";
 import { LEVEL } from "./gen.js";
 
 const STUCK = 5;  // seconds stopped before a car stops waiting (so nothing can lock up for good)
@@ -61,13 +61,13 @@ export class Movers {
     sedans.forEach((c, k) => { c.mesh = "sedan"; c.k = k; });
     keis.forEach((c, k) => { c.mesh = "kei"; c.k = k; });
     const glass = P.night ? "#3a4252" : "#5d6872";
-    this.sedan = live(instanced("cars", M.car(glass, "#2a2a2c"), mat("lit"), sedans, () => _m.identity(), paint));
-    this.kei = live(instanced("cars:kei", M.kei(glass, "#2a2a2c"), mat("lit"), keis, () => _m.identity(), paint));
-    this.lights = P.night ? live(instanced("cars:lights", M.carLights(G.head, G.tail), mat("glow"), this.cars, () => _m.identity())) : null;
+    this.sedan = live(instanced("cars", car(glass, "#2a2a2c"), mat("lit"), sedans, () => _m.identity(), paint));
+    this.kei = live(instanced("cars:kei", kei(glass, "#2a2a2c"), mat("lit"), keis, () => _m.identity(), paint));
+    this.lights = P.night ? live(instanced("cars:lights", carLights(G.head, G.tail), mat("glow"), this.cars, () => _m.identity())) : null;
     const W = this.people;
-    this.body = live(instanced("people", M.personBody(), mat("lit"), W, () => _m.identity(), (w) => new THREE.Color(C.shirts[w.p.shirt % C.shirts.length])));
-    this.legs = live(instanced("people:legs", M.personLeg(), mat("lit"), [...W, ...W], () => _m.identity(), (w) => new THREE.Color(C.pants[w.p.pants % C.pants.length])));
-    this.heads = live(instanced("people:heads", M.personHead(C.hairs[0]), mat("lit"), W, () => _m.identity(), (w) => new THREE.Color(C.skins[w.p.skin % C.skins.length])));
+    this.body = live(instanced("people", personBody(), mat("lit"), W, () => _m.identity(), (w) => new THREE.Color(C.shirts[w.p.shirt % C.shirts.length])));
+    this.legs = live(instanced("people:legs", personLeg(), mat("lit"), [...W, ...W], () => _m.identity(), (w) => new THREE.Color(C.pants[w.p.pants % C.pants.length])));
+    this.heads = live(instanced("people:heads", personHead(C.hairs[0]), mat("lit"), W, () => _m.identity(), (w) => new THREE.Color(C.skins[w.p.skin % C.skins.length])));
     this.update(0);
   }
 

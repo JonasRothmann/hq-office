@@ -2,7 +2,7 @@
 // repeated (trees, building parts, windows, lamps, cars, people) as InstancedMeshes, water with a moving sheen.
 // buildOutside(layout, palette, uniforms) -> { group, update(now, dt), dispose(), counts }.
 import { THREE, Parts, material, instanced, color, at, poolTexture } from "./parts.js";
-import * as M from "./models.js";
+import { awning, flower, gableEnds, gableSlopes, hipRoof, lampHead, lampPole, reed, rock, tree, unitBox, windowPane } from "./models.js";
 import { TAG, LEVEL, ROAD, STOREY, WATER, sampleGrid } from "./gen.js";
 import { Movers } from "./movers.js";
 
@@ -140,11 +140,11 @@ function buildNature({ P, U, mat, add, layout }) {
   const kinds = [...new Set(layout.trees.map((x) => x.kind))].sort();
   for (const kind of kinds) {
     const items = layout.trees.filter((x) => x.kind === kind);
-    add(instanced(`trees:${kind}`, M.tree(kind, P.trees), mat("lit"), items, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
+    add(instanced(`trees:${kind}`, tree(kind, P.trees), mat("lit"), items, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
   }
-  add(instanced("rocks", M.rock(N.rock), mat("lit"), layout.rocks, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
-  add(instanced("flowers", M.flower(), mat("lit"), layout.flowers, (x) => at(x.x, x.y, x.z), (x) => T(N.flowers[x.c % N.flowers.length])));
-  add(instanced("reeds", M.reed(N.reed, P.night ? "#4a4a40" : "#7a5a3a"), mat("lit"), layout.reeds, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s)));
+  add(instanced("rocks", rock(N.rock), mat("lit"), layout.rocks, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
+  add(instanced("flowers", flower(), mat("lit"), layout.flowers, (x) => at(x.x, x.y, x.z), (x) => T(N.flowers[x.c % N.flowers.length])));
+  add(instanced("reeds", reed(N.reed, P.night ? "#4a4a40" : "#7a5a3a"), mat("lit"), layout.reeds, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s)));
   return null;
 }
 
@@ -226,25 +226,25 @@ function buildCity({ P, U, mat, add, layout }) {
   // Buildings: walls, plinths, roofs (flat, gabled, hipped), roof things, balconies, windows and doors, awnings.
   const B = layout.buildings;
   const wallOf = (b) => C.walls[b.wall][b.tint % C.walls[b.wall].length];
-  add(instanced("walls", M.unitBox(), mat("lit"), B, (b) => at(b.x, b.y, b.z, 0, 0, 0, b.w, b.h, b.d), (b) => T(wallOf(b))));
-  add(instanced("plinths", M.unitBox(), mat("lit"), B, (b) => at(b.x, b.y, b.z, 0, 0, 0, b.w + 0.06, 0.45, b.d + 0.06), (b) => T(C.base[b.wall])));
+  add(instanced("walls", unitBox(), mat("lit"), B, (b) => at(b.x, b.y, b.z, 0, 0, 0, b.w, b.h, b.d), (b) => T(wallOf(b))));
+  add(instanced("plinths", unitBox(), mat("lit"), B, (b) => at(b.x, b.y, b.z, 0, 0, 0, b.w + 0.06, 0.45, b.d + 0.06), (b) => T(C.base[b.wall])));
   const flat = B.filter((b) => b.roof === "flat"), gable = B.filter((b) => b.roof === "gable"), hip = B.filter((b) => b.roof === "hip");
-  add(instanced("roofs:flat", M.unitBox(), mat("lit"), flat, (b) => at(b.x, b.y + b.h, b.z, 0, 0, 0, b.w + 0.2, 0.22, b.d + 0.2), () => T(C.flatRoof)));
+  add(instanced("roofs:flat", unitBox(), mat("lit"), flat, (b) => at(b.x, b.y + b.h, b.z, 0, 0, 0, b.w + 0.2, 0.22, b.d + 0.2), () => T(C.flatRoof)));
   const roofAt = (b, o = 0.35) => at(b.x, b.y + b.h, b.z, b.ridge === "x" ? 0 : Math.PI / 2, 0, 0, (b.ridge === "x" ? b.w : b.d) + o, b.roofH, (b.ridge === "x" ? b.d : b.w) + o);
-  add(instanced("roofs:gable", M.gableSlopes(), mat("lit"), gable, (b) => roofAt(b), (b) => T(C.roofs[b.roofTint % C.roofs.length])));
-  add(instanced("roofs:ends", M.gableEnds(), mat("lit"), gable, (b) => roofAt(b, -0.02), (b) => T(wallOf(b), 0.94)));
-  add(instanced("roofs:hip", M.hipRoof(), mat("lit"), hip, (b) => roofAt(b, 0.5), (b) => T(C.roofs[b.roofTint % 2])));
+  add(instanced("roofs:gable", gableSlopes(), mat("lit"), gable, (b) => roofAt(b), (b) => T(C.roofs[b.roofTint % C.roofs.length])));
+  add(instanced("roofs:ends", gableEnds(), mat("lit"), gable, (b) => roofAt(b, -0.02), (b) => T(wallOf(b), 0.94)));
+  add(instanced("roofs:hip", hipRoof(), mat("lit"), hip, (b) => roofAt(b, 0.5), (b) => T(C.roofs[b.roofTint % 2])));
 
   const things = [], panes = [], awnings = [];
   for (const b of B) facade(b, things, panes, awnings, C, G, night);
-  add(instanced("things", M.unitBox(), mat("lit"), things, (x) => at(x.x, x.y, x.z, x.ry ?? 0, 0, 0, x.w, x.h, x.d), (x) => T(x.c)));
-  const paneGeo = night ? M.windowPane("#7a7a7a", "#ffffff") : M.windowPane(C.frame, C.glass);
+  add(instanced("things", unitBox(), mat("lit"), things, (x) => at(x.x, x.y, x.z, x.ry ?? 0, 0, 0, x.w, x.h, x.d), (x) => T(x.c)));
+  const paneGeo = night ? windowPane("#7a7a7a", "#ffffff") : windowPane(C.frame, C.glass);
   add(instanced("windows", paneGeo, mat(night ? "glow" : "lit"), panes, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.w, x.h, 1), (x) => T(x.c)));
-  add(instanced("awnings", M.awning(), mat("lit"), awnings, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.w, 1, 1), (x) => T(C.awnings[x.c % C.awnings.length])));
+  add(instanced("awnings", awning(), mat("lit"), awnings, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.w, 1, 1), (x) => T(C.awnings[x.c % C.awnings.length])));
 
   // Street lamps and trees.
-  add(instanced("lamps", M.lampPole("#ffffff"), mat("lit"), layout.lamps, (l) => at(l.x, walk, l.z, l.ry), () => T(C.lamp)));
-  add(instanced("lamps:heads", M.lampHead("#ffffff"), mat("glow"), layout.lamps, (l) => at(l.x, walk, l.z, l.ry), () => T(night ? G.lamp : C.lampHead)));
+  add(instanced("lamps", lampPole("#ffffff"), mat("lit"), layout.lamps, (l) => at(l.x, walk, l.z, l.ry), () => T(C.lamp)));
+  add(instanced("lamps:heads", lampHead("#ffffff"), mat("glow"), layout.lamps, (l) => at(l.x, walk, l.z, l.ry), () => T(night ? G.lamp : C.lampHead)));
   if (night) {
     const pools = new THREE.PlaneGeometry(5, 5).rotateX(-Math.PI / 2);
     pools.setAttribute("color", new THREE.Float32BufferAttribute(new Array(pools.attributes.position.count * 3).fill(1), 3));
@@ -253,7 +253,7 @@ function buildCity({ P, U, mat, add, layout }) {
   const kinds = [...new Set(layout.trees.map((x) => x.kind))].sort();
   for (const kind of kinds) {
     const items = layout.trees.filter((x) => x.kind === kind);
-    add(instanced(`trees:${kind}`, M.tree(kind, P.trees), mat("lit"), items, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
+    add(instanced(`trees:${kind}`, tree(kind, P.trees), mat("lit"), items, (x) => at(x.x, x.y, x.z, x.ry, 0, 0, x.s, x.s, x.s), (x) => grey(x.tone)));
   }
 
   return new Movers(layout, P, { mat, add });
