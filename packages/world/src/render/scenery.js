@@ -84,8 +84,8 @@ export function buildScenery(plan, catalog, palette, materials) {
     last = t;
     for (const { list, meshes } of movers) {
       for (const { mv, from } of list) {
-        moverPlaces(mv, t).forEach(([x, y, z, ry], i) => {
-          _o.position.set(x, y, z); _o.rotation.set(0, ry, 0); _o.scale.set(1, 1, 1); _o.updateMatrix();
+        moverPlaces(mv, t).forEach(([x, y, z, ry, roll = 0, pitch = 0], i) => {
+          _o.position.set(x, y, z); _o.rotation.set(pitch, ry, roll, "YXZ"); _o.scale.set(1, 1, 1); _o.updateMatrix();
           for (const m of meshes) m.setMatrixAt(from + i, _o.matrix);
         });
       }

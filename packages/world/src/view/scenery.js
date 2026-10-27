@@ -34,6 +34,14 @@ import { suggest } from "../catalog/define.js";
  * @property {number[]} at                                each copy's start, metres along the loop
  * @property {string | string[]} [tint]                   one for all, or one per copy
  * @property {object} [params]
+ * @property {SceneryBob} [bob]                           rise, fall and roll in place, like a boat at its mooring
+ * @typedef {object} SceneryBob   a mover's sway on the water; with speed 0 the copies stay where `at` puts them
+ * @property {number} [h]                                 metres up and down (default 0.035)
+ * @property {number} [roll]                              radians each way about its length (default 0.03)
+ * @property {number} [pitch]                             radians each way about its width (default 0.012)
+ * @property {number} [period]                            seconds for one rise and fall (default 5.7); roll and
+ *                                                        pitch take slower periods of their own
+ * @property {number} [phase]                             seconds ahead; each copy after the first a further 1.7
  * @typedef {object} Scenery
  * @property {string} [id]
  * @property {SceneryPiece[]} [pieces]
@@ -111,6 +119,12 @@ export function checkScenery(scenery, catalog) {
     const tints = m?.tint === undefined ? [] : Array.isArray(m.tint) ? m.tint : [m.tint];
     if (Array.isArray(m?.tint) && Array.isArray(m?.at) && m.tint.length !== m.at.length) out.push(problem("scenery.tint", `${at}.tint`, `${m.tint.length} tints for ${m.at.length} copies`, "give one tint, or one per copy"));
     for (const c of new Set(tints)) colour(c, `${at}.tint`);
+    if (m?.bob !== undefined) {
+      const b = m.bob, keys = ["h", "roll", "pitch", "period", "phase"];
+      if (!b || typeof b !== "object" || Object.keys(b).some((k) => !keys.includes(k) || !finite(b[k])) || (b.period !== undefined && !(b.period > 0))) {
+        out.push(problem("scenery.bob", `${at}.bob`, `bob ${JSON.stringify(b)} is not { h, roll, pitch, period, phase } in numbers`, "write bob: { h: 0.035, roll: 0.03, period: 5.7 }, or {} for the defaults; period is above 0"));
+      }
+    }
   });
   if (scenery.fade !== undefined && !(isBox(scenery.fade?.box) && finite(scenery.fade.from) && finite(scenery.fade.to) && scenery.fade.to > scenery.fade.from)) out.push(problem("scenery.fade", "scenery.fade", "fade is not { box, from, to } with to past from", "write fade: { box: { minX, minZ, maxX, maxZ }, from: 30, to: 60 }"));
   if (scenery.shade !== undefined && !isBox(scenery.shade)) out.push(problem("scenery.shade", "scenery.shade", "shade is not a box", "write shade: { minX, minZ, maxX, maxZ }"));
@@ -133,7 +147,8 @@ export function planScenery(scenery) {
   const movers = (scenery.movers ?? []).map((m, i) => {
     const loop = loopOf(m.route);
     const tints = m.tint === undefined ? null : Array.isArray(m.tint) ? m.tint : m.at.map(() => m.tint);
-    return { key: `mover:${i}:${m.type}`, type: m.type, params: m.params ?? {}, speed: m.speed, at: m.at, tints, ...loop };
+    const bob = m.bob ? { ...BOB, ...m.bob } : null;
+    return { key: `mover:${i}:${m.type}`, type: m.type, params: m.params ?? {}, speed: m.speed, at: m.at, tints, bob, ...loop };
   });
   return {
     batches: [...batches.values()], movers,
@@ -142,6 +157,7 @@ export function planScenery(scenery) {
   };
 }
 
+const BOB = { h: 0.035, roll: 0.03, pitch: 0.012, period: 5.7, phase: 0 };
 const scaleOf = (s) => (s === undefined ? [1, 1, 1] : typeof s === "number" ? [s, s, s] : s);
 
 // A closed loop's points and the distance to each along it: { points, cum, length }.
@@ -159,16 +175,25 @@ const same = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 /**
  * Where each copy of a planned mover is at time t (seconds): [x, y, z, ry] per copy, ry turning its front (+z) along
- * the loop. A copy starts at its `at` and goes round at the mover's speed, for ever.
- * @stability experimental  @returns {[number, number, number, number][]}
+ * the loop. A copy starts at its `at` and goes round at the mover's speed, for ever. A mover that bobs adds its roll
+ * (about its length) and pitch (about its width), in radians: [x, y, z, ry, roll, pitch].
+ * @stability experimental  @returns {number[][]}
  */
 export function moverPlaces(mover, t) {
-  const { points, cum, length, speed } = mover;
-  return mover.at.map((start) => {
-    const d = ((((start + speed * t) % length) + length) % length);
-    let lo = 0, hi = points.length - 1;
-    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid - 1; }
-    const a = points[lo], b = points[(lo + 1) % points.length], seg = cum[lo + 1] - cum[lo] || 1, k = (d - cum[lo]) / seg;
-    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, Math.atan2(b[0] - a[0], b[2] - a[2]) + (speed < 0 ? Math.PI : 0)];
+  const { points, cum, length, speed, bob } = mover;
+  return mover.at.map((start, i) => {
+    const p = place(points, cum, length, speed, start, t);
+    if (!bob) return p;
+    const w = (2 * Math.PI) / bob.period, u = t + bob.phase + i * 1.7;
+    return [p[0], p[1] + Math.sin(u * w) * bob.h, p[2], p[3], Math.sin(u * w * 0.73) * bob.roll, Math.sin(u * w * 0.55 + 1.3) * bob.pitch];
   });
+}
+
+// A copy's place on its loop: start metres along it, then speed metres a second for t seconds.
+function place(points, cum, length, speed, start, t) {
+  const d = ((((start + speed * t) % length) + length) % length);
+  let lo = 0, hi = points.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid - 1; }
+  const a = points[lo], b = points[(lo + 1) % points.length], seg = cum[lo + 1] - cum[lo] || 1, k = (d - cum[lo]) / seg;
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, Math.atan2(b[0] - a[0], b[2] - a[2]) + (speed < 0 ? Math.PI : 0)];
 }

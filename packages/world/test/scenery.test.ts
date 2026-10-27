@@ -120,6 +120,29 @@ describe("movers", () => {
     expect(p.slice(0, 3).map((v) => +v.toFixed(6))).toEqual([0, 0, 2]);
     expect(Math.cos(p[3])).toBeCloseTo(1);                // its front (+z) points south, the way it goes
   });
+
+  test("a moored boat bobs: speed 0 keeps it in place, facing along its route, while it rises, falls and rolls", () => {
+    const boat = planScenery({ movers: [{ type: "land/tree", route: [[3, 0.2, 4], [3, 0.2, 5]], speed: 0, at: [0, 0], bob: { h: 0.05, period: 4 } }] }).movers[0];
+    const seen = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((t) => moverPlaces(boat, t)[0]);
+    for (const p of seen) {
+      expect([p[0], p[2]]).toEqual([3, 4]);
+      expect(p[3]).toBeCloseTo(0);
+      expect(Math.abs(p[1] - 0.2)).toBeLessThanOrEqual(0.05 + 1e-9);
+      expect(Math.abs(p[4])).toBeLessThanOrEqual(0.03 + 1e-9); // the default roll
+    }
+    expect(Math.max(...seen.map((p) => p[1])) - Math.min(...seen.map((p) => p[1]))).toBeGreaterThan(0.05);
+    expect(new Set(seen.map((p) => p[4].toFixed(4))).size).toBeGreaterThan(4);
+    const [a, b] = moverPlaces(boat, 1);
+    expect(a[1]).not.toBeCloseTo(b[1], 4);                 // two copies are out of step
+    expect(mover.bob).toBeNull();
+    expect(moverPlaces(mover, 1)[0]).toHaveLength(4);       // a mover without bob is as before
+  });
+
+  test("a bob that is not numbers is named with a fix", () => {
+    const problems = checkScenery({ movers: [{ type: "land/tree", route: [[0, 0, 0], [1, 0, 0]], speed: 0, at: [0], bob: { h: "high", period: 0 } }] }, catalog);
+    expect(problems.find((p) => p.path === "scenery.movers[0].bob")?.code).toBe("scenery.bob");
+    expect(checkScenery({ movers: [{ type: "land/tree", route: [[0, 0, 0], [1, 0, 0]], speed: 0, at: [0], bob: {} }] }, catalog)).toEqual([]);
+  });
 });
 
 describe("the frame policy for moving scenery", () => {
