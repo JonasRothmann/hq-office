@@ -1,11 +1,11 @@
-// The furnished rooms, in the Nordic studio's look with the Tokyo studio's best pieces: a team room's desks (each
-// built on its own, so a lane owns its desk) and the room round them, the HQ suite and the break area, and the courts
-// between wings. Everything is in a room's own frame: back wall at z = 0, door side at z = d.
+// The furnished rooms, in one Japandi look (warm neutrals, pale oak and smoked oak, paper light, few things with room
+// between them): a team room's desks (each built on its own, so a lane owns its desk) and the room round them, the HQ
+// suite and the break area, and the courts between wings. Everything is in a room's own frame: back wall at z = 0, door side at z = d.
 //
 // A room is a handful of meshes: one for everything that stands on the floor (vertex colours and the props atlas), one
 // per wall for what hangs on it (hidden while that wall is cut), one for what glows (shades, paper, the sign), one for
-// the light pools at night, and one per screen. Team rooms vary by their id: rug, prints, plants, pendants and one
-// signature thing, so a floor of rooms never looks cloned.
+// the light pools at night, and one per screen. Team rooms vary by their place in the order: rug, feature wall, prints,
+// plants, pendants and one signature thing, so a floor of rooms never looks cloned.
 import { THREE, Kit, roomMaterial } from "./kit.js";
 import { toWorld } from "./plan.js";
 import { ATLAS, atlasTexture } from "./atlas.js";
@@ -133,7 +133,7 @@ export function buildDesk(lane, out, L, light) {
   kit.cyl(0.06, 0.02, S.black, lampX, DESK_H, lampZ, { seg: 10 });
   kit.box(0.018, 0.3, 0.018, S.black, lampX, DESK_H + 0.02, lampZ, { rz: 0.25 * out });
   kit.box(0.018, 0.2, 0.018, S.black, lampX - 0.07 * out, DESK_H + 0.29, lampZ, { rz: -1.0 * out });
-  P.taskChair(kit, L, 0, DESK_SPOTS.seat.z - 0.08, Math.PI, [S.wool, "#4a4a50", S.sage, S.oatmeal, S.navy][draw(seed, 3) % 5]);
+  P.taskChair(kit, L, 0, DESK_SPOTS.seat.z - 0.08, Math.PI, [S.oatmeal, S.charcoal, S.sage, S.wool, S.navy][draw(seed, 3) % 5]);
   const mat = roomMaterial({ map: atlasTexture(L), room: light });
   const m = kit.mesh(mat, { atlas: ATLAS.size, white: ATLAS.white });
   m.name = "desk";
@@ -159,12 +159,15 @@ export function buildDesk(lane, out, L, light) {
 // ---------------------------------------------------------------------------------------------------------------------
 // A team room's own things, round its island of desks (built apart, buildDesk). Its back wall has two windows (local
 // x 1..3 and 4..6) with a pier between them, its door is at the front right (x 5..6): a rug under the island, two
-// enamel pendants over it, a radiator and a credenza under the windows, a pinboard and a print on the pier, a corner
-// tree, a full bookcase and a clock on the west wall, a floor lamp, a snake plant and a monstera on the east side, a
-// print on the east wall, and one signature thing at the front left. What varies, by the room's place in the order
-// (its id): the rug, the prints, the tree, the pendants' colours, the credenza's doors and the signature thing.
-const RUGS = ["oat", "stripe", "grey", "indigo", "check", "sand", "tatami", "rust"];
+// pendants over it, a low sideboard under the right window, a slatted oak feature (on the pier, or at the
+// wall's right end with a pinboard and a print on the pier), a corner tree, a bookcase and a clock on the west wall, a
+// floor lamp, a snake plant and a monstera on the east side, a print on the east wall, and one signature thing at the
+// front left. What varies, by the room's place in the order (its index): the rug, the feature wall, the prints, the
+// tree, the pendants, the sideboard's door and the signature thing.
+const RUGS = ["linen", "stripe", "grey", "indigo", "check", "sand", "tatami", "rust", "oat"];
 const SIGNATURES = ["bike", "records", "dog", "guitar", "reading"];
+// paper or ceramic over the island: [kind, colour key in the studio's tokens]
+const PENDANTS = [["washi"], ["ceramic", "charcoal"], ["lantern"], ["ceramic", "linen"], ["washi"], ["ceramic", "clay"]];
 export function buildTeamRoom(room, L, light, opts = {}) {
   const group = frameOf(room);
   group.name = room.id;
@@ -179,21 +182,27 @@ export function buildTeamRoom(room, L, light, opts = {}) {
   const signature = SIGNATURES[i % SIGNATURES.length];
 
   P.rug(kit, L, ATLAS.rugs[RUGS[i % RUGS.length]], cx, cz, 4.1, 3.1);
-  const domes = [[S.forest, S.mustard], [S.rust, S.sage], [S.navy, S.oatmeal], [S.mustard, S.forest], [S.sage, S.rust]][i % 5];
-  [2.8, 4.2].forEach((x, k) => K.lights.push(P.pendant(kit, glow, L, x, cz, { y: 1.86, kind: "dome", color: domes[k] })));
+  const [lamp, tone] = PENDANTS[i % PENDANTS.length];
+  [2.8, 4.2].forEach((x) => K.lights.push(P.pendant(kit, glow, L, x, cz, { y: 1.86, kind: lamp, color: tone && S[tone] })));
   for (const x of [2.8, 4.2]) P.pool(pools, x, cz, 1.5);
 
-  // the back wall: a radiator under the left window, a credenza under the right one, a pinboard and a print on the pier
+  // the back wall: nothing under the left window, a low sideboard under the right one with a vase of branches; the
+  // slatted oak on the pier (a pinboard at the wall's right end), or the pinboard and a print on the pier and the slats
+  // at the right end
   atBack(kit, () => {
-    P.radiator(kit, L, 2.0, 0, 1.3);
     P.credenza(kit, L, 5.0, 0, 0, 1.7, [S.sage, S.rust, S.navy, S.mustard, S.forest][(i + 2) % 5]);
-    P.pothos(kit, L, 4.45, 0.42, 0.12, seed, 0.3);
-    if (signature === "records") P.smallPlant(kit, L, 5.6, 0.42, 0.16, 3 + i);
-    else ["#2f3e57", "#e9e2d2", "#b5532e"].forEach((c, k) => kit.box(0.26 - k * 0.02, 0.035, 0.2, c, 5.55, 0.42 + k * 0.035, 0.16, { ry: k * 0.1 }));
+    P.vaseBranch(kit, L, 4.5, 0.46, 0.18, seed);
+    if (signature === "records") P.smallPlant(kit, L, 5.6, 0.46, 0.18, 3 + i);
+    else [S.charcoal, S.linen].forEach((c, k) => kit.box(0.26 - k * 0.03, 0.035, 0.2, c, 5.55, 0.46 + k * 0.035, 0.18, { ry: k * 0.12 }));
   });
-  P.pinboard(decor.n, L, 3.5, 1.0, 0, 0, 0.8, 0.6);
-  P.print(decor.n, L, 3.5, 1.78, 0, 0, ATLAS.prints[(i * 3 + 2) % 8], 0.36, 0.46, [S.black, S.oak, S.walnut][i % 3]);
-  P.print(decor.n, L, 6.5, 1.2, 0, 0, ATLAS.prints[(i * 3) % 8], 0.42, 0.56, S.oak);
+  if (i % 2 === 0) {
+    P.slats(decor.n, L, 3.0, 4.0, 2.4);
+    P.pinboard(decor.n, L, 6.5, 1.6, 0, 0, 0.62, 0.48);
+  } else {
+    P.pinboard(decor.n, L, 3.5, 1.0, 0, 0, 0.8, 0.6);
+    P.print(decor.n, L, 3.5, 1.78, 0, 0, ATLAS.prints[(i * 3 + 2) % 8], 0.36, 0.46, [S.black, S.oak, S.walnut][i % 3]);
+    P.slats(decor.n, L, 6.05, 6.95, 2.4);
+  }
 
   // the west wall: a tree in the back corner, a full bookcase, a clock
   const tree = ["fig", "olive", "fig", "monstera", "olive"][i % 5];
@@ -208,7 +217,7 @@ export function buildTeamRoom(room, L, light, opts = {}) {
 
   // the signature thing at the front left
   if (signature === "bike") {
-    atWest(kit, () => P.bike(kit, L, -3.75, 0.2, 0, ["#7f9c8a", "#b5532e", "#2f3e57"][v(1, 3)]));
+    atWest(kit, () => P.bike(kit, L, -3.75, 0.2, 0, ["#8f9a88", S.rust, S.charcoal][v(1, 3)]));
     P.planner(decor.w, L, -3.75, 1.45, 0, 0, 0.9, 0.56);
     P.dogBed(kit, L, 1.35, 4.25, 0.4, ["#c98b4f", "#3a3530", "#e9e2d2"][v(2, 3)]);
   } else if (signature === "records") {
@@ -216,7 +225,7 @@ export function buildTeamRoom(room, L, light, opts = {}) {
     P.print(decor.w, L, -3.8, 1.55, 0, 0, ATLAS.prints[(i * 3 + 5) % 8], 0.5, 0.36, S.black);
   } else if (signature === "dog") {
     P.dogBed(kit, L, 0.75, 4.15, 0.6, ["#c98b4f", "#3a3530", "#e9e2d2"][v(2, 3)]);
-    kit.cyl(0.07, 0.04, "#b9bcc2", 1.35, 0, 4.5, { seg: 10 });
+    kit.cyl(0.07, 0.04, S.stone, 1.35, 0, 4.5, { seg: 10 });
     kit.sphere(0.05, S.rust, 1.6, 0.05, 4.1, { detail: 1 });
     P.print(decor.w, L, -3.6, 1.45, 0, 0, ATLAS.prints[(i * 3 + 5) % 8], 0.42, 0.56, S.oak);
   } else if (signature === "guitar") {
@@ -241,9 +250,9 @@ export function buildTeamRoom(room, L, light, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The HQ suite: HQ's desk and the owner's under the windows, facing the room; the studio's lit sign over slatted oak on
-// the pier; a workbench with a pegboard and a 3D printer on the west wall; a reading corner; a round table under a
-// paper lantern with a whiteboard beside it; an olive tree.
+// The HQ suite: HQ's desk and the owner's under the windows, facing the room, under dark steel pendants; the studio's
+// lit sign over slatted oak on the pier; a workbench with a pegboard and a 3D printer on the west wall; a reading corner
+// on linen; a round table under a paper lantern with a whiteboard beside it; an olive tree.
 export const SUITE_SPOTS = {
   seat: new THREE.Vector3(1.9, 0, 0.82), faceDesk: 0, stand: new THREE.Vector3(3.0, 0, 1.2), hud: new THREE.Vector3(1.9, 3.0, 1.4),
 };
@@ -257,10 +266,10 @@ export function buildSuite(room, L, light, opts = {}) {
   const { kit, decor, lit, glow, pools } = K;
 
   // two desks under the windows, facing the room
-  P.desk(kit, L, 1.9, 1.5, Math.PI, { w: 1.5, d: 0.7, legs: "trestle" });
+  P.desk(kit, L, 1.9, 1.5, Math.PI, { w: 1.5, d: 0.7, legs: "trestle", smoked: true });
   K.screens.push(P.deskTop(kit, L, 1.9, 1.5, Math.PI, 11, { w: 1.5, d: 0.7 }));
-  P.taskChair(kit, L, 1.9, 0.92, 0, S.navy);
-  P.desk(kit, L, 4.6, 1.5, Math.PI, { w: 1.5, d: 0.7, legs: "trestle" });
+  P.taskChair(kit, L, 1.9, 0.92, 0, S.charcoal);
+  P.desk(kit, L, 4.6, 1.5, Math.PI, { w: 1.5, d: 0.7, legs: "trestle", smoked: true });
   K.screens.push(P.deskTop(kit, L, 4.6, 1.5, Math.PI, 6, { w: 1.5, d: 0.7 }));
   P.taskChair(kit, L, 4.6, 0.92, 0.25, S.rust);
   atBack(kit, () => { P.radiator(kit, L, 1.9, 0, 1.3); P.radiator(kit, L, 4.9, 0, 1.3); });
@@ -277,12 +286,12 @@ export function buildSuite(room, L, light, opts = {}) {
   // the west wall: the workbench with its pegboard and the 3D printer
   atWest(kit, () => atWest(glow, () => P.workbench(kit, decor.w, glow, L, -1.95, 1.8)));
 
-  // a reading corner on a grey wool rug
-  P.rug(kit, L, ATLAS.rugs.grey, 1.6, 3.7, 2.4, 1.6);
+  // a reading corner on a linen rug
+  P.rug(kit, L, ATLAS.rugs.linen, 1.6, 3.7, 2.4, 1.6);
   P.loungeChair(kit, L, 1.25, 3.6, 0.6, S.rust);
   P.lowTable(kit, L, 2.2, 3.85, 0.55, 0.55, S.walnut);
-  kit.cyl(0.05, 0.12, "#efebe4", 2.1, 0.34, 3.8, { seg: 8 });
-  ["#2f3e57", "#d4a236"].forEach((c, k) => kit.box(0.2, 0.03, 0.15, c, 2.3, 0.34 + k * 0.03, 3.9, { ry: k * 0.3 }));
+  kit.cyl(0.05, 0.12, S.pots[1], 2.1, 0.34, 3.8, { seg: 8 });
+  [S.navy, S.oatmeal].forEach((c, k) => kit.box(0.2, 0.03, 0.15, c, 2.3, 0.34 + k * 0.03, 3.9, { ry: k * 0.3 }));
   K.lights.push({ ...P.floorLamp(kit, glow, L, 0.5, 4.45, "andon"), i: 1.2, r: 2.6 });
   P.pool(pools, 0.7, 4.25, 1.0);
 
@@ -293,7 +302,7 @@ export function buildSuite(room, L, light, opts = {}) {
   P.forkChair(kit, L, 6.05, 3.5, -Math.PI / 2 + 0.1);
   P.forkChair(kit, L, 5.4, 2.85, 0.05, S.walnut);
   kit.box(0.3, 0.01, 0.22, "#f4f1ea", 5.3, DESK_H, 3.5, { ry: 0.3 });
-  kit.cyl(0.035, 0.08, "#b5532e", 5.6, DESK_H, 3.35, { seg: 8 });
+  kit.cyl(0.035, 0.08, S.clay, 5.6, DESK_H, 3.35, { seg: 8 });
   K.lights.push(P.pendant(kit, glow, L, 5.4, 3.5, { y: 1.62, kind: "lantern" }));
   P.pool(pools, 5.4, 3.5, 1.4);
   P.whiteboardStand(kit, L, 6.45, 1.9, -Math.PI / 2 + 0.35);
@@ -305,8 +314,8 @@ export function buildSuite(room, L, light, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The break area: the kitchen along the back wall, a long oak table with mixed chairs and a bench under paper globes,
-// a raised tatami lounge with tea, a tea corner, plants and coats. Two shapes: the floor stage's long room (5 m along
+// The break area: the kitchen along the back wall, a long oak table with ash chairs and a bench under paper pendants,
+// a raised tatami lounge with tea behind a shoji screen, a tea corner with a scroll, plants and coats. Two shapes: the floor stage's long room (5 m along
 // its back wall, 12 m deep, the hall coming in on its west side at z 5..7) and the wings' room (7 × 5, open to the
 // hall along its front). `spots` are where done workers stand with a mug, in this room's frame.
 export function buildBreak(room, L, light, opts = {}) {
@@ -331,20 +340,19 @@ export function buildBreak(room, L, light, opts = {}) {
   };
   const table = (tx, tz, len) => {
     P.longTable(kit, L, tx, tz, 0, len, 0.82);
-    [[S.rust, -0.85], [S.sage, 0], [S.oatmeal, 0.85]].forEach(([c, dx]) => P.shellChair(kit, L, tx + dx, tz - 0.62, 0, c));
+    [[S.linen, -0.85], [null, 0], [S.rust, 0.85]].forEach(([pad, dx]) => P.ashChair(kit, L, tx + dx, tz - 0.62, 0, S.oakLight, pad));
     P.bench(kit, L, tx, tz + 0.62, 0, len - 0.4);
-    kit.cyl(0.12, 0.03, "#efebe4", tx - 0.2, DESK_H, tz, { top: 0.14, seg: 12 });
-    [["#e9a23b", 0.03], ["#c8443a", -0.04]].forEach(([c, dx]) => kit.sphere(0.04, c, tx - 0.2 + dx, DESK_H + 0.05, tz, { detail: 1 }));
+    P.vaseBranch(kit, L, tx - 0.25, DESK_H, tz, 4);
     kit.cyl(0.035, 0.08, S.mugs[0], tx + 0.5, DESK_H, tz - 0.15, { seg: 8 });
     kit.box(0.24, 0.012, 0.32, "#f4f1ea", tx + 0.9, DESK_H, tz + 0.05, { ry: -0.2 });
-    for (const dx of [-0.6, 0.6]) K.lights.push(P.pendant(kit, glow, L, tx + dx, tz, { y: 1.92, kind: "globe" }));
+    for (const dx of [-0.6, 0.6]) K.lights.push(P.pendant(kit, glow, L, tx + dx, tz, { y: 2.05, kind: "washi" }));
     for (const dx of [-0.6, 0.6]) P.pool(pools, tx + dx, tz, 1.4);
     spots.push({ x: tx - len / 2 - 0.45, z: tz - 0.2, ry: Math.PI / 2 }, { x: tx + len / 2 + 0.45, z: tz + 0.1, ry: -Math.PI / 2 });
   };
   const coats = (x, z) => {
     kit.cyl(0.02, 1.45, S.oak, x, 0, z, { seg: 6 });
     kit.cyl(0.16, 0.03, S.oak, x, 0, z, { seg: 8 });
-    [["#2f3e57", 0], ["#d4a236", 2.1], ["#b5532e", 4.2]].forEach(([c, a]) => kit.rbox(0.22, 0.5, 0.1, c, x + Math.sin(a) * 0.1, 0.85, z + Math.cos(a) * 0.1, 0.04, { ry: a }));
+    [[S.navy, 0], [S.oatmeal, 2.1], [S.rust, 4.2]].forEach(([c, a]) => kit.rbox(0.22, 0.5, 0.1, c, x + Math.sin(a) * 0.1, 0.85, z + Math.cos(a) * 0.1, 0.04, { ry: a }));
   };
 
   if (w >= 6.5) {
@@ -353,6 +361,8 @@ export function buildBreak(room, L, light, opts = {}) {
     const lantern = P.tatamiLounge(kit, glow, L, 1.4, 1.2, 2.5, 2.2, 1);
     K.lights.push({ ...lantern, i: 1.2, r: 2.6 });
     P.pool(pools, lantern.x, lantern.z, 1.2, P.DAIS_H + 0.01);
+    // a shoji screen between the lounge and the tea corner
+    P.shojiScreen(kit, L, 2.84, 0.12, -Math.PI / 2, { panels: 3, w: 0.44, fold: 0.3 });
     atBack(kit, () => P.teaCorner(kit, decor.n, L, 3.5, 0.95));
     kitchen(4.2, 6.0);
     table(4.3, 3.65, 2.4);
@@ -366,7 +376,9 @@ export function buildBreak(room, L, light, opts = {}) {
     kitchen(0.35, Math.min(w - 0.85, 3.95));
     table(w / 2, 3.1, 2.6);
     P.figTree(kit, L, 0.45, 4.45, 5, 1.8);
-    P.monstera(kit, L, 0.55, 7.55, 7, 1.0);
+    // a shoji screen by the hall's opening, a monstera past it
+    P.shojiScreen(kit, L, 0.3, 7.3, -Math.PI / 2, { panels: 3, w: 0.44, fold: 0.3 });
+    P.monstera(kit, L, 0.55, 9.6, 7, 1.0);
     P.snakePlant(kit, L, w - 0.4, 5.2, 3);
     spots.push({ x: 1.6, z: 6.0, ry: 0.4 }, { x: 3.2, z: 5.6, ry: -0.5 });
     const lantern = P.tatamiLounge(kit, glow, L, w - 1.4, 8.3, 2.5, 2.2, 1);

@@ -1,6 +1,7 @@
-// The Nordic studio's props, built from primitives into a Kit: desks and what is on them, chairs, shelves of books,
-// lamps, plants, the kitchen, the sofa corner, boards and prints, a bike and a dog. Original shapes, named by what
-// they are. Every prop is placed in a room's own frame (back wall at z = 0); `ry` turns it about its own centre.
+// The studio's props, in the Japandi look (pale oak and ash, smoked oak, blackened steel, paper, linen, stone and
+// ceramics), built from primitives into a Kit: low desks and what is on them, chairs, shelves of books, paper lamps,
+// plants, the kitchen, the soft corner, shoji screens, boards and prints, a bike and a dog. Original shapes, named by
+// what they are. Every prop is placed in a room's own frame (back wall at z = 0); `ry` turns it about its own centre.
 // Lamps add their shades to `glow` (a kit drawn unlit, so it can shine at night) and their light to `lights`.
 import { THREE } from "./kit.js";
 import { ATLAS } from "./atlas.js";
@@ -14,21 +15,23 @@ const tex = (r, face = "+z") => ({ r, face });
 
 // --- Desks ---------------------------------------------------------------------------------------------------------
 
-// A desk: a birch top with a dark edge band on black sled legs, or on oak trestles. Its frame: the worker sits at +z.
-export function desk(kit, L, x, z, ry = 0, { w = 1.3, d = 0.66, legs = "sled" } = {}) {
+// A low desk: an ash top with a dark edge band on blackened steel sled legs, or on trestles. smoked: a smoked-oak top
+// on black trestles (HQ's and the owner's). Its frame: the worker sits at +z.
+export function desk(kit, L, x, z, ry = 0, { w = 1.3, d = 0.66, legs = "sled", smoked = false } = {}) {
   const S = L.studio;
+  const leg = smoked ? S.black : S.oak;
   kit.at(x, 0, z, ry, () => {
-    kit.box(w, 0.03, d, S.ply, 0, DESK_H - 0.03, 0);
-    kit.box(w + 0.004, 0.012, d + 0.004, S.plyEdge, 0, DESK_H - 0.03, 0);
+    kit.box(w, 0.03, d, smoked ? S.walnut : S.ply, 0, DESK_H - 0.03, 0);
+    kit.box(w + 0.004, 0.012, d + 0.004, smoked ? S.ink : S.plyEdge, 0, DESK_H - 0.03, 0);
     if (legs === "trestle") {
       for (const sx of [-1, 1]) {
         const lx = sx * (w / 2 - 0.12);
-        kit.box(0.05, DESK_H - 0.06, 0.05, S.oak, lx, 0.0, -d / 2 + 0.12, { rx: 0.0 });
-        kit.box(0.05, DESK_H - 0.06, 0.05, S.oak, lx, 0.0, d / 2 - 0.12);
-        kit.box(0.05, 0.05, d - 0.1, S.oak, lx, DESK_H - 0.09, 0);
-        kit.box(0.04, 0.04, d - 0.2, S.oak, lx, 0.12, 0);
+        kit.box(0.05, DESK_H - 0.06, 0.05, leg, lx, 0.0, -d / 2 + 0.12, { rx: 0.0 });
+        kit.box(0.05, DESK_H - 0.06, 0.05, leg, lx, 0.0, d / 2 - 0.12);
+        kit.box(0.05, 0.05, d - 0.1, leg, lx, DESK_H - 0.09, 0);
+        kit.box(0.04, 0.04, d - 0.2, leg, lx, 0.12, 0);
       }
-      kit.box(w - 0.3, 0.04, 0.04, S.oak, 0, 0.12, 0);
+      kit.box(w - 0.3, 0.04, 0.04, leg, 0, 0.12, 0);
     } else {
       for (const sx of [-1, 1]) {
         const lx = sx * (w / 2 - 0.05);
@@ -78,10 +81,10 @@ export function deskTop(kit, L, x, z, ry, seed, { w = 1.3, d = 0.66, clear = 0 }
     // keyboard, mouse on a felt pad
     kit.box(0.38, 0.016, 0.12, "#e9e6df", sx, T, 0.02);
     kit.box(0.36, 0.006, 0.1, "#cfcbc3", sx, T + 0.016, 0.02);
-    kit.box(0.22, 0.004, 0.18, pick([S.felt, "#3a3a3c", S.oatmeal, "#6d7a8a"], seed, 2), sx + 0.33, T, 0.04);
+    kit.box(0.22, 0.004, 0.18, pick([S.felt, S.charcoal, S.oatmeal, S.linen], seed, 2), sx + 0.33, T, 0.04);
     kit.rbox(0.05, 0.02, 0.08, "#f2f0ea", sx + 0.33, T + 0.004, 0.04, 0.01);
     // a notebook with a pen
-    kit.box(0.17, 0.014, 0.22, pick(["#2f3e57", "#b5532e", "#3f5b45", "#26292e", "#d4a236"], seed, 4), -w / 2 + 0.22, T, 0.08, { ry: 0.25 });
+    kit.box(0.17, 0.014, 0.22, pick([S.navy, S.rust, S.forest, S.charcoal, S.oatmeal], seed, 4), -w / 2 + 0.22, T, 0.08, { ry: 0.25 });
     kit.box(0.16, 0.004, 0.21, "#f4f1ea", -w / 2 + 0.22, T + 0.014, 0.08, { ry: 0.25 });
     kit.box(0.008, 0.008, 0.13, "#26292e", -w / 2 + 0.3, T + 0.018, 0.06, { ry: -0.3 });
     // a mug
@@ -102,12 +105,12 @@ export function deskTop(kit, L, x, z, ry, seed, { w = 1.3, d = 0.66, clear = 0 }
       for (let i = 0; i < 6; i++) { const a = i * 1.05; kit.sphere(0.045, S.leaf[i % 3], -w / 2 + 0.15 + Math.cos(a) * 0.04, T + 0.12 + (i % 2) * 0.03, -0.2 + Math.sin(a) * 0.04, { sy: 0.6 }); }
     } else if (extras[0] === 2) {
       // a stack of books
-      ["#2f3e57", "#e9e2d2", "#b5532e"].forEach((c, i) => kit.box(0.2 - i * 0.02, 0.03, 0.15, c, -w / 2 + 0.18, T + i * 0.03, -0.18, { ry: i * 0.15 }));
+      [S.charcoal, S.linen, S.clay].forEach((c, i) => kit.box(0.2 - i * 0.02, 0.03, 0.15, c, -w / 2 + 0.18, T + i * 0.03, -0.18, { ry: i * 0.15 }));
     } else {
-      // a water bottle and a small cactus
-      kit.cyl(0.03, 0.18, "#7f9c8a", -w / 2 + 0.12, T, -0.2, { seg: 8 });
-      kit.cyl(0.04, 0.05, S.pots[0], -w / 2 + 0.25, T, -0.22, { seg: 8 });
-      kit.cyl(0.025, 0.08, "#5f8e4f", -w / 2 + 0.25, T + 0.05, -0.22, { seg: 6 });
+      // a ceramic cup of pens and a small stone dish
+      kit.cyl(0.035, 0.1, S.pots[1], -w / 2 + 0.12, T, -0.2, { seg: 8 });
+      for (let i = 0; i < 3; i++) kit.box(0.008, 0.08, 0.008, [S.ink, S.oakDark, S.ink][i], -w / 2 + 0.11 + i * 0.012, T + 0.08, -0.2, { rz: (i - 1) * 0.2 });
+      kit.cyl(0.06, 0.015, S.stone, -w / 2 + 0.27, T, -0.2, { seg: 10 });
     }
     if (extras[1] === 0) {
       // headphones lying on the desk
@@ -117,7 +120,7 @@ export function deskTop(kit, L, x, z, ry, seed, { w = 1.3, d = 0.66, clear = 0 }
     } else if (extras[1] === 1) {
       // a phone and sticky notes
       kit.box(0.06, 0.008, 0.12, "#26292e", w / 2 - 0.22, T, 0.16, { ry: -0.2 });
-      kit.box(0.07, 0.01, 0.07, "#f2d46b", -0.32, T, -0.2);
+      kit.box(0.07, 0.01, 0.07, "#e8d7a8", -0.32, T, -0.2);
     }
   });
   return screen;
@@ -134,7 +137,7 @@ export function taskChair(kit, L, x, z, ry, fabric) {
       kit.box(0.025, 0.025, 0.22, S.black, Math.sin(a) * 0.1, 0.045, Math.cos(a) * 0.1, { ry: a });
       kit.cyl(0.022, 0.04, S.black, Math.sin(a) * 0.21, 0, Math.cos(a) * 0.21, { seg: 6 });
     }
-    kit.cyl(0.022, SEAT_H - 0.1, S.chrome, 0, 0.06, 0, { seg: 6 });
+    kit.cyl(0.022, SEAT_H - 0.1, S.black, 0, 0.06, 0, { seg: 6 });
     kit.rbox(0.4, 0.07, 0.38, fabric, 0, SEAT_H - 0.06, 0.01, 0.03);
     kit.box(0.04, 0.2, 0.03, S.black, 0, SEAT_H - 0.02, -0.19, { rx: 0.08 });
     kit.rbox(0.38, 0.32, 0.06, fabric, 0, SEAT_H + 0.14, -0.21, 0.03, { rx: 0.1 });
@@ -167,14 +170,20 @@ export function forkChair(kit, L, x, z, ry, wood) {
   });
 }
 
-// A moulded shell chair in a colour on four splayed oak dowel legs.
-export function shellChair(kit, L, x, z, ry, color) {
+// An ash chair: four straight legs, a solid seat, a spindle back under a wide flat top rail; a linen pad, or none.
+export function ashChair(kit, L, x, z, ry, wood, pad = null) {
   const S = L.studio;
+  const c = wood ?? S.oakLight;
   kit.at(x, 0, z, ry, () => {
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl(0.015, SEAT_H, S.oak, sx * 0.14, 0, sz * 0.13, { seg: 5, rz: -sx * 0.12, rx: sz * 0.12 });
-    kit.rbox(0.4, 0.05, 0.37, color, 0, SEAT_H - 0.03, 0.01, 0.022);
-    kit.rbox(0.42, 0.28, 0.05, color, 0, SEAT_H, -0.18, 0.024, { rx: -0.16 });
-    for (const sx of [-1, 1]) kit.rbox(0.05, 0.18, 0.28, color, sx * 0.2, SEAT_H, -0.05, 0.02, { rx: -0.05 });
+    for (const sx of [-1, 1]) {
+      kit.box(0.032, SEAT_H - 0.03, 0.032, c, sx * 0.17, 0, 0.15);
+      kit.box(0.032, SEAT_H + 0.34, 0.032, c, sx * 0.17, 0, -0.15, { rx: -0.06 });
+      kit.box(0.02, 0.02, 0.28, c, sx * 0.17, 0.12, 0);
+    }
+    kit.box(0.4, 0.035, 0.36, c, 0, SEAT_H - 0.035, 0);
+    if (pad) kit.rbox(0.34, 0.03, 0.3, pad, 0, SEAT_H, 0.01, 0.012);
+    for (let i = 0; i < 4; i++) kit.box(0.018, 0.26, 0.018, c, -0.105 + i * 0.07, SEAT_H, -0.165, { rx: -0.06 });
+    kit.box(0.4, 0.07, 0.03, c, 0, SEAT_H + 0.27, -0.18, { rx: -0.06 });
   });
 }
 
@@ -252,12 +261,15 @@ export function bookcase(kit, L, x, z, ry, { w = 1.6, h = 1.9, rows = 5, seed = 
       for (let b = 0; b < bays; b++) {
         const bx0 = -w / 2 + t + b * (bayW + t);
         k = (k * 1103515245 + 12345) >>> 0;
-        const kind = (k >>> 8) % 6;
+        const kind = (k >>> 8) % 7;
         const bh = Math.min(pitch - t - 0.03, 0.27);
-        if (kind <= 2) {
-          // a full row of books
+        if (kind === 6) {
+          // room to breathe: one ceramic alone
+          object(kit, L, bx0 + bayW * (0.35 + ((k >>> 3) % 3) * 0.15), y, zc + 0.03, k >>> 4);
+        } else if (kind <= 2) {
+          // a row of books, a thing beside it
           const r = ATLAS.books[(k >>> 4) % 3];
-          const fw = bayW * (0.7 + ((k >>> 12) % 3) * 0.1);
+          const fw = bayW * (0.55 + ((k >>> 12) % 3) * 0.1);
           kit.box(fw, bh, depth - 0.07, "#ffffff", bx0 + fw / 2 + 0.01, y, zc + 0.02, { tex: tex(r) });
           object(kit, L, bx0 + fw + (bayW - fw) / 2 + 0.01, y, zc + 0.03, k);
         } else if (kind === 3) {
@@ -266,12 +278,12 @@ export function bookcase(kit, L, x, z, ry, { w = 1.6, h = 1.9, rows = 5, seed = 
           kit.box(bayW * 0.5, bh, depth - 0.07, "#ffffff", bx0 + bayW * 0.25 + 0.01, y, zc + 0.02, { tex: tex([r[0] + 40, r[1], r[2] / 2, r[3]]) });
           object(kit, L, bx0 + bayW * 0.72, y, zc + 0.03, k >>> 3);
         } else if (kind === 4) {
-          // magazine boxes
-          ["#e9e2d2", "#2f3e57", "#e9e2d2"].forEach((c, j) => kit.box(0.09, bh * 0.85, depth - 0.08, c, bx0 + 0.08 + j * 0.1, y, zc + 0.02));
+          // two lidded linen boxes
+          [S.linen, S.charcoal].forEach((c, j) => kit.box(0.26, bh * 0.6, depth - 0.08, c, bx0 + 0.16 + j * 0.28, y, zc + 0.02));
           object(kit, L, bx0 + bayW * 0.7, y, zc + 0.03, k >>> 2);
         } else {
           // a lying stack and a ceramic
-          ["#b5532e", "#e9e2d2", "#3f5b45", "#26292e"].forEach((c, j) => kit.box(0.24 - j * 0.015, 0.032, 0.19, c, bx0 + 0.16, y + j * 0.032, zc + 0.03, { ry: (j % 2) * 0.08 }));
+          [S.clay, S.linen, S.charcoal].forEach((c, j) => kit.box(0.24 - j * 0.015, 0.032, 0.19, c, bx0 + 0.16, y + j * 0.032, zc + 0.03, { ry: (j % 2) * 0.08 }));
           object(kit, L, bx0 + bayW * 0.68, y, zc + 0.03, k >>> 5);
         }
       }
@@ -283,45 +295,80 @@ export function bookcase(kit, L, x, z, ry, { w = 1.6, h = 1.9, rows = 5, seed = 
 function object(kit, L, x, y, z, k) {
   const S = L.studio;
   switch (k % 5) {
-    case 0: kit.cyl(0.035, 0.15, pick(["#efebe4", "#47474a", "#c06b45"], k, 2), x, y, z, { top: 0.025, seg: 8 }); break;
+    case 0: kit.cyl(0.035, 0.15, pick([S.pots[1], S.charcoal, S.clay], k, 2), x, y, z, { top: 0.025, seg: 8 }); break;
     case 1: kit.cyl(0.06, 0.05, pick(S.pots, k, 1), x, y, z, { top: 0.075, seg: 10 }); break;
     case 2:
       kit.cyl(0.045, 0.07, pick(S.pots, k, 4), x, y, z, { seg: 8 });
       for (let i = 0; i < 5; i++) { const a = i * 1.3; kit.sphere(0.04, S.leaf[i % 3], x + Math.cos(a) * 0.035, y + 0.1 + (i % 2) * 0.025, z + Math.sin(a) * 0.035, { sy: 0.6 }); }
       break;
-    case 3: kit.box(0.14, 0.09, 0.12, pick(["#d9c9a0", "#9fae8f", "#26292e"], k, 3), x, y, z); break;
+    case 3: kit.sphere(0.07, pick([S.stone, S.pots[1], S.charcoal], k, 3), x, y + 0.05, z, { sy: 0.75, detail: 1 }); break;
     default:
       kit.box(0.13, 0.17, 0.015, S.black, x, y, z - 0.04, { rx: -0.15 });
-      kit.box(0.1, 0.13, 0.004, pick(["#d9a99a", "#9fae8f", "#5b7fa6"], k, 2), x, y + 0.02, z - 0.03, { rx: -0.15 });
+      kit.box(0.1, 0.13, 0.004, pick([S.blush, S.sage, S.linen], k, 2), x, y + 0.02, z - 0.03, { rx: -0.15 });
   }
 }
 
-// A low credenza of birch with sliding doors in a colour, on short black legs; things on top.
+// A low sideboard of smoked oak on blackened steel legs, its sliding doors pale oak with fine grooves, one of them in a
+// muted colour (doors); things on top.
 export function credenza(kit, L, x, z, ry, w = 1.6, doors) {
   const S = L.studio;
   kit.at(x, 0, z, ry, () => {
-    const d = 0.36, h = 0.42;
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, 0.1, 0.025, S.black, sx * (w / 2 - 0.06), 0, d / 2 + sz * (d / 2 - 0.06));
-    kit.box(w, h - 0.1, d, S.ply, 0, 0.1, d / 2);
-    kit.box(w + 0.004, 0.012, d + 0.004, S.plyEdge, 0, h - 0.012, d / 2);
+    const d = 0.38, h = 0.46;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, 0.12, 0.025, S.black, sx * (w / 2 - 0.06), 0, d / 2 + sz * (d / 2 - 0.06));
+    kit.box(w, h - 0.12, d, S.walnut, 0, 0.12, d / 2);
     const n = Math.max(2, Math.round(w / 0.55));
     for (let i = 0; i < n; i++) {
-      const dw = (w - 0.06) / n;
-      kit.box(dw - 0.01, h - 0.16, 0.012, i % 2 ? doors ?? S.sage : S.ply, -w / 2 + 0.03 + dw * (i + 0.5), 0.13, d + 0.002);
-      kit.box(0.012, 0.06, 0.006, S.black, -w / 2 + 0.03 + dw * (i + 0.5) + dw * 0.35 * (i % 2 ? -1 : 1), 0.25, d + 0.01);
+      const dw = (w - 0.06) / n, fx = -w / 2 + 0.03 + dw * (i + 0.5);
+      const coloured = i === n - 1 && doors;
+      kit.box(dw - 0.012, h - 0.18, 0.012, coloured ? doors : S.oak, fx, 0.15, d + 0.002);
+      if (!coloured) for (let g = 1; g < 4; g++) kit.box(0.006, h - 0.2, 0.004, S.oakDark, fx - dw / 2 + g * (dw / 4), 0.16, d + 0.009);
     }
   });
 }
 
+// A ceramic vase with a few bare branches in it, and a leaf or two: the one arrangement on a sideboard or a shelf.
+export function vaseBranch(kit, L, x, y, z, seed = 0) {
+  const S = L.studio;
+  const c = pick([S.pots[1], S.charcoal, S.clay, S.stone], seed, 2);
+  kit.cyl(0.06, 0.2, c, x, y, z, { top: 0.035, seg: 10 });
+  kit.cyl(0.035, 0.05, c, x, y + 0.2, z, { top: 0.03, seg: 8 });
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.1 + seed, lean = 0.22 + i * 0.12, len = 0.42 - i * 0.07;
+    const rz = Math.cos(a) * lean, rx = Math.sin(a) * lean;
+    kit.box(0.01, len, 0.01, "#4a3a2e", x, y + 0.22, z, { rz, rx });
+    // the twig's tip (a box turns about its foot, z then x)
+    const tx = -Math.sin(rz) * len, ty = Math.cos(rz) * Math.cos(rx) * len, tz = Math.cos(rz) * Math.sin(rx) * len;
+    kit.sphere(0.03, i % 2 ? S.rust : S.leaf[1], x + tx, y + 0.22 + ty, z + tz, { sy: 0.6, detail: 0 });
+  }
+}
+
 // --- Lamps ---------------------------------------------------------------------------------------------------------
 
-// A pendant over a table: a black cord from the ceiling line, a shade. kinds: "bell" (oak), "globe" (paper),
-// "lantern" (a tall paper lantern on a fine frame), "cone" (black metal). Returns the light's point.
+// A pendant over a table: a black cord from the ceiling line, a shade. kinds: "washi" (a ribbed paper ovoid), "globe"
+// (a paper ball), "lantern" (a tall paper lantern on a fine frame), "ceramic" (a matt dome in a glaze colour), "dome"
+// (enamelled metal), "bell" (oak), "cone" (blackened steel). Returns the light's point.
 export function pendant(kit, glow, L, x, z, { y = 1.75, kind = "bell", top = 2.95, color } = {}) {
   const S = L.studio;
   kit.cyl(0.05, 0.02, S.black, x, top - 0.02, z, { seg: 8 });
   kit.cyl(0.004, top - y - 0.02, S.black, x, y + 0.1, z, { seg: 3 });
-  if (kind === "dome") {
+  if (kind === "washi") {
+    // paper over a spiral of bamboo: the ribs show as faint rings round the ovoid
+    const R0 = 0.25, sy = 0.8;
+    glow.sphere(R0, S.paper, x, y + 0.04, z, { sy, detail: 2 });
+    for (const t of [-0.6, -0.2, 0.2, 0.6]) glow.cyl(R0 * Math.sqrt(1 - t * t) + 0.004, 0.006, "#e2d8c2", x, y + 0.04 + t * R0 * sy, z, { seg: 12 });
+    kit.cyl(0.03, 0.03, S.black, x, y + 0.04 + R0 * sy, z, { seg: 6 });
+    return { x, y: y - 0.05, z };
+  }
+  if (kind === "ceramic") {
+    // a matt glazed dome with a rolled rim, white inside
+    const g = new THREE.SphereGeometry(0.2, 14, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+    g.scale(1, 0.75, 1);
+    kit.add(g, color ?? S.pots[1], x, y, z);
+    kit.add(new THREE.TorusGeometry(0.2, 0.012, 4, 14), color ?? S.pots[1], x, y + 0.004, z, { rx: Math.PI / 2 });
+    kit.cyl(0.03, 0.06, S.black, x, y + 0.14, z, { seg: 8 });
+    glow.cyl(0.19, 0.01, S.paper, x, y + 0.004, z, { seg: 14 });
+    glow.sphere(0.055, S.paper, x, y - 0.07, z, { detail: 1 });
+  } else if (kind === "dome") {
     // an enamel dome in a colour, white inside
     const g = new THREE.SphereGeometry(0.22, 14, 5, 0, Math.PI * 2, 0, Math.PI / 2);
     kit.add(g, color ?? S.forest, x, y, z);
@@ -478,16 +525,16 @@ export function whiteboardStand(kit, L, x, z, ry) {
   const S = L.studio;
   kit.at(x, 0, z, ry, () => {
     for (const sx of [-1, 1]) {
-      kit.box(0.03, 1.55, 0.03, S.chrome, sx * 0.52, 0.06, 0);
-      kit.box(0.04, 0.03, 0.4, S.chrome, sx * 0.52, 0.04, 0);
+      kit.box(0.03, 1.55, 0.03, S.black, sx * 0.52, 0.06, 0);
+      kit.box(0.04, 0.03, 0.4, S.black, sx * 0.52, 0.04, 0);
       for (const sz of [-1, 1]) kit.cyl(0.025, 0.04, S.black, sx * 0.52, 0, sz * 0.18, { seg: 6 });
     }
     kit.box(1.0, 0.68, 0.025, "#ffffff", 0, 0.82, 0, { tex: { r: ATLAS.whiteboard, face: "+z" } });
     kit.box(1.0, 0.68, 0.005, "#f7f7f4", 0, 0.82, -0.015);
-    kit.box(1.03, 0.025, 0.035, S.chrome, 0, 1.5, 0);
-    kit.box(1.03, 0.025, 0.06, S.chrome, 0, 0.8, 0.015);
-    kit.box(0.1, 0.015, 0.015, "#2f5aa8", 0.25, 0.825, 0.03);
-    kit.box(0.1, 0.015, 0.015, "#c8443a", 0.38, 0.825, 0.03);
+    kit.box(1.03, 0.025, 0.035, S.oak, 0, 1.5, 0);
+    kit.box(1.03, 0.025, 0.06, S.oak, 0, 0.8, 0.015);
+    kit.box(0.1, 0.015, 0.015, S.navy, 0.25, 0.825, 0.03);
+    kit.box(0.1, 0.015, 0.015, S.rust, 0.38, 0.825, 0.03);
   });
 }
 
@@ -508,20 +555,20 @@ export function radiator(kit, L, x, z, w = 1.1) {
 
 // --- Kitchen -------------------------------------------------------------------------------------------------------
 
-// A run of base cabinets along a wall (back at z = 0) from x0 to x1: sand-grey fronts, a pale stone top, tiles up to
-// the sill, and a sink at sinkX. Things on the counter are separate (coffee machine, kettle, bowl...).
+// A run of base cabinets along a wall (back at z = 0) from x0 to x1: pale oak fronts with smoked-oak pulls, a pale
+// stone top, tiles up to the sill, and a sink at sinkX. Things on the counter are separate (coffee machine, kettle, bowl...).
 export function kitchenRun(kit, L, x0, x1, { sinkX = null, tiles = 0.95 } = {}) {
   const S = L.studio;
   const w = x1 - x0, cx = (x0 + x1) / 2, d = 0.52;
-  kit.box(w, 0.08, d - 0.06, "#3a3a3c", cx, 0, d / 2 - 0.03);
-  kit.box(w, COUNTER_H - 0.11, d, S.sand, cx, 0.08, d / 2);
+  kit.box(w, 0.08, d - 0.06, S.charcoal, cx, 0, d / 2 - 0.03);
+  kit.box(w, COUNTER_H - 0.11, d, S.oak, cx, 0.08, d / 2);
   const n = Math.max(1, Math.round(w / 0.5));
   for (let i = 0; i < n; i++) {
     const dw = w / n, fx = x0 + dw * (i + 0.5);
-    kit.box(dw - 0.012, COUNTER_H - 0.13, 0.015, "#d6ccbc", fx, 0.09, d + 0.004);
+    kit.box(dw - 0.012, COUNTER_H - 0.13, 0.015, S.oakLight, fx, 0.09, d + 0.004);
     kit.box(0.14, 0.012, 0.014, S.oakDark, fx, COUNTER_H - 0.1, d + 0.014);
   }
-  kit.box(w + 0.02, 0.035, d + 0.03, "#efece6", cx, COUNTER_H - 0.035, d / 2 + 0.01);
+  kit.box(w + 0.02, 0.035, d + 0.03, "#e2dcd1", cx, COUNTER_H - 0.035, d / 2 + 0.01);
   kit.box(w, tiles - COUNTER_H, 0.01, "#ffffff", cx, COUNTER_H, 0.005, { tex: tex([ATLAS.tiles[0], ATLAS.tiles[1], Math.min(64, Math.round(w * 18)), 32]) });
   if (sinkX !== null) {
     kit.box(0.42, 0.006, 0.32, "#b9bcc2", sinkX, COUNTER_H, 0.27);
@@ -531,17 +578,17 @@ export function kitchenRun(kit, L, x0, x1, { sinkX = null, tiles = 0.95 } = {}) 
   }
 }
 
-// A tall fridge in the cabinets' sand grey, with an oak handle.
+// A tall fridge behind pale oak doors like the cabinets', with smoked-oak pulls.
 export function fridge(kit, L, x, z, w = 0.66) {
   const S = L.studio;
-  kit.box(w, 1.62, 0.6, S.sand, x, 0, z + 0.3);
-  kit.box(w - 0.02, 1.0, 0.015, "#d6ccbc", x, 0.04, z + 0.605);
-  kit.box(w - 0.02, 0.56, 0.015, "#d6ccbc", x, 1.05, z + 0.605);
+  kit.box(w, 1.62, 0.6, S.oak, x, 0, z + 0.3);
+  kit.box(w - 0.02, 1.0, 0.015, S.oakLight, x, 0.04, z + 0.605);
+  kit.box(w - 0.02, 0.56, 0.015, S.oakLight, x, 1.05, z + 0.605);
   kit.box(0.025, 0.4, 0.02, S.oakDark, x - w / 2 + 0.06, 0.55, z + 0.62);
   kit.box(0.025, 0.25, 0.02, S.oakDark, x - w / 2 + 0.06, 1.12, z + 0.62);
   // a few things on top
-  kit.box(0.2, 0.12, 0.16, "#9fae8f", x - 0.1, 1.62, z + 0.3);
-  kit.cyl(0.05, 0.14, "#efebe4", x + 0.15, 1.62, z + 0.3, { seg: 8 });
+  kit.box(0.24, 0.12, 0.2, S.linen, x - 0.1, 1.62, z + 0.3);
+  kit.cyl(0.05, 0.14, S.pots[1], x + 0.15, 1.62, z + 0.3, { seg: 8 });
 }
 
 // An espresso machine with a grinder beside it, two cups on top.
@@ -556,7 +603,7 @@ export function coffeeMachine(kit, L, x, z) {
   kit.box(0.03, 0.07, 0.03, S.chrome, x + 0.11, y + 0.14, z + 0.16);
   kit.cyl(0.025, 0.04, "#f4f1ea", x - 0.06, y + 0.035, z + 0.17, { seg: 8 });
   kit.cyl(0.026, 0.035, "#f4f1ea", x - 0.06, y + 0.3, z - 0.03, { seg: 8 });
-  kit.cyl(0.026, 0.035, "#2f3e57", x + 0.05, y + 0.3, z - 0.03, { seg: 8 });
+  kit.cyl(0.026, 0.035, S.navy, x + 0.05, y + 0.3, z - 0.03, { seg: 8 });
   // the grinder
   kit.box(0.12, 0.2, 0.16, "#2a2a2c", x + 0.27, y, z);
   kit.cyl(0.05, 0.12, "#7a5a3a", x + 0.27, y + 0.2, z - 0.02, { top: 0.065, seg: 8 });
@@ -569,8 +616,8 @@ export function kettle(kit, L, x, z) {
 }
 
 export function fruitBowl(kit, L, x, z) {
-  kit.cyl(0.13, 0.05, "#efebe4", x, COUNTER_H, z, { top: 0.15, seg: 12 });
-  [["#e9a23b", 0.05, 0.02], ["#c8443a", -0.05, 0.03], ["#e9a23b", 0, -0.05], ["#9cbf4a", -0.03, -0.01], ["#e8d24a", 0.06, -0.04]].forEach(([c, dx, dz]) => kit.sphere(0.04, c, x + dx, COUNTER_H + 0.07, z + dz, { detail: 1 }));
+  kit.cyl(0.13, 0.05, "#8a7a68", x, COUNTER_H, z, { top: 0.15, seg: 12 });
+  [["#d08a3e", 0.05, 0.02], ["#a84a3a", -0.05, 0.03], ["#d08a3e", 0, -0.05], ["#a3a35e", -0.03, -0.01]].forEach(([c, dx, dz]) => kit.sphere(0.04, c, x + dx, COUNTER_H + 0.07, z + dz, { detail: 1 }));
 }
 
 // Open oak shelves on a wall (its face at z = 0) with mugs, jars and a plant.
@@ -599,7 +646,7 @@ export function sofa(kit, L, x, z, ry, { w = 2.0, color, cushions } = {}) {
     kit.rbox(w - 0.3, 0.12, 0.6, c, 0, 0.24, 0.07, 0.05);
     kit.rbox(w, 0.42, 0.18, c, 0, 0.08, -0.3, 0.06);
     for (const sx of [-1, 1]) kit.rbox(0.16, 0.34, 0.78, c, sx * (w / 2 - 0.08), 0.08, 0, 0.05);
-    const cs = cushions ?? [S.rust, S.sage, S.mustard];
+    const cs = cushions ?? [S.rust, S.linen, S.sage];
     cs.forEach((cc, i) => kit.rbox(0.32, 0.3, 0.1, cc, -w / 2 + 0.36 + i * ((w - 0.72) / Math.max(1, cs.length - 1)), 0.3, -0.17, 0.05, { rx: -0.25, ry: (i - 1) * 0.12 }));
     kit.rbox(0.5, 0.05, 0.62, "#ffffff", w / 2 - 0.42, 0.36, 0.08, 0.02, { tex: { r: ATLAS.knit, face: "all" } });
   });
@@ -685,16 +732,16 @@ export function workbench(kit, wall, glow, L, x, w = 1.9) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.045, 0.86, 0.045, S.black, x + sx * (w / 2 - 0.06), 0, z + sz * 0.25);
   kit.box(w - 0.1, 0.03, 0.55, S.oakDark, x, 0.22, z);
   // under the bench: two crates and a box of filament
-  kit.box(0.42, 0.28, 0.34, "#7f9c8a", x - w / 2 + 0.3, 0.25, z);
-  kit.box(0.42, 0.28, 0.34, S.mustard, x - w / 2 + 0.78, 0.25, z);
-  kit.box(0.3, 0.2, 0.3, "#efebe4", x + w / 2 - 0.3, 0.25, z);
+  kit.box(0.42, 0.28, 0.34, S.oak, x - w / 2 + 0.3, 0.25, z);
+  kit.box(0.42, 0.28, 0.34, S.linen, x - w / 2 + 0.78, 0.25, z);
+  kit.box(0.3, 0.2, 0.3, S.charcoal, x + w / 2 - 0.3, 0.25, z);
   // the pegboard and its tools: rulers, tape rolls, scissors, a cable loop, a saw, pliers
   wall.box(w - 0.1, 0.92, 0.02, "#3a3028", x, 1.08, 0.01);
   wall.box(w - 0.14, 0.88, 0.006, "#ffffff", x, 1.1, 0.023, { tex: tex(ATLAS.pegboard) });
   const tz = 0.04, x0 = x - w / 2 + 0.2;
-  wall.box(0.04, 0.5, 0.01, S.mustard, x0, 1.35, tz);
+  wall.box(0.04, 0.5, 0.01, S.oak, x0, 1.35, tz);
   wall.box(0.03, 0.4, 0.01, S.chrome, x0 + 0.1, 1.42, tz, { rz: 0.05 });
-  for (let i = 0; i < 3; i++) wall.cyl(0.05, 0.03, ["#b5532e", "#2f3e57", "#e9e2d2"][i], x0 + 0.35 + i * 0.13, 1.7, tz + 0.01, { rx: Math.PI / 2, seg: 10 });
+  for (let i = 0; i < 3; i++) wall.cyl(0.05, 0.03, [S.rust, S.navy, S.linen][i], x0 + 0.35 + i * 0.13, 1.7, tz + 0.01, { rx: Math.PI / 2, seg: 10 });
   wall.box(0.04, 0.2, 0.015, S.rust, x0 + 0.78, 1.45, tz, { rz: 0.2 });
   wall.box(0.04, 0.2, 0.015, S.rust, x0 + 0.84, 1.45, tz, { rz: -0.2 });
   wall.add(new THREE.TorusGeometry(0.11, 0.015, 4, 12), S.black, x0 + 1.12, 1.48, tz + 0.01);
@@ -708,11 +755,11 @@ export function workbench(kit, wall, glow, L, x, w = 1.9) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.04, 0.36, 0.04, "#e9e6e0", px + sx * 0.19, y + 0.05, z - 0.02 + sz * 0.18);
   kit.box(0.34, 0.3, 0.006, "#2b2b2e", px, y + 0.07, z - 0.21);
   kit.box(0.12, 0.03, 0.08, S.black, px + 0.05, y + 0.3, z - 0.02);
-  kit.cyl(0.05, 0.08, S.mustard, px - 0.02, y + 0.06, z, { seg: 8 });
+  kit.cyl(0.05, 0.08, S.clay, px - 0.02, y + 0.06, z, { seg: 8 });
   glow.box(0.3, 0.008, 0.3, "#9fd3c7", px, y + 0.061, z - 0.02);
   kit.cyl(0.07, 0.03, "#2b2b2e", px - 0.3, y + 0.38, z - 0.15, { seg: 10, rx: Math.PI / 2 });
-  kit.rbox(0.22, 0.08, 0.14, S.navy, x - 0.15, y, z + 0.05, 0.02);
-  kit.box(0.12, 0.02, 0.1, "#3d8a5a", x - 0.15, y + 0.08, z + 0.05);
+  kit.rbox(0.22, 0.08, 0.14, S.charcoal, x - 0.15, y, z + 0.05, 0.02);
+  kit.box(0.12, 0.02, 0.1, S.sage, x - 0.15, y + 0.08, z + 0.05);
   kit.cyl(0.08, 0.006, "#1c1c1f", x + 0.2, y, z + 0.1, { seg: 12 });
   kit.box(0.2, 0.012, 0.28, "#f4f1ea", x - 0.55, y, z + 0.1, { ry: 0.2 });
 }
@@ -743,7 +790,7 @@ export function tatamiLounge(kit, glow, L, x, z, w = 2.5, d = 2.2, seed = 0) {
   teapot(kit, tx + 0.05, y + 0.3, tz - 0.05, pick(["#7a3e2e", S.navy, "#3a3530"], seed, 1));
   for (const [dx, dz] of [[-0.2, 0.15], [0.22, 0.2], [0.05, -0.25]]) cup(kit, tx + dx, y + 0.3, tz + dz, "#e8e2d4");
   // floor cushions round it
-  for (const [dx, dz, c] of [[-0.62, 0.05, S.navy], [0.68, 0.12, S.rust], [0.1, 0.62, "#2c3e66"], [0.1, -0.58, S.sage]]) kit.rbox(0.48, 0.08, 0.48, c, tx + dx, y, tz + dz, 0.035);
+  for (const [dx, dz, c] of [[-0.62, 0.05, S.navy], [0.68, 0.12, S.rust], [0.1, 0.62, S.oatmeal], [0.1, -0.58, S.charcoal]]) kit.rbox(0.48, 0.08, 0.48, c, tx + dx, y, tz + dz, 0.035);
   // a paper lantern on the dais, a bonsai on a low chest at the back
   const lx = x + w / 2 - 0.3, lz = z + d / 2 - 0.3;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.022, 0.62, 0.022, "#3a3530", lx + sx * 0.12, y, lz + sz * 0.12);
@@ -776,28 +823,29 @@ export function bonsai(kit, L, x, y, z) {
 }
 
 // The tea corner against a wall (its back at z = 0): a low cabinet with a kettle, a teapot and cups on a tray, a tin
-// of tea; open shelves of bowls and cups above it on `wall` (hidden with its wall).
+// of tea; an open shelf of bowls and cups and a hanging scroll above it on `wall` (hidden with its wall).
 export function teaCorner(kit, wall, L, x, w = 1.2) {
   const S = L.studio;
   kit.box(w, 0.55, 0.4, S.ply, x, 0.08, 0.22);
   kit.box(w + 0.004, 0.012, 0.404, S.plyEdge, x, 0.62, 0.22);
   for (const sx of [-1, 1]) kit.box(0.04, 0.08, 0.04, S.black, x + sx * (w / 2 - 0.05), 0, 0.22);
   kit.box(w / 2 - 0.02, 0.4, 0.012, S.walnut, x - w / 4, 0.14, 0.425);
-  kit.box(w / 2 - 0.02, 0.4, 0.012, "#2c3e66", x + w / 4, 0.14, 0.425);
+  kit.box(w / 2 - 0.02, 0.4, 0.012, S.navy, x + w / 4, 0.14, 0.425);
   const y = 0.632;
   kit.cyl(0.08, 0.02, "#2a2a2c", x - w / 2 + 0.2, y, 0.2, { seg: 10 });
   kit.cyl(0.075, 0.18, "#d8d6d0", x - w / 2 + 0.2, y + 0.02, 0.2, { top: 0.055, seg: 10 });
   kit.box(0.03, 0.11, 0.05, "#2a2a2c", x - w / 2 + 0.28, y + 0.06, 0.2);
   kit.rbox(0.42, 0.025, 0.28, S.walnut, x + 0.1, y, 0.22, 0.01);
-  teapot(kit, x + 0.02, y + 0.025, 0.22, "#2c3e66");
+  teapot(kit, x + 0.02, y + 0.025, 0.22, S.charcoal);
   for (const dx of [0.18, 0.28]) cup(kit, x + dx, y + 0.025, 0.18, "#e8e2d4");
   kit.cyl(0.05, 0.12, S.forest, x + w / 2 - 0.12, y, 0.2, { seg: 8 });
-  for (const sy of [1.25, 1.6]) {
+  scroll(wall, L, x + w / 4, 2.4);
+  for (const sy of [1.2]) {
     wall.box(w, 0.03, 0.22, S.oak, x, sy, 0.11);
     for (let k = 0; k < Math.floor(w / 0.14); k++) {
       const px = x - w / 2 + 0.08 + k * 0.14;
       if (k % 3 === 1) { wall.cyl(0.07, 0.05, "#f4f1ea", px, sy + 0.03, 0.11, { top: 0.09, seg: 10 }); wall.cyl(0.065, 0.045, "#e8e2d4", px, sy + 0.08, 0.11, { top: 0.085, seg: 10 }); }
-      else wall.cyl(0.035, 0.07, ["#e8e2d4", "#7f9c8a", "#3a3530", "#b8826a", "#2c3e66"][(k + Math.round(sy * 10)) % 5], px, sy + 0.03, 0.11, { top: 0.04, seg: 8 });
+      else wall.cyl(0.035, 0.07, ["#e8e2d4", S.sage, "#3a3530", S.clay, S.navy][(k + Math.round(sy * 10)) % 5], px, sy + 0.03, 0.11, { top: 0.04, seg: 8 });
     }
   }
 }
@@ -829,7 +877,7 @@ export function recordCabinet(kit, L, x, z, ry = 0, seed = 0) {
     kit.cyl(0.15, 0.012, "#1c1c1f", -0.24, 0.7, 0.2, { seg: 16 });
     kit.cyl(0.03, 0.014, S.rust, -0.24, 0.7, 0.2, { seg: 8 });
     kit.box(0.02, 0.02, 0.18, S.chrome, -0.06, 0.72, 0.16, { ry: 0.3 });
-    kit.box(0.3, 0.3, 0.01, pick([S.mustard, S.navy, S.rust], seed, 2), 0.2, 0.62, 0.05, { rx: -0.12 });
+    kit.box(0.3, 0.3, 0.01, pick([S.oatmeal, S.navy, S.rust], seed, 2), 0.2, 0.62, 0.05, { rx: -0.12 });
     kit.box(0.18, 0.28, 0.18, "#26292e", 0.42, 0.62, 0.2);
     kit.cyl(0.05, 0.01, "#4a4a50", 0.42, 0.78, 0.295, { seg: 10, rx: Math.PI / 2 });
   });
@@ -848,4 +896,35 @@ export function readingCorner(kit, glow, L, x, z, ry = 0, color) {
   });
   const c = Math.cos(ry), s = Math.sin(ry);
   return floorLamp(kit, glow, L, x - c * 0.45 - s * 0.35, z + s * 0.45 - c * 0.35, "tripod");
+}
+
+// --- Japandi pieces --------------------------------------------------------------------------------------------------
+
+// A hanging scroll on a wall (its face toward +z) whose top hangs at `top`: a dark rod, the scroll, a weighted foot.
+export function scroll(wall, L, x, top, w = 0.34) {
+  const h = w * 3;
+  wall.box(w + 0.06, 0.02, 0.02, L.studio.walnut, x, top - 0.02, 0.012);
+  wall.box(w, h, 0.006, "#ffffff", x, top - 0.02 - h, 0.008, { tex: tex(ATLAS.scroll) });
+  wall.box(w + 0.05, 0.022, 0.022, L.studio.walnut, x, top - 0.04 - h, 0.012);
+}
+
+// A free-standing folding screen: `panels` leaves of washi in a pale oak lattice with a smoked-oak kick rail, folded in
+// a zigzag along +x of its frame (its first leaf's outer edge at the origin). Washi on both faces.
+export function shojiScreen(kit, L, x, z, ry = 0, { panels = 3, w = 0.48, h = 1.62, fold = 0.42 } = {}) {
+  const S = L.studio;
+  kit.at(x, 0, z, ry, () => {
+    let px = 0, pz = 0;
+    for (let i = 0; i < panels; i++) {
+      const a = i % 2 ? -fold : fold;
+      const cx = px + Math.cos(a) * w / 2, cz = pz - Math.sin(a) * w / 2;
+      kit.at(cx, 0, cz, a, () => {
+        for (const sx of [-1, 1]) kit.box(0.035, h, 0.035, S.oak, sx * (w / 2 - 0.0175), 0, 0);
+        kit.box(w, 0.035, 0.035, S.oak, 0, h - 0.035, 0);
+        kit.box(w - 0.07, 0.24, 0.025, S.walnut, 0, 0.04, 0);
+        kit.box(w - 0.07, h - 0.32, 0.012, "#ffffff", 0, 0.28, 0, { tex: { r: ATLAS.shoji, face: "all" } });
+      });
+      px += Math.cos(a) * w;
+      pz -= Math.sin(a) * w;
+    }
+  });
 }

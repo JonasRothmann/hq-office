@@ -1,4 +1,4 @@
-// The world's look (Nordic-Japanese): colour and material tokens per theme (day, night), status colours and poses.
+// The world's look (Japandi): colour and material tokens per theme (day, night), status colours and poses.
 
 // Status colours, shared with the UI (spec section 3).
 export const STATUS = {
@@ -42,25 +42,29 @@ export function markerOf(status, blocking = 0) {
   }
 }
 
-// People: skin, hair, a wardrobe in muted Nordic colours with a few strong ones, picked per lane by its name.
+// People: skin, hair, a wardrobe in the Japandi palette (oat, sand, off-white, charcoal, smoked brown, and muted
+// indigo, rust, sage, ochre), picked per lane by its name.
 const PEOPLE = {
   skin: ["#f3cfb0", "#e8b892", "#d29a6e", "#b27a50", "#8a5a3a", "#5e3b26", "#f6dcc6"],
-  hair: ["#2a1d15", "#4a3020", "#7a4b28", "#b07a3e", "#e0c07a", "#1d1d22", "#9a968f", "#9c3b24", "#d8d2c4"],
-  pants: ["#33384a", "#3e5778", "#5d7896", "#c9b48f", "#5d6247", "#2b2b2e", "#7a6a58", "#4a4a50"],
-  tops: ["#b5532e", "#d4a236", "#3f5b45", "#2f3e57", "#e3d9c6", "#9fae8f", "#c98a7a", "#5b7fa6", "#efece4", "#6b4a6e", "#8a3b32", "#4f6a74", "#cf7a3a", "#26292e"],
-  shoes: ["#f2f0ea", "#2b2b2e", "#6b4a33", "#f2f0ea", "#9c3b24", "#c9b48f"],
+  hair: ["#2a1d15", "#4a3020", "#7a4b28", "#b07a3e", "#d9bf86", "#1d1d22", "#9a968f", "#8a4a2e", "#d8d2c4"],
+  pants: ["#2e2f33", "#34405a", "#4a4f5c", "#c4b49a", "#5c6250", "#26272a", "#6b5646", "#d8ccb6"],
+  tops: ["#a65a3c", "#c39a4e", "#5c6a4e", "#34405a", "#e2d8c6", "#94a088", "#b98b72", "#55657e", "#efe9dd", "#6b5442", "#7d4a36", "#4f5e60", "#cbb898", "#2f2f32"],
+  shoes: ["#efe9dd", "#2b2b2e", "#6b4a33", "#efe9dd", "#7d4a36", "#c4b49a"],
 };
 
-// What the Nordic studio is made of: woods, plaster, textiles, pots and greens (day; night keeps them).
+// What the studio is made of: pale oak and ash, smoked oak, blackened steel, plaster, linen and wool, stone and
+// ceramics, paper, a few muted earth colours, pots and greens (day; night keeps them). The old names stay where the
+// props use them: walnut is the smoked oak, navy the indigo, mustard the ochre, forest the moss, chrome brushed steel.
 const STUDIO = {
-  oak: "#dcbf92", oakLight: "#e8d3ae", oakDark: "#b48f5e", ply: "#ead8b4", plyEdge: "#b99868", walnut: "#6e4c34",
-  plaster: "#f3eee6", warmGrey: "#d6cfc4", sand: "#cfc4b2", black: "#2a2a2c", chrome: "#c9ccd0",
-  oatmeal: "#e2d7c3", wool: "#bdb6aa", rust: "#b5532e", sage: "#9fae8f", mustard: "#d4a236", navy: "#2f3e57",
-  forest: "#3f5b45", blush: "#d9a99a", cord: "#d9c9a0", felt: "#8f9c88", paper: "#f7f1e2",
-  pots: ["#c06b45", "#efebe4", "#47474a", "#d9cbb4", "#9a6a4a"],
-  leaf: ["#4f7d47", "#3f6b3c", "#5f8e4f", "#365d34", "#6f9a58"], leafPale: "#8fb06e", olive: "#8a9a74",
-  mugs: ["#f4f1ea", "#b5532e", "#2f3e57", "#d4a236", "#9fae8f", "#26292e"],
-  spines: ["#2f3e57", "#b5532e", "#d4a236", "#e9e2d2", "#9fae8f", "#26292e", "#c98a7a", "#5b7fa6", "#8a3b32", "#efece4", "#6b8f71", "#d9c9a0"],
+  oak: "#dbc49e", oakLight: "#e9dbbf", oakDark: "#6a5443", ply: "#e8dcc4", plyEdge: "#b49a76", walnut: "#4f3f33",
+  plaster: "#f2ece2", warmGrey: "#d6cfc4", sand: "#d3c7b2", black: "#2b2a28", chrome: "#a9a7a1",
+  oatmeal: "#ded3bf", wool: "#b9b1a4", rust: "#a65a3c", sage: "#94a088", mustard: "#c39a4e", navy: "#34405a",
+  forest: "#5c6a4e", blush: "#c49a86", cord: "#d3c39c", felt: "#a39b8c", paper: "#f6efe0",
+  charcoal: "#3a3937", stone: "#a8a196", clay: "#b98a6a", linen: "#e6ddcc", ink: "#26272a",
+  pots: ["#b98a6a", "#ece6db", "#3d3b38", "#d2c4ac", "#8a7a68"],
+  leaf: ["#5d7a4f", "#4d6b44", "#6b8757", "#43603f", "#7a9064"], leafPale: "#8fa874", olive: "#8a9a74",
+  mugs: ["#efe9dd", "#a65a3c", "#34405a", "#c9bfae", "#94a088", "#3a3937"],
+  spines: ["#34405a", "#a65a3c", "#e6dccb", "#c9b79c", "#94a088", "#3a3937", "#d8ccb6", "#6e6a63", "#7d4a36", "#efe9dd", "#5c6a4e", "#b8a78a", "#c39a4e", "#8f877a"],
 };
 
 const LOOK = {
@@ -70,25 +74,25 @@ const LOOK = {
     court: { base: "#e4ded1", alt: "#d3ccbc", kind: "raked" }, path: "#d9d2c3",
     plinth: "#cfc8ba",
     floor: {
-      office: { base: "#e5cda4", alt: "#d9bd90", line: "#b9996a", kind: "planks" },
-      hq: { base: "#e5cda4", alt: "#d9bd90", line: "#b9996a", kind: "planks" },
+      office: { base: "#e6d4b2", alt: "#dcc7a2", line: "#b49d7a", kind: "planks" },
+      hq: { base: "#e6d4b2", alt: "#dcc7a2", line: "#b49d7a", kind: "planks" },
       // one-metre stone tiles with dark joints, so corridors read apart from the oak offices at the far zoom
       corridor: { base: "#d9d2c4", alt: "#c9c1b1", line: "#958b78", kind: "cement" },
-      break: { base: "#ebe5da", alt: "#cfc6b6", line: "#a89e8c", kind: "terrazzo" },
+      break: { base: "#e3dccf", alt: "#cdc3b2", line: "#a79b87", kind: "terrazzo" },
     },
-    // white plaster over a band of oak battens to a rail at the window sills
-    wall: { face: "#f4efe7", alt: "#e9e2d6", trim: "#d9c095", gap: "#8f7652", rails: "#c4a77a", rail: 0.8, kind: "band" },
+    // warm white plaster over a band of pale oak battens to a smoked-oak rail at the window sills, a smoked skirting
+    wall: { face: "#f2ece2", alt: "#e6ded0", trim: "#d8c39e", gap: "#6d5a46", rails: "#6a5443", rail: 0.8, kind: "band" },
     cladding: { base: "#3d3c38", alt: "#363531", line: "#252420", kind: "boards" },
-    cap: "#9a8462",
+    cap: "#4f4338",
     wood: "#dcc29a", woodEdge: "#c4a77a", steel: "#2b2b2e",
     chair: { seat: "#e9e4da", frame: "#2b2b2e" },
     rug: { base: "#cdc890", alt: "#c2bd84", line: "#4a4a3a", kind: "tatami" },
     plant: { leaf: "#5f8a5a", leaf2: "#4e7a4a", pot: "#efece6" },
-    lantern: { paper: "#f7f1e2", frame: "#3a3530" },
+    lantern: { paper: "#f6efe0", frame: "#3a3530" },
     shelf: "#d9c095", books: ["#3f4a5a", "#c9b79c", "#8aa39b", "#e9e4da", "#d7a68a"],
     screen: "#23262d", screenFrame: "#2b2b2e",
     counter: { top: "#f2efe8", body: "#dcc29a" }, sofa: "#c9c0ae", sofaCushion: "#d8d0bf",
-    shoji: { frame: "#c4a77a", paper: "#f7f3e8" }, accent: "#c8553d",
+    shoji: { frame: "#c4a77a", paper: "#f7f3e8" }, accent: "#a65a3c",
     tree: { leaf: "#b8442c", leaf2: "#d0603a", trunk: "#4a3a2e" },
     moon: null,
     light: { amb: "#fff8ef", ambI: 2.0, sky: "#fffaf2", ground: "#c8bca8", hemi: 0.75, key: "#fff4e4", keyI: 0.95, room: 0.0, shadow: 0.3 },
@@ -136,22 +140,22 @@ export function appearance(name, L) {
   const top = one(["sweater", "shirt", "hoodie", "tee", "cardigan", "stripes", "sweater", "blazer", "tee"], 7);
   const skin = one(P.skin, 1);
   let hair = one(P.hair, 5);
-  if (P.skin.indexOf(skin) >= 4 && ["#e0c07a", "#b07a3e", "#9c3b24", "#d8d2c4"].includes(hair)) hair = "#1d1d22";
+  if (P.skin.indexOf(skin) >= 4 && ["#d9bf86", "#b07a3e", "#8a4a2e", "#d8d2c4"].includes(hair)) hair = "#1d1d22";
   const topColor = one(P.tops, 9);
-  let inner = one(["#efece4", "#26292e", "#d4a236", "#e3d9c6"], 17);
-  if (inner === topColor) inner = "#efece4";
+  let inner = one(["#efe9dd", "#2f2f32", "#c39a4e", "#e2d8c6"], 17);
+  if (inner === topColor) inner = "#efe9dd";
   let pants = one(P.pants, 13);
   if (pants === topColor) pants = P.pants[(P.pants.indexOf(pants) + 1) % P.pants.length];
   return {
     skin, hair, hairStyle,
     beard: [0, 6, 7, 8].includes(hairStyle) && r(11, 3) === 0,
-    glasses: r(13, 4) === 0 ? one(["#26292e", "#6b4a33", "#b5532e"], 19) : null,
+    glasses: r(13, 4) === 0 ? one(["#26272a", "#6b4a33", "#4f3f33"], 19) : null,
     freckles: r(15, 5) === 0 && P.skin.indexOf(skin) <= 1,
     lashes: [1, 2, 3, 5].includes(hairStyle),
-    beanie: r(21, 10) === 0 ? one(["#b5532e", "#d4a236", "#2f3e57", "#3f5b45"], 23) : null,
+    beanie: r(21, 10) === 0 ? one(["#a65a3c", "#c39a4e", "#34405a", "#5c6a4e", "#d8ccb6"], 23) : null,
     top, topColor, inner, pants,
     shoes: one(P.shoes, 15),
-    stripe: one(["#2f3e57", "#b5532e", "#26292e"], 25),
+    stripe: one(["#34405a", "#a65a3c", "#2f2f32"], 25),
     headphones: r(17, 5) === 0,
   };
 }

@@ -1,8 +1,10 @@
-// The garden round the building: a gravel drip edge, birches and a few pines behind it and to its left (kept off the
-// camera's side of the default view, so nothing tall hides a room), low shrubs and lavender along the front, a meadow,
-// a Japanese corner at the front left (a maple, a stone lantern by a water basin, moss and stepping stones), a paved
-// path with bollards from the front door to the edge of the lot, a bike rack and a bench, a deck by the east wall.
-// Everything stays within REACH of the building, so the land round it (outside/) starts where the garden ends.
+// The garden round the building, calm and Japandi: a gravel drip edge, birches and a few pines behind it and to its
+// left (kept off the camera's side of the default view, so nothing tall hides a room), clipped shrubs and grasses
+// along the front, a bed of raked gravel with stones and moss islands, a corner at the front left (a maple, a stone
+// lantern by a water basin, moss and stepping stones on gravel), a paved path with bollards from the front door to the
+// edge of the lot, a bike rack and a bench, a timber deck by the east wall. Everything stays within REACH of the
+// building, so the land round it (outside/) starts where the garden ends.
+import { THREE } from "./kit.js";
 import { bike } from "./props.js";
 
 export const REACH = 7;
@@ -17,7 +19,7 @@ export function maple(kit, x, z, s = 1, seed = 1, y = -0.12) {
   kit.box(0.07 * s, 0.7 * s, 0.07 * s, trunk, x + 0.12 * s, y + 0.85 * s, z, { rz: -0.8 });
   kit.box(0.06 * s, 0.6 * s, 0.06 * s, trunk, x + 0.05 * s, y + 0.9 * s, z, { rz: 0.7, rx: 0.3 });
   kit.box(0.05 * s, 0.6 * s, 0.05 * s, trunk, x - 0.1 * s, y + 1.0 * s, z + 0.1 * s, { rz: 0.9, rx: -0.4 });
-  const reds = ["#b8442c", "#d0603a", "#9c3424", "#e07a3e"];
+  const reds = ["#a8452e", "#bf5a36", "#8e3a28", "#cc7040"];
   for (let i = 0; i < 13; i++) {
     const a = i * 2.39 + r() * 0.5, tier = i % 3, d = (0.35 + tier * 0.33 + r() * 0.15) * s;
     kit.sphere((0.42 - tier * 0.06 + r() * 0.08) * s, reds[i % 4], x + Math.cos(a) * d + 0.1 * s, y + (2.05 - tier * 0.28 + r() * 0.2) * s, z + Math.sin(a) * d, { sy: 0.5, detail: 1, ry: r() * 3 });
@@ -70,34 +72,48 @@ function pine(kit, x, y, z, s) {
   [[0.95, 0.9], [0.75, 1.45], [0.5, 1.95]].forEach(([r, h], k) => kit.cyl(r * s, 0.9 * s, k % 2 ? "#3f6b3c" : "#365d34", x, y + (h - 0.55) * s, z, { top: 0.02, seg: 7 }));
 }
 
+// A clipped shrub: a dark green cushion, pruned round.
 function shrub(kit, x, y, z, r, k) {
-  kit.sphere(r, ["#5f8a4f", "#4f7d47", "#6b9658"][k % 3], x, y + r * 0.6, z, { sy: 0.75, detail: 1 });
+  kit.sphere(r, ["#55704a", "#4a6542", "#5f7a50"][k % 3], x, y + r * 0.5, z, { sy: 0.68, detail: 1 });
 }
 
-function lavender(kit, x, y, z, k) {
-  for (let i = 0; i < 7; i++) { const a = i * 0.9 + k; kit.sphere(0.07, i % 2 ? "#9a8fc0" : "#8a9a7a", x + Math.cos(a) * 0.12, y + 0.12 + (i % 3) * 0.04, z + Math.sin(a) * 0.12, { sy: 1.4 }); }
-}
-
-// A meadow strip: grass tufts and wildflowers scattered over a rect.
-function meadow(kit, x0, z0, x1, z1, y, seed) {
-  let s = seed >>> 0 || 1;
-  const r = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const flowers = ["#f4f1ea", "#f2d46b", "#b9a3d6", "#e8a0a8", "#f4f1ea", "#e9a23b"];
-  const n = Math.round((x1 - x0) * (z1 - z0) * 7);
-  for (let i = 0; i < n; i++) {
-    const x = x0 + r() * (x1 - x0), z = z0 + r() * (z1 - z0);
-    const h = 0.14 + r() * 0.14, g = r() < 0.5 ? "#7f9a5f" : "#8fa86c", a = r() * 3;
-    for (let k = 0; k < 3; k++) kit.box(0.025, h * (0.8 + k * 0.15), 0.008, g, x + Math.cos(a + k * 2.1) * 0.03, y, z + Math.sin(a + k * 2.1) * 0.03, { ry: a + k * 2.1, rz: (k - 1) * 0.35 });
-    if (r() < 0.6) kit.sphere(0.028, flowers[Math.floor(r() * flowers.length)], x + 0.03, y + h + 0.02, z, { detail: 0 });
+// A clump of soft grass, arching out from its middle.
+function grass(kit, x, y, z, k) {
+  for (let i = 0; i < 9; i++) {
+    const a = i * 0.7 + k, lean = 0.5 + (i % 3) * 0.15;
+    kit.box(0.04, 0.32 - (i % 3) * 0.05, 0.008, i % 2 ? "#a3a160" : "#8f9a58", x, y, z, { ry: a, rz: lean });
   }
 }
 
-// A rowan: a small multi-stem tree with a light crown and red berries.
-function rowan(kit, x, y, z) {
-  for (const [dx, dz, rz] of [[0, 0, 0.1], [0.12, 0.05, -0.2], [-0.08, 0.1, 0.25]]) kit.cyl(0.04, 1.5, "#6b5a46", x + dx, y, z + dz, { top: 0.025, seg: 5, rz });
-  const greens = ["#7aa05f", "#6f9a58", "#8fb06e"];
-  for (let k = 0; k < 6; k++) { const a = k * 2.2; kit.sphere(0.42 + (k % 2) * 0.1, greens[k % 3], x + Math.cos(a) * 0.35, y + 1.6 + (k % 3) * 0.25, z + Math.sin(a) * 0.3, { sy: 0.8, detail: 1 }); }
-  for (let k = 0; k < 7; k++) { const a = k * 1.7; kit.sphere(0.06, "#c8443a", x + Math.cos(a) * 0.55, y + 1.45 + (k % 3) * 0.3, z + Math.sin(a) * 0.45, { detail: 0 }); }
+// A bed of raked gravel (x0..x1, z0..z1): pale gravel, lines raked along x, a few stones with rings raked round
+// them, and islands of moss.
+function gravelBed(kit, x0, z0, x1, z1, y, seed, night) {
+  const r = rand(seed), gy = y + 0.008, line = "#c6bfaf";
+  kit.plane(x1 - x0, z1 - z0, "#dcd6c9", (x0 + x1) / 2, gy, (z0 + z1) / 2);
+  const stones = [];
+  for (let n = 0; n < Math.max(1, Math.floor((x1 - x0) / 3.5)); n++) {
+    stones.push({ x: x0 + (n + 0.5 + (r() - 0.5) * 0.4) * ((x1 - x0) / Math.max(1, Math.floor((x1 - x0) / 3.5))), z: (z0 + z1) / 2 + (r() - 0.5) * 0.3, s: 0.28 + r() * 0.12 });
+  }
+  // raked lines, broken where they meet a stone's rings
+  for (let z = z0 + 0.12; z < z1 - 0.06; z += 0.16) {
+    let from = x0 + 0.05;
+    for (const st of stones) {
+      const dz = Math.abs(z - st.z), R = st.s + 0.5;
+      if (dz >= R) continue;
+      const half = Math.sqrt(R * R - dz * dz);
+      if (st.x - half > from) kit.box(st.x - half - from, 0.004, 0.022, line, (from + st.x - half) / 2, gy, z);
+      from = st.x + half;
+    }
+    if (x1 - 0.05 > from) kit.box(x1 - 0.05 - from, 0.004, 0.022, line, (from + x1 - 0.05) / 2, gy, z);
+  }
+  for (const st of stones) {
+    kit.sphere(st.s, "#8f8a80", st.x, gy, st.z, { sy: 0.55, detail: 1, ry: r() * 3 });
+    kit.sphere(st.s * 0.55, "#a29d92", st.x + st.s * 0.9, gy, st.z + 0.12, { sy: 0.5, detail: 0, ry: r() * 3 });
+    for (const k of [0, 1]) kit.add(new THREE.TorusGeometry(st.s + 0.22 + k * 0.17, 0.012, 3, 24), line, st.x + 0.08, gy + 0.004, st.z, { rx: Math.PI / 2 });
+  }
+  // moss islands at the bed's ends
+  moss(kit, x0 + 0.5, z0 + (z1 - z0) * 0.6, 0.45, gy, night ? "#3f5a48" : "#6b7f4e");
+  moss(kit, x1 - 0.6, z0 + (z1 - z0) * 0.4, 0.38, gy, night ? "#46604c" : "#5f7546");
 }
 
 // Stepping stones from the end of the garden's path (`from`) to where the land's path starts (`to`): the walk that
@@ -136,29 +152,30 @@ export function garden(kit, lamps, p, L, slab, pools = null, trees = null) {
   // birches behind and to the left, pines further back
   let i = 0;
   for (let x = b.minX - 2.5; x <= b.maxX + 1.5; x += 2.9, i++) birch(north, x + jitter(i) * 1.2, y, b.minZ - 2.0 - Math.abs(jitter(i + 7)) * 2.2, 0.95 + jitter(i + 3) * 0.3, i);
-  for (let x = b.minX - 1; x <= b.maxX + 3; x += 4.7, i++) pine(north, x + jitter(i) * 2, y, b.minZ - 5.0 + jitter(i + 1), 1.0 + jitter(i + 2) * 0.3);
+  for (let x = b.minX + 1; x <= b.maxX + 3; x += 8.5, i++) pine(north, x + jitter(i) * 2, y, b.minZ - 5.0 + jitter(i + 1), 1.0 + jitter(i + 2) * 0.3);
   for (let z = b.minZ + 0.8; z <= b.maxZ - 1; z += 3.1, i++) birch(west, b.minX - 2.2 - Math.abs(jitter(i)) * 1.5, y, z + jitter(i + 1), 0.9 + jitter(i + 4) * 0.3, i);
-  for (let z = b.minZ + 2; z <= b.maxZ + 0.5; z += 4.4, i++) pine(west, b.minX - 5.0 + jitter(i), y, z, 1 + jitter(i + 2) * 0.3);
+  for (let z = b.minZ + 2; z <= b.maxZ + 0.5; z += 8.5, i++) pine(west, b.minX - 5.0 + jitter(i), y, z, 1 + jitter(i + 2) * 0.3);
 
   const doorX = frontDoor(p);
 
-  // low shrubs and lavender along the front, leaving the door clear
+  // clipped shrubs and grasses along the front, spaced out, leaving the door clear
   let k = 0;
-  for (let x = b.minX + 0.6; x < b.maxX - 0.3; x += 1.25, k++) {
-    if (doorX !== null && Math.abs(x - doorX) < 1.4) continue;
-    if (k % 3 === 2) lavender(kit, x, y, b.maxZ + 1.0, k);
-    else shrub(kit, x, y, b.maxZ + 0.95, 0.24 + (k % 2) * 0.06, k);
+  for (let x = b.minX + 0.8; x < b.maxX - 0.3; x += 1.9, k++) {
+    if (doorX !== null && Math.abs(x - doorX) < 1.6) continue;
+    if (k % 3 === 1) grass(kit, x, y, b.maxZ + 0.95, k);
+    else shrub(kit, x, y, b.maxZ + 0.95, 0.26 + (k % 2) * 0.06, k);
   }
 
-  // a meadow strip in front, and a rowan off the front-left corner
-  const meadowEnd = doorX !== null ? doorX - 3.6 : b.maxX - 1;
-  if (meadowEnd - b.minX > 3) meadow(kit, b.minX + 1.4, b.maxZ + 1.5, meadowEnd, b.maxZ + 2.8, y, 17);
-  rowan(north, b.maxX - 1.5, y, b.minZ - 3.4);
+  // a bed of raked gravel in front, and a birch off the back-right corner
+  const bedEnd = doorX !== null ? doorX - 3.6 : b.maxX - 1;
+  if (bedEnd - b.minX > 3) gravelBed(kit, b.minX + 1.2, b.maxZ + 1.5, bedEnd, b.maxZ + 3.1, y, 17, L.night);
+  birch(north, b.maxX - 1.5, y, b.minZ - 3.4, 1.0, 5);
 
-  // the Japanese corner off the front left: a maple on a moss mound, a stone lantern by a water basin, stepping stones
+  // the corner off the front left, on gravel: a maple on a moss mound, a stone lantern by a water basin, stepping stones
   const jx = b.minX - 2.2, jz = b.maxZ + 1.6;
-  moss(kit, jx, jz, 1.25, y, L.night ? "#3f5a48" : "#6b8a4e");
-  moss(kit, jx + 1.3, jz + 0.9, 0.6, y, L.night ? "#46604c" : "#5d7f3e");
+  kit.plane(4.4, 3.4, "#dcd6c9", jx + 1.0, y + 0.006, jz + 0.5);
+  moss(kit, jx, jz, 1.25, y, L.night ? "#3f5a48" : "#6b7f4e");
+  moss(kit, jx + 1.3, jz + 0.9, 0.6, y, L.night ? "#46604c" : "#5f7546");
   maple(kit, jx, jz, 1.05, 3, y);
   const lantern = stoneLantern(kit, lamps, jx + 1.7, jz - 0.9, 0.9, y);
   pools?.plane(2.2, 2.2, "#ffffff", lantern.x, y + 0.012, lantern.z);
@@ -187,19 +204,19 @@ export function garden(kit, lamps, p, L, slab, pools = null, trees = null) {
       for (const s of [-1, 1]) kit.box(0.04, 0.62, 0.04, "#4a4a4e", hx, y, rz + s * 0.3);
       kit.box(0.04, 0.04, 0.64, "#4a4a4e", hx, y + 0.6, rz);
     }
-    bike(kit, L, rx + 0.25, rz, Math.PI / 2, "#b5532e");
+    bike(kit, L, rx + 0.25, rz, Math.PI / 2, S.rust);
     const bx = doorX - 2.6, bz = b.maxZ + 2.2;
     kit.box(1.4, 0.04, 0.4, S.oak, bx, y + 0.38, bz);
     kit.box(1.4, 0.3, 0.04, S.oak, bx, y + 0.42, bz - 0.2, { rx: -0.1 });
     for (const s of [-1, 1]) kit.box(0.05, 0.4, 0.36, "#2a2a2c", bx + s * 0.6, y, bz);
-    kit.cyl(0.25, 0.4, "#9a6a4a", bx - 1.2, y, bz - 0.1, { top: 0.28, seg: 10 });
+    kit.cyl(0.25, 0.4, S.stone, bx - 1.2, y, bz - 0.1, { top: 0.28, seg: 10 });
     shrub(kit, bx - 1.2, y + 0.36, bz - 0.1, 0.24, 1);
   }
 
-  // a deck along the east wall with two chairs and a planter
+  // a timber deck along the east wall with two chairs and a planter
   const dx = b.maxX + 0.6, dz0 = b.minZ + 0.5, dz1 = Math.min(b.maxZ - 0.5, b.minZ + 4.2);
   if (dz1 - dz0 > 2) {
-    for (let x = dx; x < dx + 2.4; x += 0.16) kit.box(0.14, 0.06, dz1 - dz0, x % 0.32 < 0.16 ? "#b48f5e" : "#a8845a", x + 0.07, y, (dz0 + dz1) / 2);
+    for (let x = dx; x < dx + 2.4; x += 0.16) kit.box(0.14, 0.06, dz1 - dz0, x % 0.32 < 0.16 ? "#b39c7c" : "#a8916f", x + 0.07, y, (dz0 + dz1) / 2);
     for (const [cz, ry] of [[dz0 + 0.9, -Math.PI / 2 + 0.3], [dz0 + 2.0, -Math.PI / 2 - 0.2]]) {
       kit.at(dx + 1.4, y + 0.06, cz, ry, () => {
         kit.box(0.5, 0.05, 0.5, "#e2d7c3", 0, 0.28, 0);
@@ -208,7 +225,7 @@ export function garden(kit, lamps, p, L, slab, pools = null, trees = null) {
       });
     }
     kit.cyl(0.22, 0.38, S.oak, dx + 0.9, y + 0.06, dz0 + 1.45, { seg: 10 });
-    kit.box(0.5, 0.36, 0.5, "#47474a", dx + 2.0, y + 0.06, dz1 - 0.4);
+    kit.box(0.5, 0.36, 0.5, S.charcoal, dx + 2.0, y + 0.06, dz1 - 0.4);
     shrub(kit, dx + 2.0, y + 0.42, dz1 - 0.4, 0.3, 2);
   }
 }
