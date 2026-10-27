@@ -2,7 +2,7 @@
 // open ones, then HQ's updates and the rooms. A short question is answered on its card, which shows all of it; anything
 // longer opens in the reader beside it. The filter (Needs you, All, Rooms) is kept in this browser, and never hides a
 // blocking question. The keys act on one target, marked: the card used last, or the reader.
-import { on } from "../core/bus.js";
+import { emit, on } from "../core/bus.js";
 import { $, keepPlace, keepScroll, pageScrolls, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { esc, setHTML, setText } from "../core/format.js";
@@ -14,7 +14,6 @@ import { drafts, opened } from "./drafts.js";
 import { age } from "./clock.js";
 import { askOf, kindTag, laneColor, pick, ready, sendAnswer, sendLabel } from "../reader/ask.js";
 import { close, current, show } from "../reader/shell.js";
-import { goRoom } from "../rooms/index.js";
 
 const list = $("hud"), below = $("below");
 const FILTERS = ["needs", "all", "rooms"];
@@ -68,7 +67,7 @@ function askCard(i) {
   const a = askOf(i.ref);
   if (!a) return "";
   const d = drafts.get(a.id) || {}, blocking = i.group === "blocking";
-  const prio = PRIO[i.priority] ? `<span class="tag prio p${i.priority}">${PRIO[i.priority]}</span>` : "";
+  const prio = PRIO[i.priority] ? `<span class="tag prio p${esc(i.priority)}">${PRIO[i.priority]}</span>` : "";
   const lock = blocking && i.locked ? `<span class="tag waits" title="${esc(i.lane)} cannot go on without the answer">${esc(i.lane)} waits</span>` : "";
   // With a lead: its name, and the time the question comes to the owner if the lead does not answer it first.
   const lead = i.holder ? `<span class="tag lead" title="${esc(i.holder)} holds this question. It comes to you if they do not answer it.">→ ${esc(i.holder)}</span>` : "";
@@ -79,21 +78,21 @@ function askCard(i) {
     ? `${a.body ? `<div class="sbody md">${markdown(a.body, true)}</div>` : ""}${i.links?.length ? `<div class="slinks">${i.links.map(linkChip).join("")}</div>` : ""}${a.options.length ? `<div class="sopts">${a.options.map((o, n) => `<button class="opt${d.opt === o ? " sel" : ""}" type="button" data-opt="${esc(o)}">${n < 9 ? `<kbd>${n + 1}</kbd>` : ""}${esc(o)}${a.recommended === o ? `<span class="pick">HQ PICK</span>` : ""}</button>`).join("")}</div>` : ""}
        <div class="qfoot"><button class="link" type="button" data-reply>Reply…</button><button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-quick${ready(a, d) ? "" : " disabled"}>${sendLabel(a)}</button></div>`
     : `${i.preview ? `<p class="pv">${esc(i.preview)}</p>` : ""}<div class="shapes">${shapeChips(i)}<span class="open">Open ›</span></div>`;
-  return `<article class="item ask${blocking ? " blocking" : ""}${i.short ? " short" : ""}${i.holder ? " held" : ""}" data-key="${esc(i.key)}" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
+  return `<article class="item ask${blocking ? " blocking" : ""}${i.short ? " short" : ""}${i.holder ? " held" : ""}" data-key="${esc(i.key)}" data-ask="${esc(a.id)}" data-lane="${esc(a.lane || "")}" data-created="${esc(a.created_at)}" data-due="${esc(a.due || "")}">
     <div class="meta">${laneHead(i)}${lead}${kindTag(a)}${prio}${lock}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span>${i.holder ? toLead : `<span class="timer"></span>`}</div>
     <h3 class="st">${linkify(i.title)}</h3>${quick}
   </article>`;
 }
 function updateCard(i) {
-  return `<article class="item upd${i.unread ? " unread" : ""}" data-key="${esc(i.key)}" data-upd="${i.ref}">
-    <div class="meta">${laneHead(i)}${i.unread ? `<span class="tag new">NEW</span>` : ""}<span class="spacer"></span><span class="age" data-since="${i.at}"></span></div>
+  return `<article class="item upd${i.unread ? " unread" : ""}" data-key="${esc(i.key)}" data-upd="${esc(i.ref)}">
+    <div class="meta">${laneHead(i)}${i.unread ? `<span class="tag new">NEW</span>` : ""}<span class="spacer"></span><span class="age" data-since="${esc(i.at)}"></span></div>
     <h3 class="st">${linkify(i.title)}</h3>${i.preview && i.preview !== i.title ? `<p class="pv">${esc(i.preview)}</p>` : ""}
   </article>`;
 }
 function roomCard(i) {
   const r = (S.rooms ?? []).find((x) => x.slug === i.ref), n = r?.unread ?? 0;
   return `<article class="item rrow${n ? " unread" : ""}${r?.archivedAt ? " archived" : ""}" data-key="${esc(i.key)}" data-room="${esc(i.ref)}">
-    <div class="meta"><span class="rk">ROOM</span><b class="lname">${esc(i.lane || "")}</b>${r?.members?.length ? `<span class="plus">+${r.members.length}</span>` : ""}${n ? `<span class="tag new">${n} NEW</span>` : ""}<span class="spacer"></span>${i.at ? `<span class="age" data-since="${i.at}"></span>` : ""}</div>
+    <div class="meta"><span class="rk">ROOM</span><b class="lname">${esc(i.lane || "")}</b>${r?.members?.length ? `<span class="plus">+${esc(r.members.length)}</span>` : ""}${n ? `<span class="tag new">${esc(n)} NEW</span>` : ""}<span class="spacer"></span>${i.at ? `<span class="age" data-since="${esc(i.at)}"></span>` : ""}</div>
     <h3 class="st">${esc(i.title)}</h3>${i.preview ? `<p class="pv">${esc(i.preview)}</p>` : ""}
   </article>`;
 }
@@ -166,7 +165,7 @@ const itemByKey = (key) => (S?.inbox ?? []).find((i) => i.key === key) ?? null;
 // Opens an item in the reader: "question:12", "update:5", "room:slug", or a pill's "tell" and "work".
 export function open(key, opts = {}) {
   const [kind, ...rest] = String(key).split(":"), ref = rest.join(":");
-  if (kind === "room") { goRoom(ref); if (opts.focus) setTimeout(() => document.querySelector("#roomView .rsend textarea")?.focus(), 0); return; }
+  if (kind === "room") { emit("room:go", ref); if (opts.focus) setTimeout(() => document.querySelector("#roomView .rsend textarea")?.focus(), 0); return; }
   if (kind === "question" || kind === "ask") show("question", Number(ref), opts);
   else if (kind === "update") show("update", Number(ref), opts);
   else show(kind, null, opts);
@@ -207,7 +206,7 @@ $("filters").addEventListener("click", (e) => { const b = e.target.closest("[dat
 
 // A pick (here or in the reader) redraws that card's options and its send button.
 on("draft", (id) => {
-  const card = list.querySelector(`.ask.short[data-ask="${id}"]`), a = askOf(id);
+  const card = list.querySelector(`.ask.short[data-ask="${CSS.escape(String(id))}"]`), a = askOf(id);
   if (!card || !a) return;
   const d = drafts.get(id) || {};
   for (const b of card.querySelectorAll(".opt")) b.classList.toggle("sel", b.dataset.opt === d.opt);
