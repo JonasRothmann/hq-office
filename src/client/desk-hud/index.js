@@ -101,7 +101,7 @@ function render(state) {
   for (const [name, c] of chips) if (!names.has(name)) { c.el.remove(); chips.delete(name); if (hot === name) hot = null; }
 }
 
-// Both sizes of every chip whose content changed: two layouts, only when something changed.
+// The sizes of every chip whose content changed (full, compact, and lifted with its title): only when something changed.
 function measure() {
   const dirty = [...chips.values()].filter((c) => !c.size);
   if (!dirty.length) return;
@@ -109,6 +109,8 @@ function measure() {
   for (const c of dirty) c.size = { full: { w: c.el.offsetWidth, h: c.el.offsetHeight } };
   for (const c of dirty) c.el.classList.add("compact");
   for (const c of dirty) c.size.compact = { w: c.el.offsetWidth, h: c.el.offsetHeight };
+  for (const c of dirty) { c.el.classList.remove("compact"); c.el.classList.add("hot"); }
+  for (const c of dirty) c.size.hot = { w: c.el.offsetWidth, h: c.el.offsetHeight };
   for (const c of dirty) { c.el.className = c.was; c.el.hidden = !c.shown; }
 }
 
@@ -159,12 +161,15 @@ function frame() {
     live.push([name, c]);
     if (ppm === null) ppm = Math.abs(p.y - world.project(up.copy(a).setY(a.y + 1)).y) / COS_PITCH;
   }
-  // Who gets their spot first: lanes waiting on the owner, then the desk nearest the camera (lowest on screen), so a
-  // chip that must move goes up, away from the worker under it.
-  live.sort(([, a], [, b]) => Number(b.el.classList.contains("wait")) - Number(a.el.classList.contains("wait")) || b.at.y - a.at.y);
+  // Who gets their spot first: the lifted chip, at its lifted size and growing from the foot it had before (so it stays
+  // under the pointer, and the chips of the desks round it, close together in a team room, make way rather than hide
+  // under it); then lanes waiting on the owner; then the desk nearest the camera (lowest on screen), so a chip that
+  // must move goes up, away from the worker under it.
+  live.sort(([an, a], [bn, b]) => Number(bn === hot) - Number(an === hot) || Number(b.el.classList.contains("wait")) - Number(a.el.classList.contains("wait")) || b.at.y - a.at.y);
   const layoutFor = (mode) => place(live.map(([name, c]) => {
-    const s = c.size[mode];
-    return { key: name, x: c.at.x - s.w / 2, y: c.at.y - LIFT - s.h, w: s.w, h: s.h };
+    const s = name === hot ? c.size.hot : c.size[mode];
+    const foot = (name === hot && c.foot) || { x: c.at.x, y: c.at.y - LIFT };
+    return { key: name, x: foot.x - s.w / 2, y: foot.y - s.h, w: s.w, h: s.h };
   }), { obstacles, bounds });
 
   let mode = "compact", spots = null;
@@ -180,15 +185,17 @@ function frame() {
   let lifted = null;
   for (const [name, c] of chips) {
     const s = c.at && spots.get(name);
-    if (!s) { show(c, false); continue; }
-    show(c, true);
     const isHot = name === hot;
+    // a lifted chip with no free spot in reach still shows, from its desk
+    if (!s && !(isHot && c.at)) { show(c, false); continue; }
+    show(c, true);
     c.el.classList.toggle("compact", mode === "compact" && !isHot);
     c.el.classList.toggle("hot", isHot);
-    if (isHot) lifted = { c, foot: { x: s.x + c.size[mode].w / 2, y: s.y + c.size[mode].h } };
-    else moveTo(c, s.x, s.y);
+    if (s) moveTo(c, s.x, s.y);
+    else lifted = { c, foot: c.foot ?? { x: c.at.x, y: c.at.y - LIFT } };
+    if (s && !isHot) c.foot = { x: s.x + c.size[mode].w / 2, y: s.y + c.size[mode].h };
   }
-  // The lifted chip grows from its foot, in front of the others, and still never over a panel.
+  // That chip grows from its foot, in front of the others, and still never over a panel.
   if (lifted) {
     const { c, foot } = lifted;
     const w = c.el.offsetWidth, h = c.el.offsetHeight;
