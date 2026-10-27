@@ -26,11 +26,18 @@ world.apply(nextDoc);                          // an edited doc: only what chang
 
 `world.apply(next)` takes a World or a plain doc. It validates the whole doc first; a `WorldError` changes nothing.
 Then it diffs the doc against the current one (`diffWorld`) and rebuilds only the objects, characters or
-architecture that changed. The sim keeps running: characters keep their place and their act. A character whose
-target or held seat is gone, or whose route is now shut, plans the act again, and drops it (a `cancel` event) when
-it cannot. A character on a tile that an object now covers walks off it. A character outside a lot that shrank is
-the one case that moves at once. Applying the same doc twice does nothing and returns `null`. A doc's
-`characters[].at` is used only when the character is new, and an act starts when the next doc adds it.
+architecture that changed, plus any object whose height moved with the floor under it. The sim keeps running:
+characters keep their place and their act. A character whose target or held seat is gone, or whose route is now
+shut, plans the act again, and drops it (a `cancel` event) when it cannot. A character on a tile that an object now
+covers walks off it, and so does one whose act was dropped while it sat in an object that changed. A character
+outside a lot that shrank is the one case that moves at once. Applying the same doc twice does nothing and returns
+`null`.
+
+A doc's `characters[].at` is the spawn tile only. Once a character exists, the edit does not check that tile, and
+it checks the character's acts without a position: the act must name a known act, clip, object and slot. An act
+starts when the next doc adds it. If the sim cannot start it (a held seat, no way there), the edit still applies
+and the host gets `cancel` with `{ who, problem, act, refused: true }`. A save loaded with `sim.ecs.load` is checked
+against the lot the same way: a seat whose object is gone is let go, and its holder stands up and steps clear.
 
 ## Entries
 
@@ -45,7 +52,8 @@ The full list of exported names is `api.txt`. The design and its reasons are in 
 
 ## Tools
 
-Paths are relative to the current directory, and the tools work from any folder. The lab and `shot.ts` serve the
+Paths are relative to the current directory, and the tools work from any folder. World and pack files are `.js` or
+`.mjs`; the tools refuse any other file and say so. The lab and `shot.ts` serve the
 folder that holds the world and every file it imports (or `--root`).
 
 ```sh

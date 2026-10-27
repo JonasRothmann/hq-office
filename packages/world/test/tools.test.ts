@@ -40,6 +40,20 @@ describe("tools from outside the package", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 60_000);
 
+  test("a .mjs world checks like a .js one; a .ts world is refused with the extensions check.ts takes", async () => {
+    const dir = hostFolder();
+    try {
+      writeFileSync(join(dir, "worlds", "den.world.mjs"), await Bun.file(join(dir, "worlds", "den.world.js")).text());
+      writeFileSync(join(dir, "worlds", "den.world.ts"), await Bun.file(join(dir, "worlds", "den.world.js")).text());
+      const mjs = await check(dir, "worlds/den.world.mjs");
+      expect({ code: mjs.code, ok: mjs.out.includes("world den") }).toEqual({ code: 0, ok: true });
+      const ts = await check(dir, "worlds/den.world.ts");
+      expect(ts.code).toBe(2);
+      expect(ts.out).toContain("worlds/den.world.ts: world and pack files are .js or .mjs");
+      expect(ts.out).toContain("rename it to worlds/den.world.js");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 60_000);
+
   test("the lab serves the folder that holds the world and every file it imports", () => {
     const dir = hostFolder();
     try {

@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 
 export const PKG = resolve(import.meta.dir, "..");
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".css": "text/css; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg" };
+const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json", ".css": "text/css; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg" };
 
 // three.js: --three, HQ_WORLD_THREE, node_modules/three upward from here or the root, or a host's vendored copy.
 export function findThree(root: string, flag?: string): string {

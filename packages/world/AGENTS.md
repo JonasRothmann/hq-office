@@ -2,6 +2,9 @@
 
 Read this before adding an object, a room or a world. Each task below takes minutes and ends with a check that proves it.
 
+`<engine>` below is this package's folder (`packages/world` from the host repo's root). Every other path is relative
+to the folder you stand in, and the tools work from any folder. World and pack files are `.js` or `.mjs`.
+
 ## Rules
 
 - The package imports nothing from outside itself except `three` (`test/boundary.test.ts`). It knows nothing about
@@ -15,7 +18,8 @@ Read this before adding an object, a room or a world. Each task below takes minu
 
 ## Add an object
 
-1. Make `packs/<pack>/<id>.js` (in your own pack; `starter` is the engine's):
+1. Make `<your-pack>/<id>.js`, in your own pack's folder outside the engine (`<engine>/packs/starter` is the
+   engine's own):
 
    ```js
    // A side table: a square top on four legs.
@@ -37,18 +41,21 @@ Read this before adding an object, a room or a world. Each task below takes minu
 
    Colours are palette tokens or hex. A token is the engine's (`src/catalog/palette.js`) or one your pack's
    `palette` names. `check.ts` names an unknown token, or an unknown clip, and the nearest one.
-   `bun tools/catalog.ts` lists objects.
+   `bun <engine>/tools/catalog.ts <your-pack>/index.js` lists objects.
    `k.cyl(part, r, h, at, colour, { top, seg })` makes cylinders and cones. `k.glow` makes lit parts (screens,
    shades) and `k.glass` makes panes.
 2. Add `import sideTable from "./side-table.js";` at the end of the pack's imports and `sideTable,` at the end of
    `objects`.
 3. Something to sit on or use gets a slot:
    `slots: { seat: { at: [0, 0.03], y: 0.38, facing: "s", stand: [[0, 1], [1, 0], [-1, 0]], clip: "sit" } }`.
-   `at` is where the user ends up and `y` is the hip rest height above the floor. `facing` is in the object's frame,
-   where `"s"` is toward its front. `stand` lists the tiles (offsets from the slot's tile) to walk to first, in order.
-4. Check it: `bun tools/check.ts packs/<pack>/index.js`. It names any part past the footprint, any size that looks
-   like centimetres, any flat parts lying in one plane (they z-fight), and any file missing from `index.js`.
-5. See it: put it in a world and run `bun tools/shot.ts <world> --zoom 2 --out x.jpg`, then look at the image.
+   `at` is where the user ends up, in metres from the footprint's centre, and it must lie inside the footprint
+   (within ±w/2, ±d/2). `y` is the hip rest height above the floor. `facing` is in the object's frame, where `"s"` is
+   toward its front. `stand` lists the tiles (offsets from the slot's tile) to walk to first, in order.
+4. Check it: `bun <engine>/tools/check.ts <your-pack>/index.js`. It names any part past the footprint, a slot outside
+   it, any size that looks like centimetres, any flat parts lying in one plane (they z-fight; parts that share a
+   name are told apart as `'shelf' #2`, in build order), and any file missing from `index.js`.
+5. See it: put it in a world and run `bun <engine>/tools/shot.ts <your-world>.world.js --zoom 2 --out x.jpg`, then
+   look at the image.
 
 Flat things lying on other things (rugs, posters, keyboards) must be boxes at least 1 cm thick that stand on the
 surface, or sit 2 mm clear of it. Never make two parts with faces in one plane, facing the same way.
@@ -75,7 +82,7 @@ rooms, objects, characters, acts })`. Objects take `{ id, type, at: [x, z], faci
 north-west tile after turning and `facing` is where its front points. Then:
 
 ```sh
-bun packages/world/tools/check.ts my.world.js --map && bun packages/world/tools/shot.ts my.world.js --advance 6000 --out my.jpg
+bun <engine>/tools/check.ts my.world.js --map && bun <engine>/tools/shot.ts my.world.js --advance 6000 --out my.jpg
 ```
 
 `--map` prints the lot as text: `,` ground, `.` floor, a letter per object, a digit per character, `|` and `-`
@@ -218,9 +225,13 @@ pack.
 
 ## Change a world while it runs
 
-`world.apply(nextDoc)` validates the whole doc, diffs it and rebuilds only what changed. Characters keep walking;
-one whose seat or target went away plans again or gets a `cancel` event. The same doc twice is a no-op. Tests of
-an edit run headless: `test/view.test.ts` drives the same code with no browser.
+`world.apply(nextDoc)` validates the whole doc, diffs it and rebuilds only what changed (an object whose height
+moved with the floor under it counts as changed). Characters keep walking; one whose seat or target went away plans
+again or gets a `cancel` event, and one left inside an object walks off it. A character that already exists is not
+checked against its doc `at` (a spawn tile only), and its acts are checked without a position: an act the sim
+cannot start is a `cancel` event with `refused: true` and the reason, not a refused edit. The same doc twice is a
+no-op. Tests of an edit run headless: `test/view.test.ts` and `test/edits.test.ts` drive the same code with no
+browser.
 
 ## Change the engine
 

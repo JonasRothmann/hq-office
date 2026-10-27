@@ -12,7 +12,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { serve } from "./serve.ts";
 import { startChrome, openTab } from "./chrome.ts";
-import { fileArg, rootFor, shown } from "./paths.ts";
+import { fileArg, moduleArg, rootFor, shown } from "./paths.ts";
 
 export type ShotOptions = { rot?: number; zoom?: number; theme?: string; time?: string; walls?: string; focus?: string; focusOn?: string; clean?: boolean };
 
@@ -28,6 +28,7 @@ if (import.meta.main) {
   const arg = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
   const world = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
   if (!world) { console.error("usage: bun tools/shot.ts <world.js> [--rot N] [--zoom N] [--theme T] [--time HH:MM] [--walls MODE] [--out FILE]"); process.exit(2); }
+  moduleArg(world);
   const root = rootFor([world], arg("root"));
   const out = fileArg(arg("out") ?? "shot.jpg");
   const [w, h] = (arg("size") ?? "1280x800").split("x").map(Number);

@@ -7,6 +7,16 @@ import { dirname, relative, resolve, sep } from "node:path";
 
 export const fileArg = (p: string) => resolve(process.cwd(), p);
 
+/** World and pack files are plain ES modules the browser loads as they are: .js or .mjs. */
+export const MODULE = /\.m?js$/;
+// A world or pack file argument; anything else stops the tool with the extensions it takes.
+export function moduleArg(p: string): string {
+  const f = fileArg(p);
+  if (MODULE.test(f)) return f;
+  console.error(`${p}: world and pack files are .js or .mjs (plain ES modules, loaded by the browser as they are); rename it to ${p.replace(/\.[^./]*$/, "")}.js`);
+  process.exit(2);
+}
+
 export const shown = (p: string) => { const r = relative(process.cwd(), p); return r && !r.startsWith("..") ? r : p; };
 
 const scanner = new Bun.Transpiler({ loader: "js" });

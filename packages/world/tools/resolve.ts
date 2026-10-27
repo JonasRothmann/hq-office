@@ -12,7 +12,7 @@ const entries = Object.fromEntries(Object.entries(pkg.exports as Record<string, 
 plugin({
   name: "@hq/world exports",
   setup(build) {
-    build.onLoad({ filter: /\.js$/ }, ({ path }) => {
+    build.onLoad({ filter: /\.m?js$/ }, ({ path }) => {
       const code = readFileSync(path, "utf8");
       if (!code.includes(pkg.name)) return { contents: code, loader: "js" };
       const contents = code.replace(/(["'])(@hq\/world(?:\/[\w/.-]+)?)\1/g, (m, _q, spec) => {

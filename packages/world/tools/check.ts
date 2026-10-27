@@ -6,12 +6,13 @@
 //   bun packages/world/tools/check.ts path/to/x.world.js [more files...] [--map]
 //   bun packages/world/tools/check.ts path/to/pack/index.js
 //
+// World and pack files are .js or .mjs; any other file is refused with that message.
 // Paths are relative to the current directory, from anywhere (tools/paths.ts).
 import "./resolve.ts";
 import { dirname } from "node:path";
 import { validateWorld, checkPack, buildLot, cutaway, lotPrims, lintCoplanar, describePairs, formatProblems, lotMap, WALL_MODES } from "../src/model/index.js";
 import { packFileProblems } from "./pack-files.ts";
-import { fileArg, shown } from "./paths.ts";
+import { moduleArg, shown } from "./paths.ts";
 
 const args = process.argv.slice(2);
 const files = args.filter((a) => !a.startsWith("--"));
@@ -24,7 +25,7 @@ const report = (what: string, problems: any[]) => {
 };
 
 for (const f of files) {
-  const path = fileArg(f);
+  const path = moduleArg(f);
   const mod = (await import(path)).default;
   if (mod?.objects) {
     report(`pack ${mod.id} (${shown(path)})`, [...checkPack(mod), ...packFileProblems(dirname(path))]);
