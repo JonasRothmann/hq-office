@@ -119,7 +119,7 @@ export function city(R, s, lot, ext) {
   }
 
   for (const block of blocks) {
-    if (block.kind === "built") perimeter(R, block, buildings, trees, lot);
+    if (block.kind === "built") perimeter(R, block, buildings, trees, spires, lot);
     if (block.kind === "park") park(R, block, trees, props);
     if (block.kind === "square") square(R, block, trees, props, racks, lot);
     if (block.kind !== "far") streetside(R, block, trees, racks, props, lot, block.kind === "canal" ? canalSide : null);
@@ -274,7 +274,7 @@ function house(R, f, front, want, lot, o = {}) {
 
 // A perimeter block: a continuous row of houses along each street, 3 to 6 storeys where the sight rule lets them
 // rise, a courtyard of trees in the middle. Neighbours never share a colour.
-function perimeter(R, block, buildings, trees, lot) {
+function perimeter(R, block, buildings, trees, spires, lot) {
   const I = block.inner, W = I.maxX - I.minX, D = I.maxZ - I.minZ;
   const rowD = clamp(Math.min(W, D) * 0.34, 7.5, 11);
   const sides = D >= 2 * rowD + 3 && W >= 2 * rowD + 3;
@@ -311,6 +311,7 @@ function perimeter(R, block, buildings, trees, lot) {
       buildings.push(b0);
       // now and then a wall dormer: a narrow bay of the front carried up past the eaves with its own gable
       if (b0.roof !== "flat" && b0.wide >= 7 && R() < 0.35) gablet(R, b0, buildings, lot);
+      else if (corner && R() < 0.2) turret(R, b0, ends[0], buildings, spires, lot);
     }
   }
   // the courtyard: trees, as many as fit
@@ -323,6 +324,18 @@ function perimeter(R, block, buildings, trees, lot) {
       trees.push({ kind: R() < 0.15 ? "maple-red" : "round", x: r2(x), z: r2(z), y: LEVEL.walk, s: down2(Math.min(tall, 0.8 + R() * 0.45)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
     }
   }
+}
+
+// A corner turret on b: a square bay on the street corner (`end` is the cross street's side), a storey above the eaves
+// under a pointed copper cap.
+function turret(R, b, end, buildings, spires, lot) {
+  const t = 2.6, sx = end === "e" ? 1 : -1, sz = b.front === "s" ? 1 : -1;
+  const x = b.x + sx * (b.w / 2 - t / 2 + 0.2), z = b.z + sz * (b.d / 2 - t / 2 + 0.2);
+  const f = rect(x - t / 2, z - t / 2, x + t / 2, z + t / 2);
+  const h = down2(b.h + b.roofH * 0.6 + 0.6), cap = 2.8;
+  if (h + cap > sight(rectGap(f, lot))) return;
+  buildings.push({ x: r2(x), z: r2(z), w: t, d: t, y: b.y, floors: Math.floor(h / STOREY), h, roof: "spire", roofH: cap, ridge: "x", front: b.front, wide: t, style: "tower", wall: b.wall, roofTint: 4, shop: false, awning: null, seed: Math.floor(R() * 1e9), steps: false, ends: [], dormers: false });
+  spires.push({ x: r2(x), z: r2(z), y: r2(b.y + h), h: cap, w: t });
 }
 
 // A wall dormer on the street front of b: a bay a third as wide, one storey above the eaves, its gable to the street.

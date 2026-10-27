@@ -166,7 +166,7 @@ export function buildCity({ P, U, mat, add, layout }) {
   if (night) {
     const pool = () => { const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2); g.setAttribute("color", new THREE.Float32BufferAttribute(new Array(g.attributes.position.count * 3).fill(1), 3)); return g; };
     // pools under the lamps, and the canal carrying the light of the quay: long soft streaks across the water
-    const glows = mids.map((m) => ({ x: m.x, y: m.ground + 0.03, z: m.z, sx: 5.5, sz: 5.5, k: 0.5 }));
+    const glows = mids.map((m) => ({ x: m.x, y: m.ground + 0.03, z: m.z, sx: 6.5, sz: 6.5, k: 0.85 }));
     const wr = cn.water, wet = rowCanal ? (cn.side === "n" ? wr.minZ : wr.maxZ) : (cn.side === "w" ? wr.minX : wr.maxX);
     const toward = rowCanal ? (cn.side === "n" ? 1 : -1) : (cn.side === "w" ? 1 : -1);
     for (const b of B) {
@@ -174,7 +174,8 @@ export function buildCity({ P, U, mat, add, layout }) {
       const u = rowCanal ? b.x : b.z, a = wet + toward * 3.2;
       glows.push(rowCanal ? { x: u, y: waterY + 0.02, z: a, sx: 1.3, sz: 6.5, k: b.shop ? 0.42 : 0.24 } : { x: a, y: waterY + 0.02, z: u, sx: 6.5, sz: 1.3, k: b.shop ? 0.42 : 0.24 });
     }
-    add(instanced("glows", pool(), mat("add", { map: poolTexture() }), glows, (g) => at(g.x, g.y, g.z, 0, 0, 0, g.sx, 1, g.sz), (g) => T("#ffd596", g.k)));
+    const gl = add(instanced("glows", pool(), mat("add", { map: poolTexture() }), glows, (g) => at(g.x, g.y, g.z, 0, 0, 0, g.sx, 1, g.sz), (g) => T("#ffd596", g.k)));
+    if (gl) gl.renderOrder = 2; // over the water, which is see-through too
   }
 
   // ---- trees ----
