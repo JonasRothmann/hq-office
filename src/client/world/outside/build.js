@@ -3,7 +3,7 @@
 // buildOutside(layout, palette, uniforms) -> { group, update(now, dt), dispose(), counts }.
 import { THREE, Parts, material, instanced, color, at } from "./parts.js";
 import { flower, tuft, reed, rock, tree } from "./models.js";
-import { WATER, sampleGrid } from "./gen.js";
+import { WATER, sampleGrid } from "../../office/outside/gen.js";
 import { buildCity } from "./city-build.js";
 
 export function buildOutside(layout, P, U) {

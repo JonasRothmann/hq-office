@@ -1,10 +1,10 @@
-// The land around the office (src/client/world/outside/gen.js, city.js): the same seed gives the same land, nothing
+// The land around the office (src/client/office/outside/gen.js, city.js): the same seed gives the same land, nothing
 // reaches into the office's lot, the river winds round it, the town's cars stay on the roads, cyclists on the bike
 // tracks and the blue crossings, people on the pavements, zebras, quays and bridges, boats on the water, the canal
 // keeps clear of the lot, counts stay within their caps, nothing near the lot stands tall enough to hide the building,
 // and the lot used for generating only changes when the office's lot has outgrown it.
 import { describe, expect, test } from "bun:test";
-import { generate, growLot, distToRect, rectGap, inside, overlaps, sight, lineLength, CAPS, GROUND, ROAD, WATER, LOT_STEP, LEVEL } from "../../src/client/world/outside/gen.js";
+import { generate, growLot, distToRect, rectGap, inside, overlaps, sight, lineLength, CAPS, GROUND, ROAD, WATER, LOT_STEP, LEVEL } from "../../src/client/office/outside/gen.js";
 
 type Pt = { x: number; z: number };
 type Rect = { minX: number; minZ: number; maxX: number; maxZ: number };

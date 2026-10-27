@@ -117,7 +117,7 @@ and Japanese mix the brief asks for.
 
 ## D14. Procedural surroundings: nature or city, seeded per installation
 
-The owner asked for generated surroundings. A pure, seeded generator (`src/client/world/outside/gen.js`) makes a
+The owner asked for generated surroundings. A pure, seeded generator (`src/client/office/outside/gen.js`, moved there with `city.js` at RFC 12 step 6) makes a
 river valley (hills, forest, a river with a bridge) or a neighbourhood (streets, crossings, other buildings, cars and
 people walking), and `build.js` draws it with instancing (12 to 24 draw calls). The seed defaults to the owner's
 name, so a page always shows the same place; a setting picks nature, city or off. The office's own lot and garden
