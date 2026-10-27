@@ -96,6 +96,19 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   them. The names in `api.txt` did not change.
 - `view.pause(on)`: while paused nothing steps (camera, characters, host systems) and nothing draws; resuming draws
   once. `inspect().paused` says which. For a view the host has covered, such as a sheet over it on a phone.
+- `view.addLamp(at, opts?)`: a lamp of the host's, at `at` ([x, y, z] in world space). It is lit like a light
+  anchor's: a spot light aimed straight down, with no shadow, its intensity times the night factor (dark by day, lit
+  by night), and outdoor surfaces leave it out. `opts` is `{ color, intensity, reach, angle, penumbra, decay }`; the
+  defaults are the engine's lamp (intensity 4.2, reach 6 m), and without a `color` it takes the palette's `lamp` and
+  follows it through `setTheme` and `setTime`. It returns `{ set({ intensity?, color? }), remove() }`; both request a
+  frame, and `color: null` follows the palette again. The lamp stays through `apply`, `setTheme`, `setTime` and
+  `setScenery`, and `dispose` removes it. Adding or removing a light makes three.js recompile its shaders, so keep a
+  lamp and set its intensity to 0 rather than remove it and add it again. `addLamp` is a method of the view, so
+  `api.txt` did not change.
+- `createWorld(canvas, world, { hoverTarget })`: `hoverTarget(hit)` maps what the pointer is over (what `pick`
+  returns, or null) to the id of the object whose highlight shows, or null for none. The default is the object hit
+  (`hit?.kind === "object" ? hit.id : null`), as before. `view.hover` still returns and emits the raw pick; only the
+  highlight changes. An id that is not an object's (unknown, or a character's) highlights nothing.
 
 ### Changed
 

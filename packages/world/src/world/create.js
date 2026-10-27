@@ -41,6 +41,10 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  *                                           host's panels cover: the view centres in the rest, and fits into it
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
+ * @property {(hit: { kind: "object"|"character"|"tile", id?: string, tile: number[] } | null) => string|null} [hoverTarget]
+ *                                           which object's highlight shows for what the pointer is over (what pick
+ *                                           returns, or null): an object id, or null for none. An id that is not an
+ *                                           object highlights nothing. Default: the object under the pointer
  * @property {import("../view/scenery.js").Scenery|null} [scenery]   the land round the lot (default: the world's own
  *                                           `scenery`, if it carries one); setScenery changes it
  * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number, oldSizing?: boolean }} [debug]
@@ -52,6 +56,7 @@ export function createWorld(canvas, world, opts = {}) {
   const debug = opts.debug ?? {};
   const events = new Map();
   let hovered = null;
+  const hoverTarget = opts.hoverTarget ?? ((hit) => (hit?.kind === "object" ? hit.id : null));
   const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
 
   // --- size: the backing store is the canvas's device-pixel box exactly
@@ -385,12 +390,17 @@ export function createWorld(canvas, world, opts = {}) {
   }
   // an instance names its object through its batch's ids
   const entityOf = (h) => h.object.userData.entity ?? h.object.userData.ids?.[h.instanceId];
-  function highlight(id) {
+  function highlight(target) {
+    const id = target && objectGroups.has(target) ? target : null;
     if (id === hovered) return;
     setHover(id);
     driver.invalidate();
     if (!running) render();
   }
+
+  // The host's lamps (view.addLamp): the stage's, so setTime lights them; no edit or theme touches them.
+  const hostLamps = new Set();
+  function redraw() { driver.invalidate(); if (!running) draw(driver.tick(0, 0)); }
 
   const view = {
     get lot() { return driver.lot; },
@@ -466,7 +476,27 @@ export function createWorld(canvas, world, opts = {}) {
     character: (id) => sim.character(id),
     sim,
     pick,
-    hover(clientX, clientY) { const p = pick(clientX, clientY); highlight(p?.kind === "object" ? p.id : null); emit("hover", p); return p; },
+    /** Pick at a viewport point, highlight hoverTarget(hit) (default: the object hit), emit "hover" and return the hit. */
+    hover(clientX, clientY) { const p = pick(clientX, clientY); highlight(hoverTarget(p)); emit("hover", p); return p; },
+    /**
+     * A lamp of the host's, like a light anchor's: a spot light at `at` ([x, y, z], world space) aimed straight down,
+     * casting no shadow and lighting nothing outdoors. Its light is its intensity times the night, so it is dark by day.
+     * opts: { color, intensity, reach, angle, penumbra, decay }; color defaults to the palette's `lamp` (and follows
+     * it through setTheme and setTime). It stays through apply, setTheme, setTime and setScenery; dispose removes it.
+     * Returns { set({ intensity?, color? }), remove() }; `color: null` follows the palette again. Adding or removing a
+     * light makes three.js recompile its shaders, so keep a lamp and set its intensity to 0 rather than remove and
+     * add it again.
+     */
+    addLamp(at, o = {}) {
+      if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isFinite)) throw new TypeError(`addLamp: at must be [x, y, z] in metres, got ${JSON.stringify(at)}`);
+      const l = stage.addLamp(at, o);
+      hostLamps.add(l);
+      redraw();
+      return { // after remove() or dispose(), both do nothing
+        set(p = {}) { if (!hostLamps.has(l)) return; stage.setLamp(l, p); redraw(); },
+        remove() { if (!hostLamps.delete(l)) return; stage.removeLamp(l); redraw(); },
+      };
+    },
     project(p) { const q = projectPose(pose, p); const d = pose.dpr; return { x: Math.round(q.x * d) / d, y: Math.round(q.y * d) / d, visible: q.x >= 0 && q.y >= 0 && q.x <= pose.w && q.y <= pose.h }; },
     anchor(id, name) {
       const o = driver.lot.objects.find((x) => x.id === id);
@@ -506,6 +536,8 @@ export function createWorld(canvas, world, opts = {}) {
       for (const type of [...typeMeshes.keys()]) undrawType(type);
       for (const id of [...objectGroups.keys()]) dropObject(id);
       for (const id of [...meshes.keys()]) dropCharacter(id);
+      for (const l of hostLamps) stage.removeLamp(l);
+      hostLamps.clear();
       sceneryView?.dispose();
       materials.dispose(); renderer.dispose();
     },
