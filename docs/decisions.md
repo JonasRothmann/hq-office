@@ -136,3 +136,33 @@ pendants; doorways have noren. Nordic's people stay (faces, hair, poses), dresse
 garden is raked gravel, moss, a stone lantern, a maple, birches and a timber deck and path. D13's grafts stay; the
 saturated Nordic colours and the clutter go. The "city" surroundings (D14) become Copenhagen, restyled in their own
 lane.
+
+## D17. The HUD as a stack and a reader: what was decided beyond the spec
+
+The full-height column of four tabs is gone. The stack (`src/client/inbox/`) lists `S.inbox` as tall as its content;
+the reader (`src/client/reader/`) shows one item in full beside it. These choices were made while building it:
+
+- Layout. On a desktop the window is a grid of three columns: the stack (340px), the reader's column, and the dock
+  (the worker card over the pills, 340px). The reader starts under the status pill, is at most 640px wide and as tall
+  as its item. It never covers the stack. With the world on it stops 44px above the window's foot, where the world's
+  turn buttons sit. `.desk` is the stack alone, so the world's inset is the stack's width; the reader floats over the
+  office and the desk chips hide under it. Making the inset follow the open reader waits for the engine work.
+- Needs you lists the blocking and open questions, unread updates and rooms with new lane messages. Its count is the
+  number of open questions. The item the reader shows stays listed while it shows, even once it is read, so the
+  reader and its card stay paired.
+- A question is short when it has no secrets, at most four options, a body of at most 200 characters and no table,
+  code or heading (`isShort` in `src/server/owner-inbox.ts`). A short card shows its options and SEND; anything
+  longer shows a preview, its shape (lines, tables, code, links) and opens in the reader.
+- Answered from the reader, the reader moves on to the next question in the stack's order, or closes.
+- FROM HQ is no longer a separate feed: updates are inbox items. The top bar's FROM HQ opens the newest unread one.
+  SENT AND ANSWERED and the secrets drop moved into Tell HQ's view. Replying to an update stays (a note that starts
+  with `re: #uID`); replying to your own note is dropped.
+- A room in the reader is one scroll: its head (owner, work, who sits at the table), the brief folded after 12 lines
+  with ALL N LINES, the shelf, the thread, and the send box pinned at the foot. The rail fold, the strip of room tabs
+  and the phone's CHAT, BRIEF and SHELF tabs are gone. Pills show rooms with new messages (up to three) and the room
+  that is open. On a desktop a room no longer pauses the office; on a phone the reader covers it and it rests.
+- Keys work only while no text field has focus. Esc steps back in this order: a dialog, the tier menu, the text
+  field, the reader, the worker card. Cmd-Enter outside a field sends the reader's answer (or a focused short card's).
+  J and K move through the stack; with the reader open it follows them.
+- Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
+  on). Nothing is fetched from another site; a picture shows only when it is on this HUD.

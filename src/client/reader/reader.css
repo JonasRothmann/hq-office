@@ -111,6 +111,8 @@
   .tiermenu .pop { width: min(290px, calc(100vw - 24px)); }
 }
 @media (max-width: 1150px) and (pointer: coarse) {
-  .x { height: 32px; padding: 0 10px; }
+  /* no Esc key on a touch screen: the button says what it does */
+  .x { height: 32px; padding: 0 10px; font-size: 0; }
+  .x::after { content: "Close"; font-size: 12px; }
   .opt { min-height: 40px; }
 }
