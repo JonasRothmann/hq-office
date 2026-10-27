@@ -1,8 +1,8 @@
 // The office on the @hq/world engine (OFFICE: new, D18) on the real page, in Chrome with WebGL on SwiftShader, against
 // a temporary server: the setting mounts the engine instead of the classic renderer; a lane added through the API
 // joins with world.apply (the same WebGL context, the same engine, and the workers already there keep their places);
-// a click on a worker selects its lane and opens its card; Q turns the office; the desk chips sit over their desks.
-// Needs Chrome.
+// a click on a worker selects its lane and opens its card; Q turns the office; the desk chips sit over their desks;
+// OUTSIDE puts the town or the valley round it, and switches between them on the same page and context. Needs Chrome.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -31,7 +31,8 @@ beforeAll(async () => {
   if (!chromeFound) return;
   chrome = await startChrome({ webgl: true });
   server = await startServer(ROOT);
-  await server.post("/api/settings", { settings: { office: "new" } });
+  // the plain lot, as these tests were written for; the last test puts the land round it
+  await server.post("/api/settings", { settings: { office: "new", outside: "off" } });
   for (let i = 0; i < 2; i++) await addLane(i);
   await server.post(`/api/lanes/${name(0)}/vitals`, { model: "claude-opus-5-5", effort: "high", subagents: 2, contextUsed: 90_000, contextMax: 200_000 });
   page = await newSession(chrome.cdp, errors);
@@ -129,3 +130,29 @@ test.skipIf(!chromeFound)("the desk chips sit over their desks, clear of the sta
   }
   expect(errors).toEqual([]);
 }, 240_000);
+
+test.skipIf(!chromeFound)("OUTSIDE city puts the town round the office within the draw budget; nature swaps it on the same page and context", async () => {
+  await page.evaluate(`(() => { window.__gl = document.getElementById("world").getContext("webgl2"); window.__samePage = true; })()`);
+  await server.post("/api/settings", { settings: { outside: "city" } });
+  await until(`__world.inspect().outside?.mode === "city" && __world.inspect().outside.pieces > 1000`);
+  const before = await page.evaluate(`__world.inspect().engine.stats.renders`);
+  await until(`__world.inspect().engine.stats.renders > ${before}`); // a frame drawn with the town in it
+  const city = await page.evaluate(`(() => { const i = __world.inspect(); return { draws: i.engine.draws, pieces: i.outside.pieces, movers: i.outside.movers, id: i.outside.mode }; })()`);
+  expect(city.draws).toBeGreaterThan(0);
+  expect(city.draws).toBeLessThan(220);
+  expect(city.movers).toBeGreaterThan(0); // traffic, walkers, boats
+
+  await server.post("/api/settings", { settings: { outside: "nature" } });
+  await until(`__world.inspect().outside?.mode === "nature"`);
+  const nature = await page.evaluate(`(() => ({
+    same: window.__gl === document.getElementById("world").getContext("webgl2"),
+    page: window.__samePage === true,
+    pieces: __world.inspect().outside.pieces,
+    draws: __world.inspect().engine.draws,
+  }))()`);
+  expect(nature.same).toBe(true);
+  expect(nature.page).toBe(true);
+  expect(nature.pieces).not.toBe(city.pieces);
+  expect(nature.draws).toBeLessThan(220);
+  expect(errors).toEqual([]);
+}, 300_000);

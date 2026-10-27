@@ -22,8 +22,7 @@ function renderSettings() {
   $("settings").innerHTML = `<div class="shead"><b class="k">SETTINGS</b><span class="spacer"></span><button class="btn-s" type="button" data-close>CLOSE</button></div>`
     + row("performance")
     + row("office", "", "NEW draws the office on the new engine. The page reloads to switch.")
-    + row("outside", `<button class="btn-s" type="button" data-reroll ${settings.outside === "off" ? "disabled" : ""}>REROLL</button>`,
-      settings.office === "new" ? "The new office shows its plain lot for now. NATURE and CITY come to it later." : "")
+    + row("outside", `<button class="btn-s" type="button" data-reroll ${settings.outside === "off" ? "disabled" : ""}>REROLL</button>`)
     // The lane tree: what each level is called (from the top: lanes under HQ first; deeper lanes take the last
     // name), shown on the worker card.
     + `<form class="srow" data-levels><span class="k">LEVEL NAMES</span><div class="opts2"><input class="levels" name="levels" maxlength="200" spellcheck="false" autocomplete="off" value="${esc(settings.levels)}" aria-label="Level names, comma-separated"><button class="btn-s" type="submit">SAVE</button></div><span class="hint">From the top, comma-separated. Deeper lanes use the last name.</span></form>`
