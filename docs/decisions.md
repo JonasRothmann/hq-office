@@ -189,3 +189,43 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
   only on the shelf of a room archived more than 7 days ago is no longer named after that shelf.
 - Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
   on). Nothing is fetched from another site; a picture shows only when it is on this HUD.
+
+## D19. Attach and threads: uploads as URLs, a thread is a room the HUD keeps
+
+Steps 4 and 5 of the HUD build plan (attach, then threads and replying to a lane). These choices were made while
+building them:
+
+- One upload route for everything. `POST /api/uploads` (`src/server/uploads.ts`) takes any file of a known type up to
+  25 MB, the rooms' cap. The type comes from the name's extension (or the content type when the name has none) and the
+  bytes must match it: a PNG starts like a PNG, a PDF like a PDF, a text file is UTF-8 without NUL bytes. Anything
+  else is refused: 413 for size, 415 for type. Programs and disk images are never kept. A refusal is final on the
+  page; only a network failure offers RETRY.
+- The page and the lanes get URLs, never paths. The reply is `{ url, href, name, kind, type, size }`: `url` is
+  `/uploads/NAME` for the page, `href` the same file on this server's address as the page reached it, for a lane on
+  another machine. The stored name has a random part, so it cannot be guessed. Files are served sandboxed with
+  `nosniff`, like a room's files; a zip downloads. A sent attachment is `[image: href]` for an image and
+  `[title](href)` for a file, a shelf item or a titled link. A draft kept from before keeps working: its URL stands in.
+- One + menu on every send box, built by `composer()` in `src/client/images/images.js`: upload a file, an image or
+  screenshot (re-encoded as before, 10 MB), a link or artifact URL (a card in the tray), an item from a room's shelf.
+  The menu is a popover, so the reader's scrolling box never clips it. Its link row is no form: the menu sits inside
+  Tell HQ's form, and a nested form would send the note. ⌘U opens the menu of the box with the cursor, else of the
+  KEYS target.
+- Drop and paste follow the keys. A drop on a box goes to that box, a drop on a stack card to that card's item, and a
+  drop anywhere else to the KEYS target (D17); a paste with no field focused goes there too. `keys.js` tells
+  `images.js` the target through `setDropTarget`, so the attach module does not import the stack (that cycle broke
+  the drafts' load order). A hint names the item: "Drop to attach to: TITLE".
+- A thread is a room the HUD keeps. A reply on question 12 opens room `thread-q12` (update 5: `thread-u5`), owned by
+  the item's lane, or HQ when it has none. No table changes. Delivery, AWAY · KEPT, RETRY and read marks are the rooms'
+  own, and a lane answers with `hud room say thread-q12`. HQ cannot create a room whose slug starts with `thread-`.
+  We chose this over a table of replies: that would have duplicated the delivery path and its tests.
+- A thread shows with its item. `S.rooms` lists thread rooms with `thread: { kind, ref }`; the inbox folds a thread
+  into its question or update (`item.thread`) while that is listed, and lists it as a room once the item is gone, so
+  a lane's late reply still reaches the owner. The pills never show a thread.
+- Who a reply goes to. A question's reply goes to its lane by default; an update's to HQ, as the `re: #uID` note it
+  always was. The To chip switches either to the other. A question's box has REPLY (to the thread, the question stays
+  open) beside its SEND (the answer).
+- Reopen. `POST /api/asks/ID/reopen` (in `routes/threads.ts`, so `asks.ts` is untouched) sets an answered question back
+  to open and clears its answer, answer time and ack, so HQ and the lane wait for a new answer. The old answer is not
+  lost: the lane is told in the thread ("The answer X no longer stands"), HQ in one line, and the event log keeps it.
+  A withdrawn question cannot be reopened: HQ took it back. The reader shows an answered question (from Tell HQ's
+  list) with its answer, its thread and REOPEN.

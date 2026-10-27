@@ -101,6 +101,8 @@ Every question has a tier and a priority. The panel shows a **BLOCKING** group a
 
 HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read. `hud guide` prints how HQ should reach you.
 
+Any question or update has a thread. The reader shows it under the body, with a TO chip that says whether your message goes to the lane or to HQ, so you can write there without answering. On a question, REPLY sends to the thread and the question stays open; SEND still answers it. On an update, REPLY goes to HQ as a note unless TO picks the lane. A reply shows SENDING, DELIVERED, AWAY · KEPT (typed into the lane once herdr sees it again) or NOT DELIVERED with RETRY, as room messages do. The lane answers in the thread with `hud room say thread-q12 "..."` (`thread-u5` for update 5). An answered question can be reopened: Tell HQ's SENT AND ANSWERED list opens it in the reader, and REOPEN clears the answer, tells the lane and HQ in one line, and makes the question open again. A withdrawn question cannot be reopened.
+
 ## Secrets
 
 Paste a key into the SECRETS tab (under the room) with a name and a lifetime in minutes, or into the fields of a question HQ asked with `hud ask --secret NAME`. HQ reads it until it expires:
@@ -191,13 +193,22 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 SETTINGS in the top bar has three choices. PERFORMANCE sets how often the office draws: SMOOTH (30 frames a second), BALANCED (15) or POWER SAVER (only when something changes or moves; the cars and the river outside then stand still). OUTSIDE picks what surrounds the office: NATURE, CITY or OFF. The land grows from your name (`HUD_OWNER`), so it stays the same across reloads; REROLL grows another, and RESET TO DEFAULTS goes back to the one from your name. LEVEL NAMES names the levels of the lane tree. The THEME button in the status pill picks system, light or dark, and the SOUND button turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
-## Images
+## Attachments
 
-Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+Every send box (Tell HQ, a question's answer and reply, an update's reply, a room's send box) is one composer: attachments on top, the text field, then a **+** button on the left and SEND on the right. The field grows with what you type, up to five lines. The + button opens a menu (Cmd-U opens it too):
 
-Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+- **Upload a file**: an image (PNG, JPEG, GIF, WebP or SVG), a PDF, a zip, or a text file (txt, md, csv, tsv, json, yaml, toml, xml, html, log, diff, patch, or source such as ts, js, py, sql, sh, go or rs). 25 MB at most.
+- **Image or screenshot**: a photo or screenshot, shrunk in the browser first (see below). On a phone the phone's own menu opens: photo library, take a photo, or choose a file.
+- **Link or artifact URL**: a link, shown as a card in the box.
+- **From a room's shelf**: pick a room, then an item on its shelf.
 
-Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
+Dropping a file on the page, or pasting one while no text field has focus, attaches it to the item the keys target (the card or reader marked KEYS). Dropping it on a specific box or card sends it there. A hint says where it will go: "Drop to attach to: <title>".
+
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the uploads folder of the data directory (10 MB at most).
+
+Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. Files, links and shelf items show as cards. The text you type stays clean. An attachment is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again). A file the server refuses says why in one line: it is too big, it is a type the server does not keep, or its bytes do not match its type (a .png must be a PNG, a text file must be UTF-8).
+
+When you send, each attachment is added to the end of your text as a link on this server: `[image: http://HOST:PORT/uploads/NAME]` for an image, `[title](URL)` for a file, a shelf item or a titled link, and a bare link as itself. Never a path on your disk, so a lane on another machine can fetch it (with curl, for example). Uploaded files sit in the uploads folder under a name nobody can guess, and are served sandboxed, so a file can show but never run a script. Attachments are part of the draft: they stay through live updates and a reload of the page (the page keeps their links, never the files), and are cleared once the message is sent.
 
 ## Configuration
 
