@@ -23,4 +23,22 @@ describe("ECS and scene-graph walkers agree", () => {
     expect(at(ecs.character("ada"))).toEqual({ x: 3.5, z: 4.47, hips: 0.44, clip: "type" });
     expect(at(sg.get("ada"))).toEqual(at(ecs.character("ada")));
   });
+
+  test("the visit: both pause beside chair-3 and end back at chair-1, typing", () => {
+    const { ecs, sg } = both();
+    const visit = { do: "visit", target: "chair-3", wait: 2, then: { do: "sit", target: "chair-1", clip: "type" } };
+    ecs.act("ada", visit);
+    sg.act("ada", visit);
+    const paused = (c: any) => c.clip === "idle" && Math.abs(c.x - 8.5) < 1e-6 && Math.abs(c.z - 5.5) < 1e-6;
+    let ecsPause = 0, sgPause = 0;
+    for (let t = 0; t < 14; t += STEP) {
+      ecs.step(STEP); sg.step(STEP);
+      if (paused(ecs.character("ada"))) ecsPause += STEP;
+      if (paused({ ...sg.get("ada"), clip: sg.get("ada").anim.clip })) sgPause += STEP;
+    }
+    expect(ecsPause).toBeGreaterThan(2);
+    expect(sgPause).toBeGreaterThan(2);
+    expect(at(ecs.character("ada"))).toEqual({ x: 3.5, z: 4.47, hips: 0.44, clip: "type" });
+    expect(at(sg.get("ada"))).toEqual(at(ecs.character("ada")));
+  });
 });

@@ -62,6 +62,9 @@ export function createWalkers(lot, nav, emit = () => {}) {
         c.hips = st.hips + (seat - st.hips) * ease(k);
         c.ry = turnToward(c.ry, facingAngle(s.facing), TURN_RATE * dt);
         if (k < 1) { busy = true; break; }
+      } else if (s.kind === "wait") {
+        setClip(c.anim, "idle");
+        if (st.t < s.s) { busy = true; break; }
       } else if (s.kind === "loop") {
         setClip(c.anim, s.clip);
         const done = waiting.get(c.id);
