@@ -8,7 +8,7 @@ import { secrets } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
 import { leads } from "./ask-routes.ts";
-import { routeOf } from "./lead-router.ts";
+import { answerNotice, routeOf } from "./lead-router.ts";
 
 // ---- tiers: blocking or not, and a priority (docs/spec-3d-office.md, section 2) ----
 
@@ -75,18 +75,20 @@ export function askAndRoute(body: any) {
   return { id, ...leads.route(id, to) };
 }
 
-// The owner (no `by`) or the lead holding it (`by`, hud answer --as LEAD) answers; anyone else gets NotHolder (409).
-// HQ hears every answer and who gave it. An ask that went to a lead also has its answer typed into the asking lane.
-export function answerAsk(id: number, answer: string, by?: string | null) {
+// The owner (no token, no `by`) or the lead holding it (the token typed in with it: hud answer --token T) answers. Any
+// token or `by` makes the caller a lead, so a blank `by` is never the owner; a wrong or old token is Forbidden (403),
+// checked first so the refusal says nothing about the ask. HQ hears every answer and who gave it. An ask that went to a
+// lead has its answer typed into the asking lane, and HQ hears it is already there.
+export function answerAsk(id: number, answer: string, as: { token?: unknown; by?: unknown } = {}) {
+  const lead = as.token != null || as.by != null ? leads.authorize(id, as.token, as.by) : null;
   const ask = db.query("SELECT * FROM asks WHERE id = ?").get(id) as Ask | null;
   if (!ask) throw new Error(`no ask ${id}`);
+  // The owner lost a race with the lead's answer: the page keeps the owner's text and offers it as a follow-up.
+  if (ask.status === "answered" && ask.answered_by) throw new Error(`ask ${id} was answered first by ${ask.answered_by}: "${ask.answer}"`);
   if (ask.status !== "open") throw new Error(`ask ${id} is already ${ask.status}`);
-  const lead = by ? String(by).trim() : null;
-  leads.mayAnswer(ask as any, lead);
   db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, answered_by = ? WHERE id = ?").run(answer, Date.now(), lead, id);
   event(lead ?? OWNER, `answered "${ask.title}": ${answer}`, ask.lane);
-  notifyHq(`HUD answer #${id}${ask.lane ? ` (${ask.lane})` : ""}${lead ? `, answered by ${lead}, its lead` : ""}: "${ask.title}" -> ${answer}`, `ask:${id}`);
-  leads.answered(id);
+  if (!leads.answered(id)) notifyHq(answerNotice({ ...ask, answer, answered_by: lead }), `ask:${id}`);
 }
 
 // The owner (from the page) or HQ (hud tier) moves an open ask between tiers or re-prioritises it. A locked ask
@@ -109,6 +111,8 @@ export function setTier(id: number, body: any) {
   const what = [next.tier !== ask.tier && `to ${next.tier}`, next.priority !== ask.priority && `priority ${PRIORITIES[next.priority]}`].filter(Boolean).join(", ");
   event(by === "owner" ? OWNER : "hq", `moved ask #${id} ${what}: ${ask.title}`, ask.lane);
   if (by === "owner") notifyHq(`HUD ask #${id}${ask.lane ? ` (${ask.lane})` : ""}: the owner set "${ask.title}" to ${next.tier}, priority ${PRIORITIES[next.priority]} (was ${ask.tier}, ${PRIORITIES[ask.priority]})`);
+  // Raised to blocking urgent while a lead holds it: it goes to the owner now (decision D20).
+  leads.retiered(id);
   return view;
 }
 

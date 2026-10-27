@@ -6,7 +6,7 @@ import { db } from "./db.ts";
 import { bump, listeners } from "./push.ts";
 import { event } from "./events.ts";
 import { notifyHq } from "./hq-link.ts";
-import { promptAgent } from "./herdr.ts";
+import { HQ_AGENT, promptAgent } from "./herdr.ts";
 import { away } from "./rooms.ts";
 import { getSettings } from "./settings.ts";
 import { createLeadRouter } from "./lead-router.ts";
@@ -15,10 +15,11 @@ export const leads = createLeadRouter({
   db,
   prompt: promptAgent,
   away,
-  notifyHq: (text) => notifyHq(text),
+  notifyHq: (text, ref) => notifyHq(text, ref),
   event,
   bump,
   owner: OWNER,
+  hq: HQ_AGENT,
   defaultRoute: () => (getSettings().askRoute === "lead" ? "lead" : "owner"),
 });
 
@@ -34,22 +35,3 @@ function checkSoon() {
 listeners.add(checkSoon);
 setInterval(checkSoon, 5_000);
 checkSoon();
-
-// GET /api/asks/held: what a lead holds; with a wait, until it holds something or the time is up.
-export async function waitHeld(lane: string, waitMs: number) {
-  const deadline = Date.now() + waitMs;
-  let found = leads.held(lane);
-  while (!found.length && Date.now() < deadline) {
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        listeners.delete(done);
-        clearTimeout(t);
-        resolve();
-      };
-      const t = setTimeout(done, deadline - Date.now());
-      listeners.add(done);
-    });
-    found = leads.held(lane);
-  }
-  return { lane, asks: found };
-}

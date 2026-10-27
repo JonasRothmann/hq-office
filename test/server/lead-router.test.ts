@@ -3,7 +3,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { applySchema } from "../../src/server/schema.ts";
-import { createLeadRouter, MAX_HELD, NotHolder, type Route } from "../../src/server/lead-router.ts";
+import { createLeadRouter, Forbidden, MAX_HELD, NotHolder, type Route } from "../../src/server/lead-router.ts";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-10-27T09:00:00Z");
@@ -41,12 +41,15 @@ function setup(opts: { route?: Route; fail?: boolean } = {}) {
   };
   const row = (id: number) => db.query("SELECT * FROM asks WHERE id = ?").get(id) as any;
   const hop = (id: number) => db.query("SELECT * FROM ask_routes WHERE ask_id = ?").get(id) as any;
+  // The token typed into the lead with the question (the latest hop's).
+  const token = (id: number) => (db.query("SELECT token FROM ask_routes WHERE ask_id = ? ORDER BY hop DESC").get(id) as { token: string } | null)?.token;
+  // A lead (by) answers with the question's token; the owner (null) with none.
   const answer = (id: number, text: string, by: string | null) => {
-    router.mayAnswer(row(id), by);
+    if (by !== null) router.authorize(id, token(id), by);
     db.query("UPDATE asks SET status = 'answered', answer = ?, answered_at = ?, answered_by = ? WHERE id = ?").run(text, clock.t, by, id);
     router.answered(id);
   };
-  return { db, clock, typed, hq, router, lane, ask, row, hop, answer };
+  return { db, clock, typed, hq, router, lane, ask, row, hop, answer, token };
 }
 
 describe("routing", () => {
@@ -61,8 +64,8 @@ describe("routing", () => {
     // Typed into the idle lead, quoted, with its two commands.
     await s.router.settled();
     expect(s.typed.map((x) => x.lane)).toEqual(["iris"]);
-    expect(s.typed[0].text).toContain(`hud answer ${r.id} "<answer>" --as iris`);
-    expect(s.typed[0].text).toContain(`hud escalate ${r.id} --as iris`);
+    expect(s.typed[0].text).toContain(`hud answer ${r.id} "<answer>" --token ${s.token(r.id)}`);
+    expect(s.typed[0].text).toContain(`hud escalate ${r.id} --token ${s.token(r.id)}`);
     expect(s.typed[0].text).toContain("| Q");
     expect(s.hop(r.id).delivery).toBe("sent");
   });
@@ -208,20 +211,23 @@ describe("escalation", () => {
     expect(s.hq.filter((t) => t.includes(`#${r.id}`))).toHaveLength(1);
   });
 
-  test("hud escalate: once by the holder, again a no-op, never by another lane", () => {
+  test("hud escalate: once by the holder's token, never without it; after that its token is old, and HQ's is a no-op", () => {
     const s = setup();
     s.lane("iris");
     s.lane("kelp", "iris");
     s.lane("other");
     const r = s.ask({ lane: "kelp" }, "lead");
-    expect(() => s.router.escalate(r.id, "other", "")).toThrow(NotHolder);
-    expect(() => s.router.escalate(r.id, "kelp", "")).toThrow(NotHolder);
-    expect(s.router.escalate(r.id, "iris", "money")).toEqual({ id: r.id, escalated: true, holder: null });
-    expect(s.router.escalate(r.id, "iris", "money")).toEqual({ id: r.id, escalated: false, holder: null });
+    const token = s.token(r.id);
+    expect(() => s.router.escalate(r.id, { by: "iris" })).toThrow(Forbidden);
+    expect(() => s.router.escalate(r.id, { token, by: "kelp" })).toThrow(Forbidden);
+    expect(s.router.escalate(r.id, { token, by: "iris", reason: "money" })).toEqual({ id: r.id, escalated: true, holder: null });
+    expect(() => s.router.escalate(r.id, { token, reason: "money" })).toThrow(Forbidden);
     expect(s.router.escalateNow(r.id, "timeout", "late")).toBe(false);
     expect(s.hop(r.id)).toMatchObject({ escalated_by: "iris", reason: "money" });
     expect(s.hq).toHaveLength(1);
-    expect(() => s.router.escalate(r.id, "other", "")).toThrow(NotHolder);
+    expect(s.router.escalate(r.id, { hq: true })).toEqual({ id: r.id, escalated: false, holder: null });
+    const owners = s.ask({ lane: "other" });
+    expect(() => s.router.escalate(owners.id, { hq: true })).toThrow(NotHolder);
   });
 
   test("a lead that is done or removed passes what it holds to the owner on the next check", () => {
@@ -243,8 +249,8 @@ describe("answering", () => {
     s.lane("kelp", "iris");
     s.lane("other");
     const r = s.ask({ lane: "kelp" }, "lead");
-    expect(() => s.answer(r.id, "no", "other")).toThrow(NotHolder);
-    expect(() => s.answer(r.id, "no", "kelp")).toThrow(NotHolder);
+    expect(() => s.answer(r.id, "no", "other")).toThrow(Forbidden);
+    expect(() => s.answer(r.id, "no", "kelp")).toThrow(Forbidden);
     s.answer(r.id, "use 3 retries", "iris");
     await s.router.settled();
     expect(s.row(r.id)).toMatchObject({ status: "answered", answered_by: "iris" });
@@ -299,7 +305,8 @@ describe("answering", () => {
     s.lane("kelp", "iris");
     const low = s.ask({ lane: "kelp", priority: 3, title: "later" }, "lead");
     const high = s.ask({ lane: "kelp", priority: 1, title: "sooner" }, "lead");
-    expect(s.router.held("iris").map((a) => a.id)).toEqual([high.id, low.id]);
-    expect(s.router.held("kelp")).toEqual([]);
+    expect(s.router.held(s.token(low.id)).asks.map((a) => a.id)).toEqual([high.id, low.id]);
+    expect(s.router.held(s.token(high.id)).asks.map((a) => a.token)).toEqual([s.token(high.id), s.token(low.id)]);
+    expect(() => s.router.held("kelp")).toThrow(Forbidden);
   });
 });

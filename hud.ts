@@ -9,9 +9,11 @@
 //           [--priority urgent|high|normal|low]   orders the panel within a tier (default normal)
 //           [--to lead|owner]     lead: the asking lane's lead answers first and the owner gets it on a timeout;
 //                                 owner (the default): the owner answers
-//   hud answer ID TEXT --as LEAD             answer a question LEAD holds (the owner answers on the page)
-//   hud escalate ID --as LEAD [--reason R]   pass a question LEAD holds to the owner now
-//   hud held --as LEAD [--wait N] [--json]   the questions LEAD holds; --wait blocks until one comes
+//   hud answer ID TEXT --token T             a lead answers a question it holds; T is the token typed in with it
+//                                            (the owner answers on the page)
+//   hud escalate ID --token T [--reason R]   a lead passes a question it holds to the owner now
+//   hud escalate ID --hq [--reason R]        HQ passes a question a lead holds to the owner now
+//   hud held --token T [--json]              the questions the lead holding T holds, each with its own token
 //   hud tier ID blocking|nonblocking [--priority P]   move an open question between tiers (not a locked blocking
 //   hud tier ID --priority P                          one) or re-prioritise it; the owner can do the same on the page
 // ask ledger: change an open question instead of withdrawing and reposting it
@@ -50,6 +52,7 @@
 //   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
+import { oneLine, quoteAgentText } from "./src/agent-text.ts";
 import { atText, expiresText } from "./src/client/secrets/expiry.js";
 import { restartTime } from "./src/server/secrets.ts";
 
@@ -163,72 +166,59 @@ switch (cmd) {
     break;
   }
   case "answer": {
-    // TEXT is the words after the ID, or stdin when it is piped. Checked before anything is read or sent.
+    // TEXT is the words after the ID, or stdin when it is piped. Checked before anything is read or sent. The token is
+    // the one typed into the lead with the question: it names the lead, so no --as is needed.
     const [id, ...words] = rest;
-    const lead = one("as");
+    const token = one("token");
     const usage = () => {
-      console.error("usage: hud answer ID TEXT --as LEAD  (TEXT on stdin when piped)");
+      console.error("usage: hud answer ID TEXT --token T  (TEXT on stdin when piped; the owner answers on the page)");
       process.exit(2);
     };
-    if (!/^\d+$/.test(id ?? "") || !lead) usage();
-    if (lead === "owner" || lead === "hq") {
-      console.error("the owner answers on the page; hud answer is for a lead");
-      usage();
-    }
+    if (!/^\d+$/.test(id ?? "") || !token) usage();
     const text = (await textArg(words.length ? words.join(" ") : undefined)).trim();
     if (!text) usage();
-    await call("POST", `/api/asks/${id}/answer`, { answer: text, by: lead });
-    console.log(`ask #${id} answered as ${lead}`);
+    await call("POST", `/api/asks/${id}/answer`, { answer: text, token, by: one("as") });
+    console.log(`ask #${id} answered`);
     break;
   }
   case "escalate": {
-    const lead = one("as");
-    if (!/^\d+$/.test(rest[0] ?? "") || !lead) {
-      console.error("usage: hud escalate ID --as LEAD [--reason R]");
+    // A lead passes on what it holds with its token; HQ with --hq (a switch: it takes no value).
+    const hq = argv.includes("--hq");
+    const p = parse(argv.filter((a) => a !== "--hq"));
+    const token = p.one("token");
+    if (!/^\d+$/.test(p.rest[0] ?? "") || hq === !!token) {
+      console.error("usage: hud escalate ID --token T [--reason R]   (HQ: hud escalate ID --hq [--reason R])");
       process.exit(2);
     }
-    const out = await call("POST", `/api/asks/${rest[0]}/escalate`, { by: lead, reason: one("reason") });
+    const out = await call("POST", `/api/asks/${p.rest[0]}/escalate`, hq ? { hq: true, reason: p.one("reason") } : { token, by: p.one("as"), reason: p.one("reason") });
     console.log(out.escalated ? `ask #${out.id} escalated to the owner` : `ask #${out.id} is already with the owner`);
     break;
   }
   case "held": {
-    // --json takes no value. --wait takes an optional N (seconds, at most 240): it is taken only when a number follows.
+    // --json takes no value. The token of any question the lead holds names the lead.
     const json = argv.includes("--json");
-    let wait: string | undefined;
-    const args: string[] = [];
-    for (let i = 0; i < argv.length; i++) {
-      if (argv[i] === "--json") continue;
-      if (argv[i] === "--wait") {
-        wait = /^\d+$/.test(argv[i + 1] ?? "") ? argv[++i] : "";
-        continue;
-      }
-      args.push(argv[i]);
-    }
-    const lead = parse(args).one("as");
-    if (!lead) {
-      console.error("usage: hud held --as LEAD [--wait N] [--json]");
+    const token = parse(argv.filter((a) => a !== "--json")).one("token");
+    if (!token) {
+      console.error("usage: hud held --token T [--json]");
       process.exit(2);
     }
-    const secs = wait === undefined ? undefined : wait === "" ? 240 : Math.min(Number(wait), 240);
-    const q = new URLSearchParams({ lane: lead, ...(secs === undefined ? {} : { wait: String(secs) }) });
-    let out = await call("GET", `/api/asks/held?${q}`);
-    // With --wait, an empty list waits again, as hud wait does.
-    while (secs && !out.asks.length) out = await call("GET", `/api/asks/held?${q}`);
+    const out = await call("GET", `/api/asks/held?${new URLSearchParams({ token })}`);
     if (json) {
       console.log(JSON.stringify(out, null, 2));
       break;
     }
     if (!out.asks.length) {
-      console.log(`nothing held by ${lead}`);
+      console.log(`nothing held by ${oneLine(out.lane)}`);
       break;
     }
+    // Another agent's text: every line of it quoted (src/agent-text.ts), so none of it can read as a command here.
     const PRIORITY = ["urgent", "high", "normal", "low"];
     for (const a of out.asks) {
-      console.log(`#${a.id} from ${a.lane} · ${a.tier}, ${PRIORITY[a.priority]} · to the owner at ${new Date(a.escalate_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${a.title}`);
-      if (a.body) for (const line of a.body.split("\n")) console.log(`  | ${line}`);
-      if (a.options?.length) console.log(`  options: ${a.options.join(" / ")}${a.recommended ? ` (HQ pick: ${a.recommended})` : ""}`);
+      console.log(`#${a.id} from ${oneLine(a.lane)} · ${a.tier}, ${PRIORITY[a.priority]} · to the owner at ${new Date(a.escalate_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · token ${a.token}`);
+      const options = a.options?.length ? ["", `options: ${a.options.join(" / ")}${a.recommended ? ` (HQ pick: ${a.recommended})` : ""}`] : [];
+      console.log(quoteAgentText([a.title, ...(a.body ? ["", a.body] : []), ...options].join("\n")));
     }
-    console.log(`answer: hud answer ID "<answer>" --as ${lead} · not yours to decide: hud escalate ID --as ${lead} --reason "<why>"`);
+    console.log(`answer: hud answer ID "<answer>" --token T · not yours to decide: hud escalate ID --token T --reason "<why>" (T: the token on its line)`);
     break;
   }
   case "update":

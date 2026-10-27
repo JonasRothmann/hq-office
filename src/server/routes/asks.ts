@@ -4,12 +4,12 @@ import { event } from "../events.ts";
 import { json } from "../json.ts";
 import { bump } from "../push.ts";
 import { answerAsk, askAndRoute, setTier, TierLocked } from "../asks.ts";
-import { leads, waitHeld } from "../ask-routes.ts";
-import { NotHolder } from "../lead-router.ts";
+import { leads } from "../ask-routes.ts";
+import { Forbidden, NotHolder } from "../lead-router.ts";
 import type { Ctx, Route } from "../router.ts";
 
-// A raw POST, so that a refusal of a locked tier or of a lane that does not hold the ask answers 409 rather than the
-// router's 400.
+// A raw POST, so that a refusal of a locked tier or of HQ escalating what the owner holds answers 409, and a lead's
+// wrong or old token 403, rather than the router's 400.
 const guarded = (run: (body: any, m: RegExpMatchArray) => unknown) => async ({ req, m }: Ctx) => {
   const body = await req.json().catch(() => ({}));
   try {
@@ -17,22 +17,25 @@ const guarded = (run: (body: any, m: RegExpMatchArray) => unknown) => async ({ r
     bump();
     return json(out ?? { ok: true });
   } catch (e) {
-    return json({ error: (e as Error).message }, e instanceof TierLocked || e instanceof NotHolder ? 409 : 400);
+    return json({ error: (e as Error).message }, e instanceof Forbidden ? 403 : e instanceof TierLocked || e instanceof NotHolder ? 409 : 400);
   }
 };
 
 const routes: Route[] = [
   { method: "POST", path: "/api/asks", handle: ({ body }) => askAndRoute(body) },
-  // No `by`: the owner, from the page. `by`: the lead holding it (hud answer ID TEXT --as LEAD).
+  // No `token` and no `by`: the owner, from the page. `token`: the lead holding it (hud answer ID TEXT --token T).
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/answer$/, raw: true, handle: guarded((body, m) => {
-    answerAsk(Number(m[1]), String(body.answer ?? "").trim() || "done", body.by);
+    answerAsk(Number(m[1]), String(body.answer ?? "").trim() || "done", { token: body.token, by: body.by });
   }) },
-  { method: "POST", pattern: /^\/api\/asks\/(\d+)\/escalate$/, raw: true, handle: guarded((body, m) => leads.escalate(Number(m[1]), body.by, body.reason)) },
-  // What a lead holds (hud held --as LEAD [--wait N]).
-  { method: "GET", path: "/api/asks/held", handle: async ({ url }) => {
-    const lane = (url.searchParams.get("lane") ?? "").trim();
-    if (!lane) return json({ error: "lane is required: hud held --as LEAD" }, 400);
-    return json(await waitHeld(lane, Math.min(Number(url.searchParams.get("wait")) || 0, 240) * 1000));
+  // `token`: the lead holding it (hud escalate ID --token T). `hq: true`: HQ (hud escalate ID --hq).
+  { method: "POST", pattern: /^\/api\/asks\/(\d+)\/escalate$/, raw: true, handle: guarded((body, m) => leads.escalate(Number(m[1]), body)) },
+  // What a lead holds (hud held --token T): the token of any question it holds names the lead.
+  { method: "GET", path: "/api/asks/held", handle: ({ url }) => {
+    try {
+      return json(leads.held(url.searchParams.get("token")));
+    } catch (e) {
+      return json({ error: (e as Error).message }, 403);
+    }
   } },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/tier$/, raw: true, handle: guarded((body, m) => setTier(Number(m[1]), body)) },
   { method: "POST", pattern: /^\/api\/asks\/(\d+)\/withdraw$/, handle: ({ body, m }) => {

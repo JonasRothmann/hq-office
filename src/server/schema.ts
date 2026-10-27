@@ -39,4 +39,7 @@ export function applySchema(db: Database) {
     ["holder", "TEXT"],
     ["answered_by", "TEXT"],
   ]);
+  // The capability token of a hop (decision D20), for a route table made before tokens. A hop without one cannot be
+  // answered by its lead; it reaches the owner on its timer.
+  addColumns(db, "ask_routes", [["token", "TEXT"]]);
 }

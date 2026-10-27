@@ -59,21 +59,66 @@ const until = async (check: () => Promise<boolean> | boolean, ms = 8000) => {
 const withdraw = (id: number) => post(`/api/asks/${id}/withdraw`);
 const laneStatus = async (name: string) => (await state()).lanes.find((l: any) => l.name === name)?.status;
 const askRoute = async (value: string | null) => post("/api/settings", { settings: { askRoute: value } });
+// The token typed into the lead with question #id, once it is there.
+const tokenOf = async (id: number) => {
+  let token = "";
+  await until(() => !!(token = prompts().find((p) => p.to === "lead" && p.text.includes(`question #${id} for you`))?.text.match(/--token ([0-9a-f]{32})/)?.[1] ?? ""));
+  return token;
+};
 
-test("an answer or escalation by a lane that does not hold the ask is a 409; the holder's answer is typed into the asking lane", async () => {
+test("without the question's token an answer or escalation is a 403 that does not say whether the ask exists; with it, the answer is typed into the asking lane and HQ is told no relay is needed", async () => {
   const { id, holder, escalateAt } = await post("/api/asks", { lane: "kid", title: "Retry budget?", to: "lead" });
   expect(holder).toBe("lead");
   expect(escalateAt).toBeGreaterThan(Date.now() + 29 * 60_000);
-  await until(() => prompts().some((p) => p.to === "lead" && p.text.includes(`#${id}`)));
-  for (const [path, body] of [[`/api/asks/${id}/answer`, { answer: "x", by: "other" }], [`/api/asks/${id}/escalate`, { by: "kid" }]] as const) {
+  const token = await tokenOf(id);
+  const refusals = [
+    [`/api/asks/${id}/answer`, { answer: "x", by: "other" }],
+    [`/api/asks/${id}/answer`, { answer: "x", by: "lead" }],
+    [`/api/asks/${id}/answer`, { answer: "x", by: "  " }],
+    [`/api/asks/${id}/answer`, { answer: "x", token: "0".repeat(32) }],
+    [`/api/asks/${id}/answer`, { answer: "x", token, by: "kid" }],
+    [`/api/asks/${id}/escalate`, { by: "lead" }],
+    [`/api/asks/99999/answer`, { answer: "x", token }],
+    [`/api/asks/99999/escalate`, { token }],
+  ] as const;
+  const errors = new Set<string>();
+  for (const [path, body] of refusals) {
     const res = await send(path, body);
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toContain("held by lead");
+    expect(res.status).toBe(403);
+    errors.add((await res.json()).error);
   }
+  expect(errors.size).toBe(1);
+  expect((await fetch(`${server.base}/api/asks/held?token=nope`)).status).toBe(403);
   expect((await openAsk(id)).holder).toBe("lead");
-  expect((await send(`/api/asks/${id}/answer`, { answer: "three", by: "lead" })).status).toBe(200);
+  // The token is the lead's alone: never in the page's state.
+  expect(JSON.stringify(await state())).not.toContain(token);
+  expect(await (await fetch(`${server.base}/api/asks/held?token=${token}`)).json()).toMatchObject({ lane: "lead", asks: [{ id, token }] });
+  expect((await send(`/api/asks/${id}/answer`, { answer: "three", token })).status).toBe(200);
   await until(() => prompts().some((p) => p.to === "kid" && p.text.includes("| three")));
   expect((await state()).answered.find((a: any) => a.id === id)).toMatchObject({ answered_by: "lead", lead: "lead", holder: "lead" });
+  // M2: HQ's outbox says it is already in the lane.
+  await until(() => prompts().some((p) => p.to === "hq" && p.text.includes(`HUD answer #${id} (kid), answered by lead, its lead: "Retry budget?" -> three. Already delivered to kid; no relay needed.`)));
+  // L1: the owner's answer lost the race; the error names who answered and what, so the page can keep the draft.
+  const late = await send(`/api/asks/${id}/answer`, { answer: "two" });
+  expect(late.status).toBe(400);
+  expect((await late.json()).error).toBe(`ask ${id} was answered first by lead: "three"`);
+});
+
+test("raising a lead's question to blocking urgent sends it to the owner at once; moving it routes it again and the old lead drops it", async () => {
+  agents({ hq: "idle", lead: "idle", kid: "idle", other: "idle" });
+  await post("/api/sync");
+  const raised = await post("/api/asks", { lane: "kid", title: "Raise me", to: "lead" });
+  const moved = await post("/api/asks", { lane: "kid", title: "Move me", to: "lead" });
+  await until(async () => (await openAsk(raised.id))?.delivery === "sent" && (await openAsk(moved.id))?.delivery === "sent");
+  await post(`/api/asks/${raised.id}/tier`, { by: "owner", tier: "blocking", priority: "urgent" });
+  expect(await openAsk(raised.id)).toMatchObject({ holder: null, escalated_by: "tier" });
+  await post(`/api/asks/${moved.id}/update`, { lane: "other" });
+  expect(await openAsk(moved.id)).toMatchObject({ lane: "other", holder: null });
+  await until(() => prompts().some((p) => p.to === "lead" && p.text.includes(`#${moved.id}`) && p.text.includes("no longer yours: it moved to other")));
+  await until(() => prompts().some((p) => p.to === "lead" && p.text.includes(`#${raised.id}`) && p.text.includes("no longer yours")));
+  for (const { id } of [raised, moved]) await withdraw(id);
+  agents({ hq: "idle", lead: "idle", kid: "working", other: "idle" });
+  await post("/api/sync");
 });
 
 test("without to and with no setting, a lane's question goes to the owner; askRoute lead sends the next one to the lead, and to owner still goes to the owner", async () => {
@@ -128,11 +173,13 @@ test("a lane whose question a lead holds shows as with_lead, and its inbox item 
   await post("/api/sync");
 });
 
-test("the lead escalates its question once: the owner holds it, and a second escalation changes nothing", async () => {
+test("the lead escalates its question once: the owner holds it, its token is then old, and HQ's escalation changes nothing", async () => {
   const { id } = await post("/api/asks", { lane: "kid", title: "Money?", to: "lead" });
   await until(async () => (await openAsk(id))?.delivery === "sent");
-  expect(await post(`/api/asks/${id}/escalate`, { by: "lead", reason: "money" })).toEqual({ id, escalated: true, holder: null });
-  expect(await post(`/api/asks/${id}/escalate`, { by: "lead", reason: "money" })).toEqual({ id, escalated: false, holder: null });
+  const token = await tokenOf(id);
+  expect(await post(`/api/asks/${id}/escalate`, { token, reason: "money" })).toEqual({ id, escalated: true, holder: null });
+  expect((await send(`/api/asks/${id}/escalate`, { token, reason: "money" })).status).toBe(403);
+  expect(await post(`/api/asks/${id}/escalate`, { hq: true })).toEqual({ id, escalated: false, holder: null });
   expect(await openAsk(id)).toMatchObject({ holder: null, lead: "lead", escalated_by: "lead", escalate_reason: "money" });
   expect((await state()).inbox.find((i: any) => i.key === `ask:${id}`)).toMatchObject({ group: "open", needsYou: true, holder: null });
   await withdraw(id);
