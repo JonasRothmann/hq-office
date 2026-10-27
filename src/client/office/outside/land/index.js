@@ -59,6 +59,7 @@ import gardenBench from "./garden-bench.js";
 import deck from "./deck.js";
 import bikeRack from "./bike-rack.js";
 import lightPool from "./light-pool.js";
+import hair from "./hair.js";
 
 export default definePack({
   id: "land",
@@ -120,5 +121,6 @@ export default definePack({
     deck,
     bikeRack,
     lightPool,
+    hair,
   ],
 });

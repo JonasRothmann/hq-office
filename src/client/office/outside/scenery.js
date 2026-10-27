@@ -5,7 +5,7 @@
 //
 // The generator works in the layout's frame with the old office's ground at y = -0.12; the world's lot is the layout
 // moved by `o` (plan.js) with its ground at y = 0. `sink` moves everything as it goes in.
-import { generate, growLot, seedOf, sampleGrid, LEVEL, WATER, ROAD, STOREY, TAG } from "./gen.js";
+import { generate, growLot, seedOf, sampleGrid, distToRect, LEVEL, WATER, ROAD, STOREY, TAG } from "./gen.js";
 import { GABLE_H } from "./land/gable-end.js";
 import { garden, frontDoor, REACH } from "./garden.js";
 import { MARGIN } from "../plan.js";
@@ -16,6 +16,9 @@ export const MODES = ["nature", "city", "off"];
 // lot is drawn in the same token, so lot, garden and meadow read as one lawn.
 export const LAWN = { light: { ground: PALETTE.light["ground-lawn"] }, dark: { ground: PALETTE.dark["ground-lawn"] } };
 const DY = 0.12; // the generator's ground (y -0.12) to the world's (y 0)
+// The sun's shadows reach this far past the land's lot, and the trees within it cast them: the nearest streets and
+// meadows at the default view. Further out the land is past the shadow map (a wider one blurs the office's shadows).
+const SHADE = 10;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const hex2 = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
 const grey = (k) => `#${hex2(k).repeat(3)}`;
@@ -65,8 +68,16 @@ export function outsideScenery(layout, opts = {}) {
     id: `outside:${L.mode}:${L.seed}`,
     pieces: s.pieces, fields: s.fields, strips: s.strips, movers: s.movers,
     fade: { box: hole, from: L.fade.from, to: L.fade.to },
-    shade: hole, ground: true,
+    shade: { minX: hole.minX - SHADE, minZ: hole.minZ - SHADE, maxX: hole.maxX + SHADE, maxZ: hole.maxZ + SHADE }, ground: true,
   };
+}
+
+// The land's trees; those near the lot cast shadows.
+function trees(s, L) {
+  for (const x of L.trees) {
+    const shadow = distToRect(x.x, x.z, L.lot) < SHADE;
+    s.put(`tree-${x.kind === "street" ? "round" : x.kind}`, x.x, x.y, x.z, { ry: x.ry, s: x.s, tint: grey(x.tone), shadow });
+  }
 }
 
 // Where scenery goes in, moved into the world's frame on the way.
@@ -96,8 +107,8 @@ function sink(o) {
       if (points.length < 2) return;
       s.strips.push({ points: points.map(([x, y, z, h]) => [X(x), Y(y), Z(z), r3(h)]), color, ...(finish ? { finish } : {}) });
     },
-    mover(type, route, speed, at, tint, params) {
-      s.movers.push({ type: land(type), route: route.map(([x, y, z]) => [X(x), Y(y), Z(z)]), speed, at, ...(tint ? { tint } : {}), ...(params ? { params } : {}) });
+    mover(type, route, speed, at, tint, params, bob) {
+      s.movers.push({ type: land(type), route: route.map(([x, y, z]) => [X(x), Y(y), Z(z)]), speed, at, ...(tint ? { tint } : {}), ...(params ? { params } : {}), ...(bob ? { bob } : {}) });
     },
   };
   return s;
@@ -151,7 +162,7 @@ function nature(s, L) {
   const br = L.bridge;
   if (br) s.put("bridge", br.x, -DY, br.z, { ry: br.ry, params: { length: r3(br.length), width: r3(br.width), y0: r3(br.y0 + DY), y1: r3(br.y1 + DY), rise: r3(br.rise + DY) } });
 
-  for (const x of L.trees) s.put(`tree-${x.kind === "street" ? "round" : x.kind}`, x.x, x.y, x.z, { ry: x.ry, s: x.s, tint: grey(x.tone) });
+  trees(s, L);
   for (const x of L.rocks) s.put("rock", x.x, x.y, x.z, { ry: x.ry, s: x.s, tint: grey(x.tone) });
   for (const x of L.flowers) s.put("flower", x.x, x.y, x.z, { ry: x.ry ?? 0, tint: land(`flower-${x.c % 5}`) });
   for (const x of L.tufts ?? []) s.put("tuft", x.x, x.y, x.z, { ry: x.ry, s: x.s });
@@ -305,9 +316,24 @@ function town(s, L) {
     } else if (p.kind === "table") s.put("cafe-table", p.x, p.y, p.z, { ry: p.ry, tint: T(`awning-${p.c % 5}`) });
     else s.put(p.kind, p.x, p.y, p.z, { ry: p.ry });
   }
-  for (const x of L.trees) s.put(`tree-${x.kind === "street" ? "round" : x.kind}`, x.x, x.y, x.z, { ry: x.ry, s: x.s, tint: grey(x.tone) });
+  trees(s, L);
   for (const r of L.racks) s.put(r.cargo ? "cargo-bike" : "bike", r.x, walk, r.z, { ry: r.ry, tint: T(`bike-${r.paint % 7}`) });
-  for (const x of L.boats) s.put(`boat-${x.kind}`, x.x, waterY, x.z, { ry: x.ry, tint: T(`boat-${x.paint % 6}`) });
+  // boats at their moorings: movers that stay put (speed 0, facing along their two-point route) and bob
+  for (const x of L.boats) {
+    const route = [[x.x, waterY, x.z], [x.x + Math.sin(x.ry), waterY, x.z + Math.cos(x.ry)]];
+    s.mover(`boat-${x.kind}`, route, 0, [0], T(`boat-${x.paint % 6}`), null, { phase: x.phase });
+  }
+  // at night the canal carries the light of the quay's windows: a long soft streak across the water from each house
+  {
+    const wr = cn.water, wet = rowCanal ? (cn.side === "n" ? wr.minZ : wr.maxZ) : (cn.side === "w" ? wr.minX : wr.maxX);
+    const a = wet + (rowCanal ? (cn.side === "n" ? 1 : -1) : (cn.side === "w" ? 1 : -1)) * 3.2;
+    for (const b of L.buildings) {
+      if (b.style !== "canal") continue;
+      const more = { s: [1.3, 1, 6.5], tint: grey(b.shop ? 0.5 : 0.28) };
+      if (rowCanal) s.put("light-pool", b.x, waterY + 0.02, a, more);
+      else s.put("light-pool", a, waterY + 0.02, b.z, { ...more, ry: Math.PI / 2 });
+    }
+  }
 
   // the movers: cars on the road, walkers and riders stepping up and down with the ground
   for (const c of L.cars) {
@@ -321,17 +347,19 @@ function town(s, L) {
     s.mover("walker", route, p.speed, [p.offset], T(`shirt-${p.shirt % 10}`));
     s.mover("walker-legs", route, p.speed, [p.offset], T(`pants-${p.pants % 6}`));
     s.mover("head", route, p.speed, [p.offset], T(`skin-${p.skin % 6}`));
+    s.mover("hair", route, p.speed, [p.offset], T(`hair-${p.hair % 7}`));
   }
   for (const c of L.cyclists) {
     const route = groundOf(c.path);
     s.mover(c.cargo ? "cargo-bike" : "bike", route, c.speed, [c.offset], T(`bike-${c.paint % 7}`));
     s.mover("rider", route, c.speed, [c.offset], T(`shirt-${c.shirt % 10}`));
     s.mover("head", route, c.speed, [c.offset], T(`skin-${c.skin % 6}`), { y: 1.5 });
+    s.mover("hair", route, c.speed, [c.offset], T(`hair-${c.hair % 7}`), { y: 1.5 });
   }
 }
 
 // Windows, doors, shop fronts, awnings, dormers and chimneys for one house. Panes are glass by day and lit by night
-// through their tokens (pane-a and pane-b lit, pane-dark not).
+// through their tokens (pane-a and pane-b lit, pane-dark not; a shop's pane-shop warmer, with its light on the pavement).
 function facade(s, b) {
   let seed = b.seed >>> 0;
   const R = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 0x9e3779b9) >>> 0; return seed / 4294967296; };
@@ -367,8 +395,8 @@ function facade(s, b) {
       for (let k = 0; k < n; k++) {
         const u = -f.L / 2 + (f.L * (k + 0.5)) / n, px = f.x(u), pz = f.z(u);
         if (fl === 0 && front) {
-          if (k === Math.floor(n / 2)) pane(px, y0 + 1.15, pz, f.ry, 0.95, 2.0, b.shop ? land("pane-b") : land("door"));
-          else if (b.shop) pane(px, y0 + 1.25, pz, f.ry, f.L / n - 0.28, 1.85, land("pane-b"));
+          if (k === Math.floor(n / 2)) pane(px, y0 + 1.15, pz, f.ry, 0.95, 2.0, b.shop ? land("pane-shop") : land("door"));
+          else if (b.shop) pane(px, y0 + 1.25, pz, f.ry, f.L / n - 0.28, 1.85, land("pane-shop"));
           else pane(px, y0 + 1.7, pz, f.ry, 0.8, 1.3, lit(R()));
           continue;
         }
@@ -383,6 +411,8 @@ function facade(s, b) {
       if (b.roofH > 3.4) pane(f.x(0), b.y + b.h + b.roofH * 0.58, f.z(0), f.ry, 0.5, 0.6, lit(R()));
     }
     if (front && b.shop) {
+      // the shop's light on the pavement in front, by night
+      s.put("light-pool", f.x(0) + f.ox * 1.4, b.y + 0.012, f.z(0) + f.oz * 1.4, { ry: f.ry, s: [r3(Math.min(f.L, 7.5) * 0.95), 1, 3], tint: grey(0.55) });
       if (b.awning !== null) s.put("awning", f.x(0), b.y + 2.05, f.z(0), { ry: f.ry, s: [Math.min(f.L - 0.5, 6.5), 1, 1], tint: land(`awning-${b.awning % 5}`) });
       else thing(f.x(0) + f.ox * 0.06, b.y + 2.45, f.z(0) + f.oz * 0.06, f.ry, Math.min(2.6, f.L * 0.5), 0.42, 0.08, land(`awning-${b.seed % 5}`));
     }
