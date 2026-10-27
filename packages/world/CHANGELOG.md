@@ -11,7 +11,8 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   has `pieces` (`{ type, at: [x, y, z], ry, s, tint, params, shadow }`: objects of the new kind `"scenery"`, placed
   freely, drawn as one instanced mesh per type, params and material, a `tint` token or hex multiplying each copy),
   `fields` (height fields with a colour and tone per vertex and a `hole` for the lot), `strips` (ribbons such as
-  paths and rivers; outdoor `glass` is water), `movers` (copies of a piece going round a closed loop at a speed),
+  paths and rivers; outdoor `glass` is water; all the ribbons of a finish are one mesh), `movers` (copies of a piece
+  going round a closed loop at a speed; the movers of a type and params share one instanced mesh per material),
   `fade` (everything outdoors fades into the background between `from` and `to` metres outside a box), `shade` (the
   ground the sun's shadows cover besides the lot) and `ground` (the scenery draws the land, so the engine leaves out
   its own). `checkScenery(scenery, catalog)` names each mistake with its path and a fix; `createWorld` and

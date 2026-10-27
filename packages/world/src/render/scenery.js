@@ -1,7 +1,7 @@
-// The scenery drawn (view/scenery.js plans it): each batch of pieces and each mover as instanced meshes, one per
-// material; height fields and ribbons as single vertex-coloured meshes. Everything takes the outdoor materials (no lamp
-// light, the fade). update(t) puts the movers where they are at t seconds. Movers cast no shadows, so moving them
-// never redraws the shadow map.
+// The scenery drawn (view/scenery.js plans it): each batch of pieces, and the movers of each type and params, as
+// instanced meshes, one per material; each height field as one vertex-coloured mesh, and the ribbons as one per
+// finish. Everything takes the outdoor materials (no lamp light, the fade). update(t) puts the movers where they are
+// at t seconds. Movers cast no shadows, so moving them never redraws the shadow map.
 import * as THREE from "three";
 import { buildPrims } from "../catalog/define.js";
 import { resolveColor } from "../catalog/palette.js";
@@ -46,17 +46,28 @@ export function buildScenery(plan, catalog, palette, materials) {
     }
   }
 
-  const movers = plan.movers.map((mv) => {
-    const meshes = instanced(`scenery:${mv.key}`, mv.type, mv.params, mv.at.length, false);
+  // movers of one type and params share their meshes: each mover's copies are a run of instances
+  const kinds = new Map();
+  for (const mv of plan.movers) {
+    const key = `${mv.type}|${JSON.stringify(mv.params)}`;
+    if (!kinds.has(key)) kinds.set(key, { type: mv.type, params: mv.params, list: [], n: 0 });
+    const k = kinds.get(key);
+    k.list.push({ mv, from: k.n });
+    k.n += mv.at.length;
+  }
+  const movers = [...kinds.values()].map((k) => {
+    const meshes = instanced(`scenery:mover:${k.type}`, k.type, k.params, k.n, false);
     for (const m of meshes) {
-      m.frustumCulled = false; // its copies go round the whole loop
-      if (mv.tints) mv.tints.forEach((t, i) => m.setColorAt(i, tintOf(t)));
+      m.frustumCulled = false; // its copies go round whole loops
+      for (const { mv, from } of k.list) if (mv.tints) mv.tints.forEach((t, i) => m.setColorAt(from + i, tintOf(t)));
     }
-    return { mv, meshes };
+    return { list: k.list, meshes };
   });
 
   for (const f of plan.fields) add(fieldGeometry(f, palette), "matte", "scenery:field");
-  for (const s of plan.strips) add(stripGeometry(s, palette), s.finish ?? "matte", "scenery:strip");
+  for (const finish of new Set(plan.strips.map((s) => s.finish ?? "matte"))) {
+    add(stripGeometry(plan.strips.filter((s) => (s.finish ?? "matte") === finish), palette), finish, "scenery:strip");
+  }
   function add(geo, finish, name) {
     const mesh = new THREE.Mesh(geo, materials.get(finish, null, { outdoor: true }));
     mesh.name = name;
@@ -70,12 +81,14 @@ export function buildScenery(plan, catalog, palette, materials) {
   function update(t) {
     if (t === last) return;
     last = t;
-    for (const { mv, meshes } of movers) {
-      const places = moverPlaces(mv, t);
-      for (const m of meshes) {
-        places.forEach(([x, y, z, ry], i) => { _o.position.set(x, y, z); _o.rotation.set(0, ry, 0); _o.scale.set(1, 1, 1); _o.updateMatrix(); m.setMatrixAt(i, _o.matrix); });
-        m.instanceMatrix.needsUpdate = true;
+    for (const { list, meshes } of movers) {
+      for (const { mv, from } of list) {
+        moverPlaces(mv, t).forEach(([x, y, z, ry], i) => {
+          _o.position.set(x, y, z); _o.rotation.set(0, ry, 0); _o.scale.set(1, 1, 1); _o.updateMatrix();
+          for (const m of meshes) m.setMatrixAt(from + i, _o.matrix);
+        });
       }
+      for (const m of meshes) m.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -117,10 +130,19 @@ function fieldGeometry(f, palette) {
   return g;
 }
 
-// A ribbon: the points joined by quads of their half widths, facing up.
-function stripGeometry(s, palette) {
-  const c = linear(resolveColor(s.color, palette)), P = s.points;
+// Ribbons: each one's points joined by quads of their half widths, facing up, all in one geometry.
+function stripGeometry(strips, palette) {
   const pos = [], col = [], nor = [];
+  for (const s of strips) ribbon(s, linear(resolveColor(s.color, palette)), pos, col, nor);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+function ribbon(s, c, pos, col, nor) {
+  const P = s.points;
   const side = (i) => {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)];
     const tx = b[0] - a[0], tz = b[2] - a[2], tl = Math.hypot(tx, tz) || 1, h = P[i][3];
@@ -134,11 +156,5 @@ function stripGeometry(s, palette) {
     for (const tri of up(A, B, D) ? [[A, B, D], [A, D, C]] : [[A, D, B], [A, C, D]]) for (const v of tri) { pos.push(...v); col.push(...c); nor.push(0, 1, 0); }
     prev = cur;
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  g.computeBoundingSphere();
-  return g;
 }
 const up = (A, B, D) => (B[0] - A[0]) * (D[2] - A[2]) - (B[2] - A[2]) * (D[0] - A[0]) < 0;
