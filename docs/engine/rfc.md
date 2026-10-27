@@ -989,6 +989,15 @@ started.
    - Cost: a 12-lane lot is about 2,200 primitives, 450 draw calls and 75k triangles. The bands make a wall four
      boxes instead of one, which makes the coplanar lint about a third slower. Instancing (step 5) is where to win
      the draw calls back.
+   - The polish pass, against the old renderer's shots. Engine: a pack's `overrides` and a doc's `palette`
+     recolour the engine's own tokens (the pack makes the wall tops smoked oak and the ground moss); lamps are warm
+     downlights and night keeps less fill, so rooms pool under their lamps; a piece tagged `wall` hides while its
+     wall is cut (`hangsOnCut`). Pack: the lit つくる sign, a clock, a corkboard, two prints and radiators, the long
+     dining table, a bike, a dog in its bed, a record player and a lounge chair; plants with leaf clusters; a rug
+     that shows on oak; cords that read. Each team room varies by index: a corkboard or a print between the windows,
+     a clock and a print on the side walls, and a signature (the bike, the dog or the reading chair). Halls get a
+     paper pendant every four tiles. Lights reach through walls (no point shadows), so a lamp by an outer wall
+     warms the ground outside.
 4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
    `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
    back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the
