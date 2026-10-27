@@ -21,7 +21,9 @@
 @hq/world checkPack
 @hq/world createCamera
 @hq/world createCatalog
+@hq/world createEcs
 @hq/world createNav
+@hq/world createSim
 @hq/world createWorld
 @hq/world cutaway
 @hq/world defineObject
@@ -73,7 +75,9 @@
 @hq/world/model checkPack
 @hq/world/model createCamera
 @hq/world/model createCatalog
+@hq/world/model createEcs
 @hq/world/model createNav
+@hq/world/model createSim
 @hq/world/model cutaway
 @hq/world/model defineObject
 @hq/world/model definePack

@@ -29,6 +29,12 @@ describe("package boundary", () => {
     });
   }
 
+  test("the pure half (everything @hq/world/model reaches) never imports three", () => {
+    const pure = /^src\/(model|catalog|nav|anim|camera|arch|lint|sim)\//;
+    const bad = files.filter((f) => pure.test(rel(f)) && specifiers(readFileSync(f, "utf8")).includes("three")).map(rel);
+    expect(bad).toEqual([]);
+  });
+
   test("nothing assigns to three.js globals (ShaderChunk, ColorManagement, ...)", () => {
     const bad = files.filter((f) => /\b(ShaderChunk|ShaderLib|ColorManagement)(\.\w+|\[[^\]]+\])*\s*=[^=]/.test(readFileSync(f, "utf8"))).map(rel);
     expect(bad).toEqual([]);

@@ -1,5 +1,6 @@
 // "@hq/world/model": the pure half of the engine (no three.js). Runs in Bun and in the browser: world files, packs,
-// validation, rooms, nav, acts, the camera rig, architecture as primitives, the cutaway rule and the coplanar lint.
+// validation, rooms, nav, acts, the simulation (an ECS and its systems), the camera rig, architecture as primitives,
+// the cutaway rule and the coplanar lint.
 export { WALL_H, KERB_H, WALL_T, FLOOR_Y, SIDES, rect, sideEdge, tileKey } from "./grid.js";
 export { problem, WorldError, formatProblems } from "./problems.js";
 export { defineWorld, toJSON, fromJSON, FORMAT } from "./world.js";
@@ -9,6 +10,8 @@ export { defineObject, definePack, createCatalog, checkPack, buildPrims } from "
 export { PALETTES } from "../catalog/palette.js";
 export { createNav } from "../nav/nav.js";
 export { planAct } from "../nav/act.js";
+export { createEcs } from "../sim/ecs.js";
+export { createSim } from "../sim/index.js";
 export { cutaway, WALL_MODES } from "../arch/cutaway.js";
 export { buildArchitecture, objectPrims, lotPrims } from "../arch/build.js";
 export { lintCoplanar, describePair } from "../lint/coplanar.js";

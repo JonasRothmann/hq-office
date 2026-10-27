@@ -13,7 +13,7 @@ import { problem } from "../model/problems.js";
 const centre = ([x, z]) => [x + 0.5, z + 0.5];
 const ENTER = { sit: "sit-down" };
 
-// { steps } or { problem } when the act cannot be done (no such object, slot taken, no way there).
+// { steps, hold? } (hold: the slot to reserve) or { problem } when the act cannot be done (no such object, slot taken, no way there).
 /** @stability stable */
 export function planAct(lot, nav, who, act, path = "acts") {
   const from = who.tile;
@@ -36,6 +36,6 @@ export function planAct(lot, nav, who, act, path = "acts") {
   if (tiles.length > 1) steps.push({ kind: "walk", points: simplify(tiles).map(centre) });
   steps.push({ kind: "turn", facing: slot.facing });
   steps.push({ kind: "enter", to: slot.at, y: slot.y, facing: slot.facing, clip: ENTER[slot.clip] ?? slot.clip, object: o.id, slot: slotName });
-  steps.push({ kind: "loop", clip: slot.clip });
-  return { steps, slot: slotName, stand: tiles[tiles.length - 1] };
+  steps.push({ kind: "loop", clip: act.clip ?? slot.clip });
+  return { steps, hold: { object: o.id, slot: slotName }, stand: tiles[tiles.length - 1] };
 }

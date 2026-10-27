@@ -4,27 +4,20 @@
 import * as THREE from "three";
 import { buildLot } from "../model/lot.js";
 import { WorldError } from "../model/problems.js";
-import { FLOOR_Y, QUARTER, tileKey } from "../model/grid.js";
+import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
 import { createNav } from "../nav/nav.js";
-import { planAct } from "../nav/act.js";
+import { createSim } from "../sim/index.js";
+import { floorAt as floorOf } from "../sim/motion.js";
 import { cutaway, WALL_MODES } from "../arch/cutaway.js";
 import { buildArchitecture } from "../arch/build.js";
-import { CLIPS, RIG, samplePose, blendPose } from "../anim/clips.js";
 import { createCamera, stepCamera, cameraPose, project as projectPose, unproject, rotateCamera, zoomCamera, panCamera, fitCamera } from "../camera/rig.js";
 import { createStage } from "../render/stage.js";
 import { createMaterials } from "../render/materials.js";
 import { primsToGroup } from "../render/meshes.js";
 import { buildCharacter } from "../render/character.js";
 
-const WALK_SPEED = 1.3;   // m/s
-const TURN_RATE = 9;      // rad/s
-const FADE = 0.2;         // s, clip cross-fade
 const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
-
-const facingAngle = (side) => QUARTER[side] * (Math.PI / 2);
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const ease = (t) => t * t * (3 - 2 * t);
 
 /**
  * @typedef {object} WorldOptions
@@ -38,6 +31,7 @@ const ease = (t) => t * t * (3 - 2 * t);
  * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's CSS size
  * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
  * @property {boolean} [startActs]           run the world's acts at once (default true)
+ * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
  * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number }} [debug]   reproduce the old defects, for comparisons
  */
 
@@ -123,109 +117,32 @@ export function createWorld(canvas, world, opts = {}) {
     }
   }
 
-  // --- characters
+  // --- characters: the simulation (pure, an ECS) owns their state; the meshes only mirror it (renderSync)
+  const sim = createSim(lot, nav, { systems: opts.systems, emit: (name, data) => emit(name, data) });
   const charGroup = new THREE.Group();
   charGroup.name = "characters";
   scene.add(charGroup);
-  const chars = new Map();
+  const meshes = new Map();
+  const floorAt = (x, z) => floorOf(lot, x, z);
   function buildCharacters() {
-    const prev = new Map(chars);
-    for (const c of chars.values()) { charGroup.remove(c.mesh.root); c.mesh.dispose(); }
-    chars.clear();
-    for (const c of lot.characters) {
-      const old = prev.get(c.id);
-      const mesh = buildCharacter(c.id, c.look, palette, materials);
+    for (const m of meshes.values()) { charGroup.remove(m.root); m.dispose(); }
+    meshes.clear();
+    for (const [id, c] of sim.ecs.query("character")) {
+      const mesh = buildCharacter(id, c.look, palette, materials);
       charGroup.add(mesh.root);
-      const st = old ? { ...old, mesh } : {
-        id: c.id, mesh, x: c.tile[0] + 0.5, z: c.tile[1] + 0.5, ry: facingAngle(c.facing), hips: RIG.hip,
-        clip: "idle", clipT: 0, from: null, fadeT: 0, steps: [], si: 0, step: null, done: null, holding: null,
-      };
-      chars.set(c.id, st);
-      updateChar(st, 0);
+      meshes.set(id, mesh);
     }
+    renderSync();
   }
-  const floorAt = (x, z) => (lot.floor.has(tileKey(Math.floor(x), Math.floor(z))) ? FLOOR_Y : 0);
-  const tileOf = (c) => [Math.floor(c.x), Math.floor(c.z)];
-
-  function setClip(c, name) {
-    if (c.clip === name) return;
-    c.from = currentPose(c);
-    c.fadeT = 0;
-    c.clip = name;
-    c.clipT = 0;
-  }
-  const currentPose = (c) => {
-    const p = samplePose(CLIPS[c.clip] ?? CLIPS.idle, c.clipT);
-    return c.from && c.fadeT < FADE ? blendPose(c.from, p, ease(c.fadeT / FADE)) : p;
-  };
-
-  // Walk to a slot and use it (or walk to a tile). Resolves when the character is in place; rejects with a
-  // WorldError when the act cannot be done.
-  function act(id, a) {
-    const c = chars.get(id);
-    if (!c) return Promise.reject(new WorldError([{ code: "act.who", severity: "error", path: "act", message: `no character '${id}'`, fix: `use one of: ${[...chars.keys()].join(", ")}` }]));
-    if (c.holding) { nav.release(c.holding.object, c.holding.slot, id); c.holding = null; }
-    const plan = planAct(lot, nav, { id, tile: tileOf(c) }, a);
-    if (plan.problem) return Promise.reject(new WorldError([plan.problem], "act"));
-    if (plan.slot) { nav.reserve(a.target, plan.slot, id); c.holding = { object: a.target, slot: plan.slot }; }
-    const steps = plan.steps.map((s) => (s.kind === "loop" && a.clip ? { ...s, clip: a.clip } : s));
-    // stand up first if seated
-    if (c.hips < RIG.hip - 0.01) steps.unshift({ kind: "stand" });
-    c.steps = steps; c.si = 0; c.step = null;
-    return new Promise((resolve) => { c.done = resolve; });
-  }
-
-  function updateChar(c, dt) {
-    let busy = false;
-    while (c.si < c.steps.length) {
-      const s = c.steps[c.si];
-      if (c.step !== s) { c.step = s; c.stepState = { t: 0, i: 1, from: [c.x, c.z], hips: c.hips, ry: c.ry }; }
-      const st = c.stepState;
-      st.t += dt;
-      if (s.kind === "stand") {
-        setClip(c, "idle");
-        const k = Math.min(1, st.t / 0.4);
-        c.hips = st.hips + (RIG.hip - st.hips) * ease(k);
-        if (k < 1) { busy = true; break; }
-      } else if (s.kind === "walk") {
-        setClip(c, "walk");
-        let left = WALK_SPEED * dt;
-        while (left > 0 && st.i < s.points.length) {
-          const [tx, tz] = s.points[st.i];
-          const dx = tx - c.x, dz = tz - c.z, d = Math.hypot(dx, dz);
-          if (d > 1e-6) c.ry = turnToward(c.ry, Math.atan2(dx, dz), TURN_RATE * dt * 1.5);
-          if (d <= left) { c.x = tx; c.z = tz; left -= d; st.i++; } else { c.x += (dx / d) * left; c.z += (dz / d) * left; left = 0; }
-        }
-        if (st.i < s.points.length) { busy = true; break; }
-      } else if (s.kind === "turn") {
-        setClip(c, "idle");
-        c.ry = turnToward(c.ry, facingAngle(s.facing), TURN_RATE * dt);
-        if (Math.abs(wrap(c.ry - facingAngle(s.facing))) > 1e-3) { busy = true; break; }
-      } else if (s.kind === "enter") {
-        setClip(c, s.clip);
-        const dur = CLIPS[s.clip]?.dur ?? 0.5;
-        const k = Math.min(1, st.t / dur);
-        c.x = st.from[0] + (s.to[0] - st.from[0]) * ease(k);
-        c.z = st.from[1] + (s.to[1] - st.from[1]) * ease(k);
-        const seat = s.y !== undefined ? s.y - floorAt(c.x, c.z) + 0.06 : RIG.hip;
-        c.hips = st.hips + (seat - st.hips) * ease(k);
-        c.ry = turnToward(c.ry, facingAngle(s.facing), TURN_RATE * dt);
-        if (k < 1) { busy = true; break; }
-      } else if (s.kind === "loop") {
-        setClip(c, s.clip);
-        if (c.done) { const d = c.done; c.done = null; emit("act", { who: c.id, clip: s.clip }); d(); }
-        break;
-      }
-      c.si++;
+  function renderSync() {
+    for (const [id, , b] of sim.ecs.query("character", "body")) {
+      const m = meshes.get(id);
+      if (!m) continue;
+      m.root.position.set(b.x, floorAt(b.x, b.z), b.z);
+      m.root.rotation.y = b.ry;
+      m.setHips(b.hips);
+      m.setPose(sim.pose(id));
     }
-    c.clipT += dt;
-    c.fadeT += dt;
-    const m = c.mesh;
-    m.root.position.set(c.x, floorAt(c.x, c.z), c.z);
-    m.root.rotation.y = c.ry;
-    m.setHips(c.hips);
-    m.setPose(currentPose(c));
-    return busy;
   }
 
   // --- the frame
@@ -233,8 +150,9 @@ export function createWorld(canvas, world, opts = {}) {
   function simulate(dtMs) {
     const moving = stepCamera(cam, dtMs);
     let busy = moving;
-    for (const c of chars.values()) busy = updateChar(c, dtMs / 1000) || busy;
-    if (chars.size) stage.invalidateShadows();
+    busy = sim.step(dtMs / 1000) || busy;
+    renderSync();
+    if (meshes.size) stage.invalidateShadows();
     syncArch();
     return busy;
   }
@@ -263,7 +181,7 @@ export function createWorld(canvas, world, opts = {}) {
     const dt = last ? Math.min(100, now - last) : STEP;
     last = now;
     const busy = simulate(dt);
-    const ambient = chars.size > 0 && (!opts.idleFps || now - lastDraw >= 1000 / opts.idleFps - 1);
+    const ambient = meshes.size > 0 && (!opts.idleFps || now - lastDraw >= 1000 / opts.idleFps - 1);
     if (busy || dirty || ambient) { render(); lastDraw = now; }
   }
   function start() { if (running || (opts.clock ?? "raf") !== "raf") return; running = true; last = 0; raf = requestAnimationFrame(loop); }
@@ -278,7 +196,7 @@ export function createWorld(canvas, world, opts = {}) {
   buildCharacters();
   applyTime();
   syncArch();
-  if (opts.startActs !== false) for (const a of world.doc.acts) act(a.who, a).catch((e) => console.error(e));
+  if (opts.startActs !== false) for (const a of world.doc.acts) sim.act(a.who, a).catch((e) => console.error(e));
   render();
   start();
 
@@ -297,7 +215,7 @@ export function createWorld(canvas, world, opts = {}) {
     const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity);
     const ground = unproject(pose, [x, y], FLOOR_Y);
     const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
-    if (hit) return { kind: chars.has(hit.object.userData.entity) ? "character" : "object", id: hit.object.userData.entity, tile };
+    if (hit) return { kind: meshes.has(hit.object.userData.entity) ? "character" : "object", id: hit.object.userData.entity, tile };
     if (tile[0] < 0 || tile[1] < 0 || tile[0] >= lot.w || tile[1] >= lot.d) return null;
     return { kind: "tile", tile, room: lot.roomAt.get(tileKey(...tile)) };
   }
@@ -336,18 +254,19 @@ export function createWorld(canvas, world, opts = {}) {
       if (!running) render();
     },
     setTime(t) { time = t; applyTime(); if (!running) render(); },
-    act,
-    character: (id) => { const c = chars.get(id); return c && { id, x: c.x, z: c.z, ry: c.ry, clip: c.clip, hips: c.hips, step: c.step?.kind ?? null }; },
+    act: sim.act,
+    character: sim.character,
+    sim,
     pick,
     hover(clientX, clientY) { const p = pick(clientX, clientY); highlight(p?.kind === "object" ? p.id : null); emit("hover", p); return p; },
     project(p) { const q = projectPose(pose, p); const d = pose.dpr; return { x: Math.round(q.x * d) / d, y: Math.round(q.y * d) / d, visible: q.x >= 0 && q.y >= 0 && q.x <= pose.w && q.y <= pose.h }; },
     anchor(id, name) {
       const o = lot.objects.find((x) => x.id === id);
       if (o) return o.anchors[name] ?? null;
-      const c = chars.get(id);
+      const c = sim.ecs.get(id, "body");
       return c ? [c.x, floorAt(c.x, c.z) + c.hips + 0.95, c.z] : null;
     },
-    attach(obj, id) { const g = objectGroups.get(id) ?? chars.get(id)?.mesh.root; if (!g) return false; g.add(obj); dirty = true; return true; },
+    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); dirty = true; return true; },
     on(name, fn) { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(fn); return () => events.get(name).delete(fn); },
     advance(ms) { let left = ms; while (left > 1e-6) { const d = Math.min(STEP, left); simulate(d); left -= d; } render(); return view.inspect(); },
     render() { render(); },
@@ -355,7 +274,7 @@ export function createWorld(canvas, world, opts = {}) {
     inspect() {
       return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: wallMode, focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
         camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
-        characters: [...chars.keys()].map((id) => view.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+        characters: sim.characters().map((id) => sim.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
     },
     three: { renderer, scene, camera },
     get dirty() { return dirty; },
@@ -363,16 +282,11 @@ export function createWorld(canvas, world, opts = {}) {
       running = false; cancelAnimationFrame(raf); ro?.disconnect();
       for (const g of archCache.values()) disposeGroup(g);
       for (const g of objectGroups.values()) disposeGroup(g, true);
-      for (const c of chars.values()) c.mesh.dispose();
+      for (const m of meshes.values()) m.dispose();
       materials.dispose(); renderer.dispose();
     },
   };
   return view;
-}
-
-function turnToward(a, target, max) {
-  const d = wrap(target - a);
-  return Math.abs(d) <= max ? target : a + Math.sign(d) * max;
 }
 
 // The floored part of the lot (what the view fits), or the whole lot when nothing is floored.

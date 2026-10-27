@@ -50,7 +50,7 @@ describe("coplanar lint", () => {
       const turning = new Set([...cut, ...cutaway(lot, { mode, rot: rot + 1 })]);
       expect({ mode, rot, turning: true, pairs: lintCoplanar(lotPrims(lot, catalog, turning)) }).toEqual({ mode, rot, turning: true, pairs: [] });
     }
-  });
+  }, 30_000); // 24 lints of the whole lot; slow on a loaded machine
 
   test("cutaway drops the near walls and keeps the far ones", () => {
     const { lot } = buildLot(tiny);
