@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Render a world file headlessly and save the frame, so an agent can see what it built.
 //
-//   bun packages/world/tools/shot.ts <world.js> [--rot 0..3] [--zoom 0..2] [--theme light|dark] [--time 14:00]
+//   bun packages/world/tools/shot.ts <world.js> [--rot 0..3] [--zoom far|mid|near|0..12] [--theme light|dark] [--time 14:00]
 //        [--walls up|cutaway|down] [--focus ROOM] [--focus-on x,z] [--advance MS] [--size 1280x800] [--clean]
 //        [--root DIR] [--out shot.jpg]
 //
@@ -14,7 +14,7 @@ import { serve } from "./serve.ts";
 import { startChrome, openTab } from "./chrome.ts";
 import { fileArg, moduleArg, rootFor, shown } from "./paths.ts";
 
-export type ShotOptions = { rot?: number; zoom?: number; theme?: string; time?: string; walls?: string; focus?: string; focusOn?: string; clean?: boolean };
+export type ShotOptions = { rot?: number; zoom?: number | string; theme?: string; time?: string; walls?: string; focus?: string; focusOn?: string; clean?: boolean };
 
 export function labUrl(port: number, worldUrl: string, o: ShotOptions) {
   const q = new URLSearchParams({ world: worldUrl, manual: "1" });
@@ -27,7 +27,7 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   const arg = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
   const world = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
-  if (!world) { console.error("usage: bun tools/shot.ts <world.js> [--rot N] [--zoom N] [--theme T] [--time HH:MM] [--walls MODE] [--out FILE]"); process.exit(2); }
+  if (!world) { console.error("usage: bun tools/shot.ts <world.js> [--rot N] [--zoom far|mid|near|N] [--theme T] [--time HH:MM] [--walls MODE] [--out FILE]"); process.exit(2); }
   moduleArg(world);
   const root = rootFor([world], arg("root"));
   const out = fileArg(arg("out") ?? "shot.jpg");
@@ -40,7 +40,7 @@ if (import.meta.main) {
     const rel = relative(root, fileArg(world));
     if (rel.startsWith("..")) throw new Error(`${shown(fileArg(world))} is not under --root ${shown(root)}`);
     const worldUrl = "/" + rel.split("\\").join("/");
-    await tab.load(labUrl(server.port, worldUrl, { rot: num("rot"), zoom: num("zoom"), theme: arg("theme"), time: arg("time"), walls: arg("walls"), focus: arg("focus"), focusOn: arg("focus-on"), clean: !args.includes("--chrome") }));
+    await tab.load(labUrl(server.port, worldUrl, { rot: num("rot"), zoom: arg("zoom"), theme: arg("theme"), time: arg("time"), walls: arg("walls"), focus: arg("focus"), focusOn: arg("focus-on"), clean: !args.includes("--chrome") }));
     const state = await tab.evaluate(`JSON.stringify(window.__lab.world.advance(${Number(arg("advance") ?? 0)}))`);
     const shot = await tab.screenshot(out.endsWith(".png") ? "png" : "jpeg");
     mkdirSync(dirname(out), { recursive: true });

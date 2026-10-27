@@ -2,8 +2,8 @@
 
 An engine for Sims-like 3D lots in the browser. You describe a lot as data: tiles, floors, walls on tile edges, doors and
 windows, objects from a catalog, characters, and what they do. The engine checks it, finds the rooms, plans walks
-through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, three zooms, and
-walls up, cut away or down.
+through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, a ladder of 13 zoom
+stops, and walls up, cut away or down.
 
 There is no build step. The modules are plain ES modules. three.js is a peer: the host's import map maps `three` to
 its one copy.
@@ -13,7 +13,7 @@ import { createWorld } from "@hq/world";
 import house from "./tiny-house.world.js";
 
 const world = createWorld(canvas, house, { theme: "light", time: "14:00", walls: "cutaway" });
-world.bindInput(canvas);                       // drag to pan, wheel to zoom, click to pick
+world.bindInput(canvas);                       // drag to pan, wheel or pinch to zoom toward the cursor, click to pick
 world.camera.rotate(1);                        // a quarter turn; the camera's height and focus never move
 await world.act("ada", { do: "sit", target: "chair-1", clip: "type" });
 world.act("ada", { do: "visit", target: "chair-3", wait: 4, then: { do: "sit", target: "chair-1", clip: "type" } });
@@ -77,7 +77,7 @@ folder that holds the world and every file it imports (or `--root`).
 bun packages/world/tools/check.ts path/to/x.world.js --map  # validate, check packs, lint for z-fighting, draw the lot; exit 1 on errors
 bun packages/world/tools/check.ts path/to/pack/index.js     # check a pack's objects and that index.js lists every file
 bun packages/world/tools/catalog.ts [path/to/pack/index.js]  # list objects: footprint, slots, anchors, tags
-bun packages/world/tools/shot.ts path/to/x.world.js --rot 1 --zoom 2 --theme dark --time 21:00 --walls cutaway --advance 6000 --out x.jpg
+bun packages/world/tools/shot.ts path/to/x.world.js --rot 1 --zoom near --theme dark --time 21:00 --walls cutaway --advance 6000 --out x.jpg
 bun packages/world/tools/serve.ts                            # the lab: http://127.0.0.1:4791/?world=/path/x.world.js
 bun packages/world/tools/proof.ts --out shots                # the turn, pan, wall-mode, walk, night, sizing and idle proofs
 cd packages/world && bun test                                # the package's tests (no browser, no three.js)
@@ -90,6 +90,9 @@ GPU is needed. The tools find three.js through `--three`, `HQ_WORLD_THREE`, a `n
 ## Promises
 
 - The camera's height is constant during a turn, and the focus stays on the same screen point; turns never refit or zoom.
+- Zoom moves between the stops of `ZOOMS`, 16 to 128 px per metre, each about 19 % closer than the last. `ZOOM_STOPS`
+  names three (`far`, `mid`, `near`). A zoom toward the cursor keeps the ground under it within a device pixel, and a
+  turn mid-zoom keeps the zoom's target.
 - The canvas's backing store is exactly its device-pixel box (ResizeObserver's `devicePixelContentBoxSize`, or a
   size rounded to device pixels where the browser has none), at DPR 1, 1.5 and 2 and at fractional sizes.
   Where the browser has no device-pixel box (Safari), only the size is rounded, not the canvas's place on the page.
