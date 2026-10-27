@@ -210,7 +210,7 @@ export function buildTeamRoom(room, L, light, opts = {}) {
   else if (tree === "olive") P.oliveTree(kit, L, 0.5, 0.5, seed);
   else P.monstera(kit, L, 0.5, 0.55, seed, 1.25);
   atWest(kit, () => {
-    P.bookcase(kit, L, -1.85, 0, 0, { w: 1.7, h: 1.95, rows: 5, seed });
+    P.bookcase(kit, L, -1.85, 0, 0, { w: 1.7, h: 1.95, rows: 5, seed, smoked: i % 3 === 1 });
     kit.at(-1.4, 1.95, 0.16, 0, () => P.pothos(kit, L, 0, 0, 0, seed + 1, 0.9));
   });
   P.clock(decor.w, L, -1.85, 2.35, 0, 0);
@@ -232,7 +232,7 @@ export function buildTeamRoom(room, L, light, opts = {}) {
     P.guitar(kit, L, 0.45, 4.3, Math.PI / 2 - 0.3);
     kit.rbox(0.42, 0.36, 0.26, "#26292e", 0.4, 0, 3.6, 0.02, { ry: 0.2 });
     kit.box(0.34, 0.24, 0.01, "#4a4a50", 0.4, 0.05, 3.74, { ry: 0.2 });
-    P.planner(decor.w, L, -3.75, 1.45, 0, 0, 0.9, 0.56);
+    P.scroll(decor.w, L, -3.75, 2.3);
   } else {
     K.lights.push({ ...P.readingCorner(kit, glow, L, 0.95, 4.05, Math.PI / 2 + 0.5, [S.mustard, S.rust, S.sage][v(3, 3)]), i: 1.2, r: 2.6 });
     P.print(decor.w, L, -3.9, 1.5, 0, 0, ATLAS.prints[(i * 3 + 5) % 8], 0.42, 0.56, S.walnut);
@@ -277,10 +277,10 @@ export function buildSuite(room, L, light, opts = {}) {
   K.lights.push(P.pendant(kit, glow, L, 4.6, 1.45, { y: 1.75, kind: "cone" }));
   P.pool(pools, 1.9, 1.4, 1.3); P.pool(pools, 4.6, 1.4, 1.3);
 
-  // the pier: slatted oak and the lit sign; prints in the corners
+  // the pier: slatted oak and the lit sign; a hanging scroll in the left corner, a print in the right
   P.slats(decor.n, L, 3.0, 4.0, 2.4);
   P.sign(decor.n, lit.n, L, 3.5, 1.3, 0.86, 0.05);
-  P.print(decor.n, L, 0.5, 1.15, 0, 0, ATLAS.prints[3], 0.42, 0.56, S.oak);
+  P.scroll(decor.n, L, 0.55, 2.35);
   P.print(decor.n, L, 6.5, 1.3, 0, 0, ATLAS.prints[5], 0.36, 0.48, S.walnut);
 
   // the west wall: the workbench with its pegboard and the 3D printer
@@ -335,7 +335,7 @@ export function buildBreak(room, L, light, opts = {}) {
       P.fruitBowl(kit, L, k1 - 0.3, 0.3);
       for (let k = 0; k < 3; k++) kit.cyl(0.035, 0.08, S.mugs[k + 2], k0 + 0.85 + k * 0.09, P.COUNTER_H, 0.36, { seg: 8 });
     });
-    P.openShelves(decor.n, L, (k0 + k1) / 2, Math.min(1.6, k1 - k0 - 0.2), [1.25, 1.55]);
+    P.openShelves(decor.n, L, (k0 + k1) / 2, Math.min(1.6, k1 - k0 - 0.2), [1.35]);
     for (let x = k0 + 0.6; x < k1 - 0.1 && spots.length < 3; x += 0.85) spots.push({ x, z: 1.15, ry: ((spots.length % 3) - 1) * 0.4 });
   };
   const table = (tx, tz, len) => {
@@ -345,7 +345,7 @@ export function buildBreak(room, L, light, opts = {}) {
     P.vaseBranch(kit, L, tx - 0.25, DESK_H, tz, 4);
     kit.cyl(0.035, 0.08, S.mugs[0], tx + 0.5, DESK_H, tz - 0.15, { seg: 8 });
     kit.box(0.24, 0.012, 0.32, "#f4f1ea", tx + 0.9, DESK_H, tz + 0.05, { ry: -0.2 });
-    for (const dx of [-0.6, 0.6]) K.lights.push(P.pendant(kit, glow, L, tx + dx, tz, { y: 2.05, kind: "washi" }));
+    for (const dx of [-0.6, 0.6]) K.lights.push(P.pendant(kit, glow, L, tx + dx, tz, { y: 2.2, kind: "washi" }));
     for (const dx of [-0.6, 0.6]) P.pool(pools, tx + dx, tz, 1.4);
     spots.push({ x: tx - len / 2 - 0.45, z: tz - 0.2, ry: Math.PI / 2 }, { x: tx + len / 2 + 0.45, z: tz + 0.1, ry: -Math.PI / 2 });
   };

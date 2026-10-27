@@ -19,7 +19,7 @@ export function maple(kit, x, z, s = 1, seed = 1, y = -0.12) {
   kit.box(0.07 * s, 0.7 * s, 0.07 * s, trunk, x + 0.12 * s, y + 0.85 * s, z, { rz: -0.8 });
   kit.box(0.06 * s, 0.6 * s, 0.06 * s, trunk, x + 0.05 * s, y + 0.9 * s, z, { rz: 0.7, rx: 0.3 });
   kit.box(0.05 * s, 0.6 * s, 0.05 * s, trunk, x - 0.1 * s, y + 1.0 * s, z + 0.1 * s, { rz: 0.9, rx: -0.4 });
-  const reds = ["#a8452e", "#bf5a36", "#8e3a28", "#cc7040"];
+  const reds = ["#9e4a32", "#b4593a", "#88402c", "#c06a44"];
   for (let i = 0; i < 13; i++) {
     const a = i * 2.39 + r() * 0.5, tier = i % 3, d = (0.35 + tier * 0.33 + r() * 0.15) * s;
     kit.sphere((0.42 - tier * 0.06 + r() * 0.08) * s, reds[i % 4], x + Math.cos(a) * d + 0.1 * s, y + (2.05 - tier * 0.28 + r() * 0.2) * s, z + Math.sin(a) * d, { sy: 0.5, detail: 1, ry: r() * 3 });
@@ -60,7 +60,7 @@ function birch(kit, x, y, z, s, i) {
   kit.cyl(0.06 * s, 2.7 * s, bark, x, y, z, { top: 0.035 * s, seg: 6, rz: jitter(i) * 0.1 });
   kit.cyl(0.04 * s, 1.9 * s, bark, x + 0.25 * s, y, z + 0.1, { top: 0.025 * s, seg: 6, rz: -0.18 });
   for (let k = 0; k < 6; k++) kit.box(0.09 * s, 0.025, 0.09 * s, "#2b2b2e", x + jitter(i + k) * 0.02, y + 0.35 + k * 0.38 * s, z, { ry: k });
-  const greens = ["#8fb06e", "#7aa05f", "#9dbb78", "#6f9a58"];
+  const greens = ["#8aa66e", "#789a62", "#95b07a", "#6d8f5a"];
   for (let k = 0; k < 7; k++) {
     const a = k * 2.3 + i;
     kit.sphere((0.5 + (k % 3) * 0.12) * s, greens[(k + i) % 4], x + Math.cos(a) * 0.45 * s, y + (2.0 + (k % 4) * 0.35) * s, z + Math.sin(a) * 0.4 * s, { sy: 0.85, detail: 1 });

@@ -236,23 +236,25 @@ export function lowTable(kit, L, x, z, w = 0.9, d = 0.5, color) {
 
 // --- Storage -------------------------------------------------------------------------------------------------------
 
-// Open birch-plywood shelving full of books and things, back against the wall (its back at local z = 0, facing +z).
-export function bookcase(kit, L, x, z, ry, { w = 1.6, h = 1.9, rows = 5, seed = 1, depth = 0.32 } = {}) {
+// Open shelving with books and things and room between them, back against the wall (its back at local z = 0, facing
+// +z): ash plywood with dark edges, or smoked oak (smoked).
+export function bookcase(kit, L, x, z, ry, { w = 1.6, h = 1.9, rows = 5, seed = 1, depth = 0.32, smoked = false } = {}) {
   const S = L.studio;
+  const body = smoked ? S.walnut : S.ply, edge = smoked ? S.ink : S.plyEdge;
   kit.at(x, 0, z, ry, () => {
     const t = 0.025, zc = depth / 2;
-    kit.box(w, h, 0.015, S.plyEdge, 0, 0, 0.008);
+    kit.box(w, h, 0.015, smoked ? S.oakDark : S.plyEdge, 0, 0, 0.008);
     for (const sx of [-1, 1]) {
-      kit.box(t, h, depth, S.ply, sx * (w / 2 - t / 2), 0, zc);
-      kit.box(t + 0.002, h, 0.008, S.plyEdge, sx * (w / 2 - t / 2), 0, depth);
+      kit.box(t, h, depth, body, sx * (w / 2 - t / 2), 0, zc);
+      kit.box(t + 0.002, h, 0.008, edge, sx * (w / 2 - t / 2), 0, depth);
     }
     const bays = w > 1.2 ? 2 : 1;
-    if (bays === 2) kit.box(t, h, depth - 0.02, S.ply, 0, 0, zc);
+    if (bays === 2) kit.box(t, h, depth - 0.02, body, 0, 0, zc);
     const pitch = (h - 0.1) / rows;
     for (let i = 0; i <= rows; i++) {
       const y = 0.05 + i * pitch;
-      kit.box(w - 0.01, t, depth, S.ply, 0, Math.min(y, h - t), zc);
-      kit.box(w - 0.01, t, 0.006, S.plyEdge, 0, Math.min(y, h - t), depth);
+      kit.box(w - 0.01, t, depth, body, 0, Math.min(y, h - t), zc);
+      kit.box(w - 0.01, t, 0.006, edge, 0, Math.min(y, h - t), depth);
     }
     const bayW = (w - t * (bays + 1)) / bays;
     let k = seed;
