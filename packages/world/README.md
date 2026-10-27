@@ -30,7 +30,7 @@ architecture that changed. The sim keeps running: characters keep their place an
 target or held seat is gone, or whose route is now shut, plans the act again, and drops it (a `cancel` event) when
 it cannot. A character on a tile that an object now covers walks off it. A character outside a lot that shrank is
 the one case that moves at once. Applying the same doc twice does nothing and returns `null`. A doc's
-`characters[].at` is used only when the character is new.
+`characters[].at` is used only when the character is new, and an act starts when the next doc adds it.
 
 ## Entries
 

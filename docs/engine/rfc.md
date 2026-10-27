@@ -1,6 +1,7 @@
 # RFC: `@hq/world`, an engine for Sims-like 3D worlds
 
-Status: phase 1 (design and a thin proof). Date: 2026-10-27. Proof: `packages/world/`. Shots: `docs/engine/shots/`.
+Status: phase 1.5 (design, a thin proof, and the fixes from its review). Date: 2026-10-27.
+Proof: `packages/world/`. Shots: `docs/engine/shots/`.
 
 The 3D office grew lane by lane in `src/client/world/`. Layout, props, people, cutaway and rendering are tangled,
 placement is hard-coded per room kind, and two defects the owner reported (the turn bobs, the view flickers) come from
@@ -8,7 +9,7 @@ that tangle. This RFC proposes a small engine for building lots the way a Sims-l
 the app uses through one public entry. The HQ office becomes the first world built on it.
 
 Contents: 1 Goals. 2 The package boundary (decision D16). 3 Layers. 4 Public API. 5 World files. 6 The two defects.
-7 Rendering quality and cost. 8 Agent DX. 9 Alternatives. 10 Migration. 11 Phase 1 proof. 12 Phase 2.
+7 Rendering quality and cost. 8 Agent DX. 9 Alternatives. 10 Migration. 11 Phase 1 proof. 12 Migration order.
 
 ## 1. Goals and non-goals
 
@@ -303,11 +304,18 @@ the package boundary, and state as data. Headless testing is a tie. Both designs
 code was not, so most of that gain came from leaving the renderer, not from the ECS. That is close, and the
 owner's preference breaks the tie: design 3.
 
+The line counts above are from the day of the comparison. Since then the review asked that the comparison import
+only the package's public entries, so the rival now carries its own copy of the motion helpers and its own map of
+held seats: `walker.js` is 103 lines. The sim grew too (`sim/index.js` is 181 lines), for edits at run time, a
+reservation that lives in a component and acts that fail cleanly (3.8, 3.10). The rival has none of that.
+
 What the choice costs, and how it is contained:
 
 - **The step order is spread out.** `sequence.js` starts a step only when a character holds no component of any
-  registered step kind (`ecs.stepKinds()`). A queued step with no system throws an error that names the fix
-  (`no system runs step 'dance'; register one with step: "dance"`).
+  registered step kind (`ecs.stepKinds()`). A queued step with no system cancels the act with a problem that names
+  the fix (`step.unknown`: register a system with `step: "dance"`), and the character stands idle.
+- **A system can break the loop.** It cannot any more: a system that throws is logged once with its name and
+  switched off, and the other systems keep running (`ecs.disabled()` lists it).
 - **A frame per step boundary.** When a step finishes mid-frame, the next one starts on the next frame. That costs
   16 ms per boundary, which no one can see; the rival carried the rest of the frame over.
 - **Queries copy.** A query returns a fresh array of `[id, ...components]`, so systems may add and remove components
@@ -320,16 +328,18 @@ runs in Bun tests.
 
 | Layer | Pure | Knows | Does not know |
 | --- | --- | --- | --- |
-| `model` | yes | the world doc, tiles, edges, rooms, placement, problems | geometry, three.js |
-| `catalog` | yes | object definitions, packs, the primitive kit | where objects are placed |
+| `model` | yes | the world doc, tiles, edges, rooms, problems, the diff of two docs | geometry, three.js |
+| `catalog` | yes | object definitions, packs and their palettes, the primitive kit | where objects are placed |
+| `lot` | yes | the built lot: placement, slots in world space, analysis with fixes, the ASCII map | three.js |
 | `arch` | yes | floors, walls and openings as primitives; the cutaway rule | three.js |
-| `nav` | yes | walkable tiles, A*, slots, reservations, action plans | animation, drawing |
+| `nav` | yes | walkable tiles, A*, slots, action plans | who holds a seat, animation, drawing |
 | `anim` | yes | the rig, clips as keyframes, sampling, blending | meshes |
 | `camera` | yes | the Sims camera rig: state, easing, pose, projection, pixel snap | three.js |
 | `lint` | yes | coplanar faces in a primitive list | where they came from |
-| `sim` | yes | an ECS of placed objects and characters; the step systems; saving its state | meshes, three.js |
+| `sim` | yes | an ECS of characters; the step systems; held seats; edits; saving its state | meshes, three.js |
+| `view` | yes | the frame policy (when to draw, when shadows are stale), the canvas size, edits and the camera calls | three.js |
 | `render` | no | three.js: renderer, lights, shadows, materials, meshes, characters | the world doc's rules |
-| `world` | no | composition: builds a world view from a world file; the frame loop; events | lanes, HQ |
+| `world` | no | the three.js glue: does what the view driver returns; events | lanes, HQ |
 | `ui` (in `render` and `world`) | no | projection for overlays, picking, hover | the app's DOM |
 
 The key decision is that **geometry is data until the last step**. Architecture and objects produce primitive lists
@@ -385,8 +395,9 @@ Colours are palette tokens (`"wood"`, `"fabric"`, `"leaf"`) or hex. Openings def
   crosses an edge only if it has no wall or a passable opening; diagonals need both orthogonal moves open.
 - A* with octile distance; paths are smoothed by dropping collinear tiles.
 - Slots: an object's `slots` give where a character stands (`stand`, tile offsets tried in order), where it ends up
-  (`at`), which way it faces and which clip it plays. `reserve(objectId, slot, who)` makes a slot exclusive.
-- `planAct(lot, nav, character, { do: "sit", target: "chair-1" })` returns steps:
+  (`at`), which way it faces and which clip it plays. Nav keeps no state: who holds a slot is the sim's `holding`
+  component, and `planAct` asks through its `holder(objectId, slot)` option.
+- `planAct(lot, nav, character, { do: "sit", target: "chair-1" }, { holder })` returns steps:
   `walk(path) → turn(facing) → enter(slot, clip) → loop(clip)`, plus the slot to hold. `{ do: "visit", target, wait,
   then }` plans `walk → turn → wait`, then the `then` act from the tile beside the target. The sim runs the steps.
 
@@ -459,22 +470,62 @@ and `ppm` (current pixels per metre). Rules:
 
 ### 3.8 sim
 
-`createSim(lot, nav, { systems })` puts every placed object (`placed`) and character (`character`, `body`, `anim`)
-into an ECS (`createEcs`: entities are ids, components are plain JSON per kind, systems run in a fixed order). `act`
-plans with `planAct`, holds the slot (`holding`) and sets a `queue` of steps. `sequence` starts the next step as a
-component of its kind. `stand`, `walk`, `turn`, `enter`, `wait` and `loop` each run their kind and remove it when
-it is done, and `anim` advances the clips. A host's systems run after the step systems and before `anim`. The whole
-state is `ecs.toJSON()`, and `ecs.load()` restores it. Why an ECS here and not for the lot: 2.12.
+`createSim(lot, nav, { systems })` puts every character (`character`, `body`, `anim`) into an ECS (`createEcs`:
+entities are ids, components are plain JSON per kind, systems run in a fixed order). Placed objects are not
+entities: they are the lot's, and nothing about them changes while the sim runs. `act` plans with `planAct`, sets
+`doing` (the act), `holding` (`{ object, slot }`, the seat it holds) and a `queue` of steps. The held seat exists
+only as that component: `ecs.toJSON()` carries it, `ecs.load()` restores it, and two characters never hold one
+seat. An act that cannot be planned changes nothing. `sequence` starts the next step as a component of its kind.
+`stand`, `walk`, `turn`, `enter`, `wait`, `then` and `loop` each run their kind and remove it when it is done, and
+`anim` advances the clips. `then` plans the visit's next act from where the character stands. A host's systems run
+after the step systems and before `anim`. A system that throws is switched off and logged once with its name. Why an
+ECS here and not for the lot: 2.12.
 
-### 3.9 world
+### 3.9 world and the view driver
 
-`createWorld(canvas, world, opts)` validates the world (throws with every problem), builds the catalog, the lot, the
-nav grid, the sim, the architecture for the current cutaway, the object meshes and the character meshes, and starts
-the frame loop. Each frame steps the sim, then mirrors its components onto the meshes (render sync); the meshes hold
-no state of their own.
-The loop renders on every animation frame while anything changes (camera moving, a character acting, a drag,
-a time change) and draws nothing while the view is still. No frame cap applies during interaction; an optional
-`idleFps` limits only ambient animation (characters idling) when nothing else moves.
+`createWorld(canvas, world, opts)` validates the world (throws with every problem) and makes a view driver
+(`src/view/driver.js`, pure). The driver owns the catalog, the lot, the nav grid, the sim, the camera and the cut
+walls. Each frame, `driver.tick(now, dt)` steps the sim and the camera and returns `{ render, shadows, cut }`.
+`createWorld` builds the architecture for the cut, the object groups and the character meshes, mirrors the sim onto
+them, and draws only when the driver says so. The meshes hold no state of their own.
+
+The frame policy is in the driver, so Bun tests count it:
+
+- **Render** when the camera moves (a pan, a zoom, a turn, an eased focus), a body moves, the cut walls change, or
+  something asked (an edit, a theme or time change, a hover, `invalidate()`).
+- **Redraw the shadow map** only when a body moved, the cut walls changed, or an edit, theme or time change asked.
+  A pan, a zoom or a hover never redraws it.
+- **Nothing else draws.** A clip looping in place (typing, breathing) is not motion: it draws at `idleFps`
+  (default 0, never) and never redraws shadows. No frame cap applies during interaction.
+
+The canvas's backing store is its device-pixel box. A `ResizeObserver` on `device-pixel-content-box` gives it
+exactly. Where a browser has none, the size is rounded to whole device pixels and the CSS size set to match, so the
+browser never resamples the canvas. The renderer's pixel ratio is 1 and the camera takes the DPR (capped at 2).
+
+### 3.10 Edits at run time
+
+Two shapes were possible: an edit API (`addObject`, `moveObject`, `removeObject`, each validated) or one call that
+takes the next whole doc and diffs it. The engine has the second: `world.apply(next)`.
+
+- **The host already makes whole docs.** The office will be a generator from the lane tree to a `WorldDoc` (12,
+  step 2). With `apply`, it calls the generator again and hands over the result. With an edit API, it would have to
+  diff its own docs to find the calls, which is the same diff written once per host.
+- **Idempotent for free.** The same doc twice is a no-op (`diffWorld` finds no change and `apply` returns `null`).
+  A host that re-renders on every state change does no work when nothing moved.
+- **Validation sees the whole result.** An edit API would validate one change at a time and could pass a sequence
+  whose end state is invalid, or reject a valid end state halfway. `apply` validates the next doc whole; a
+  `WorldError` changes nothing.
+- **Only the diff is rebuilt.** `diffWorld(a, b)` names the objects and characters added, removed and changed, and
+  whether the lot or the packs changed. `createWorld` rebuilds those groups only, and the architecture only when
+  the lot changed. App children attached to a rebuilt object stay attached.
+
+The sim keeps running through an edit. New characters spawn at their `at`; removed ones are dropped (their act's
+promise rejects). A character keeps its place and its act. If its held seat or target changed or went away, or its
+route now crosses a blocked tile, it plans the act again from where it stands, and gets a `cancel` event when that
+fails. A character on a tile that an object now covers walks off it. A character outside a lot that shrank is
+moved inside; that is the only teleport. A doc's `characters[].at` applies only to a new character. An act in the
+next doc that the current one did not have starts; acts both docs share are not replayed. So a host sends a worker
+to a desk by adding the act to the doc it generates.
 
 ## 4. The public API
 
@@ -500,7 +551,8 @@ re-exports it and adds the browser half.
  *  @property {{ who: string, do: string, target?: string, slot?: string }[]} [acts] */
 
 /** @typedef {{ doc: WorldDoc, packs: Pack[] }} World */
-/** @typedef {{ id: string, objects: ObjectDef[], palette?: Record<string, string> }} Pack */
+/** @typedef {{ id: string, objects: ObjectDef[],
+ *              palette?: { light: Record<string, string>, dark: Record<string, string> } }} Pack   tokens are the pack's own */
 /** @typedef {{ shape: "box"|"cyl", part: string, size: number[], at: number[], rot?: number, color: string,
  *              finish?: "matte"|"glow"|"glass", owner?: string }} Primitive */
 ```
@@ -514,19 +566,21 @@ re-exports it and adds the browser half.
 | `definePack` | `({ id, objects, palette }) → Pack` |
 | `createCatalog` | `(packs) → Catalog` (`get`, `has`, `list(filter)`, `problems`) |
 | `validateWorld` | `(world) → Problem[]` |
-| `checkPack` | `(pack) → Problem[]` (footprint, slots, coplanar parts) |
+| `checkPack` | `(pack) → Problem[]` (palette shape, colour tokens, clips, footprint, slots, coplanar parts) |
 | `buildLot` | `(world, catalog) → Lot` (tiles, edges, rooms, placed objects with world slots) |
 | `detectRooms` | `(doc) → Room[]` |
+| `diffWorld` | `(docA, docB) → WorldDiff` (`same`, `lot`, `packs`, `objects`, `characters`, `acts`; experimental) |
+| `lotMap` | `(lot, { characters }) → string` (the lot as ASCII, for `check.ts --map`) |
 | `toJSON` / `fromJSON` | `(world) → string`, `(json, packs) → World` |
-| `createNav` | `(lot) → Nav` (`path`, `reserve`, `release`, `walkable`) |
-| `planAct` | `(lot, nav, character, act) → { steps, hold? } \| { problem }` |
-| `createEcs` | `() → Ecs` (`add`, `get`, `has`, `remove`, `query`, `system`, `step`, `toJSON`, `load`; experimental) |
-| `createSim` | `(lot, nav, { systems, emit }) → Sim` (`act`, `step`, `character`, `ecs`; experimental) |
+| `createNav` | `(lot) → Nav` (`path`, `walkable`, `canStep`; no state) |
+| `ACTS`, `planAct` | `(lot, nav, character, act, { at, holder }) → { steps, hold? } \| { problem }` |
+| `createEcs` | `({ onError }) → Ecs` (`add`, `get`, `has`, `remove`, `query`, `system`, `step`, `toJSON`, `load`, `disabled`; experimental) |
+| `createSim` | `(lot, nav, { systems, emit }) → Sim` (`act`, `step`, `apply`, `character`, `ecs`; experimental) |
 | `cutaway` | `(lot, { mode, rot, focus }) → Set<string>` |
 | `buildArchitecture` | `(lot, cut, palette) → Primitive[]` |
 | `lintCoplanar` | `(primitives) → Pair[]` |
 | `RIG`, `CLIPS`, `samplePose`, `blendPose` | the rig and clips as data (experimental) |
-| `createCamera`, `stepCamera`, `cameraPose`, `project`, `unproject` | the camera rig |
+| `createCamera`, `stepCamera`, `cameraPose`, `project`, `unproject`, `focusCamera` | the camera rig |
 | `WALL_H`, `KERB_H`, `WALL_T`, `FLOOR_Y`, `PITCH`, `ZOOMS` | the numbers |
 
 `@hq/world` adds:
@@ -534,7 +588,11 @@ re-exports it and adds the browser half.
 ```js
 /** createWorld(canvas, world, { theme, time, walls, rot, zoom, clock: "raf"|"manual", idleFps, systems }) → WorldView
  *  WorldView:
- *   camera: { rotate(dir), zoom(step), pan(dxPx, dyPx), focusOn(x, z), fit(), pose(), state }
+ *   camera: { rotate(dir), zoom(step), pan(dxPx, dyPx), focusOn(x, z, { ease }), fitBox(box, { ease }), fit(),
+ *             pose(), state }
+ *   roomBox(roomId) → { minX, minZ, maxX, maxZ }      for camera.fitBox
+ *   apply(nextWorldOrDoc) → WorldDiff | null         an edit at run time (3.10)
+ *   invalidate({ shadows }?)                         request a frame for a change the engine cannot see
  *   setWalls(mode, focusRoom?), setTheme("light"|"dark"), setTime("14:00")
  *   act(characterId, act) → Promise<void>          walk to a slot and use it, or visit (walk, wait, then)
  *   character(id) → { x, z, ry, hips, clip, step }
@@ -544,8 +602,9 @@ re-exports it and adds the browser half.
  *   project([x, y, z]) → { x, y, visible }           CSS px, snapped to device pixels
  *   anchor(entityId, name) → [x, y, z] | null        a named point of an object or character
  *   attach(object3d, entityId)                       parent app objects to an entity (experimental)
- *   on("frame"|"pick"|"hover"|"act"|"camera", fn) → off
+ *   on("frame"|"pick"|"hover"|"act"|"cancel"|"error"|"camera", fn) → off
  *   advance(ms)                                       with clock "manual": step and render (tests, shots)
+ *   inspect() → { ..., size: { w, h, dpr, buffer }, stats: { renders, shadowRedraws, frames } }
  *   three: { renderer, scene, camera }              experimental escape hatch
  *   dispose() */
 ```
@@ -630,8 +689,11 @@ Checked against a read-only diagnosis (verified here in the vendored three.js), 
 
 Each one is impossible by construction in the engine: the shadow taps are world-fixed (3.7), the loop has no cap
 during interaction (3.9), the architecture has no overlapping coplanar faces and the lint fails the build if any
-appear (3.6, 8), and the camera snaps to device pixels at rest (3.5). The proof measures it: two frames during a pan
-are compared after undoing the known whole-pixel shift.
+appear (3.6, 8), and the camera snaps to device pixels at rest (3.5). For (5), the shadow map redraws only when a
+character moves, the cut changes or an edit asks, and `test/view.test.ts` counts the redraws. The snap only helps if
+the canvas's backing store is exactly its device pixels, so the engine sizes it from `devicePixelContentBoxSize`
+(3.9). The proof measures it: two frames during a pan are compared after undoing the known whole-pixel shift, and
+two screenshots (what the screen shows) are compared the same way at DPR 1, 1.5 and 2.
 
 ## 7. Rendering quality and cost
 
@@ -717,8 +779,10 @@ adapter that keeps today's `api.js` contract. Nothing in `src/client/world/` cha
 | `outside/` (gen.js, build.js) | an app-side generator that adds ground objects around the lot, or a `packages/world-outside/` pack when a second world wants it | the generator kept; its drawing moves to objects |
 | The desk HUD | positions from `world.project(anchor)`, rounded to `1/dpr` (the engine's projection is pixel-snapped) | kept, rounding changed |
 
-The engine needs three things the proof does not have before the office can move: instancing for repeated objects,
-per-room light at night, and `attach`/`anchor` on characters as well as objects.
+The engine already has `anchor` and `attach` on characters as well as objects, edits at run time (`apply`, 3.10),
+and eased `focusOn` and `fitBox` for the room view. App children attached to an object stay attached when an edit
+rebuilds it. The office still needs instancing for repeated objects (measured first, 12) and per-room light at
+night. The order of the whole migration is in 12.
 
 ## 11. Phase 1 proof
 
@@ -784,25 +848,41 @@ and Ada types at the desk. `day.jpg` is the same view at 14:00. Draw calls: 27 f
 **What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), DPR 2, instancing, per-room
 light, and the HQ office itself.
 
-## 12. Phase 2: what to build first
+## 12. Migration order
 
-1. **The office as a world, behind the adapter.** Write `src/client/office/plan.js` (the lane tree to a `WorldDoc`)
-   and `src/client/office/adapter.js` (today's `api.js` contract on `world.anchor`, `project`, `attach`, `on`). Ship
-   it behind a setting next to the current world. This is the step that proves the boundary. Everything else
-   follows from what it needs. The adapter writes lane state as components (a `lane` component on each worker,
-   for example) and passes its own systems (status, subagent balls) through `createWorld(..., { systems })`.
-   The visit to the lead's desk is the app's setting. When it is on, the adapter sends
-   `act(worker, { do: "visit", target: leadDesk, wait, then: { do: "sit", target: ownChair, clip: "type" } })`.
-   The engine part already exists and is tested (`sim.test.ts`).
-2. **Engine features the office needs**, in that order: `InstancedMesh` for `instance: true` objects (a 12-lane
-   office has 48 desks and chairs); per-room light (a uniform per room, so a lit office glows at night among dark
-   ones); anchors and `attach` on characters (the desk HUD, the subagent balls); model edits at run time
-   (`addObject`, `moveObject`, `removeObject`, validated) so a new lane's desk appears without a rebuild.
-3. **The Japandi pack**, after the two lanes now in `src/client/world/` merge: `furniture.js` and `look.js` reshaped
-   into one `defineObject` file per piece, checked with `check.ts`.
-4. **The small shared changes named in 2.5**: `page.ts` watches `packages/`; root `workspaces` once app tests import
-   app packs.
-5. **Then delete** `src/client/world/{camera,scene,rooms,kit,walk}.js` and `plan.js`'s `wallCuts`/`cameraSide`,
-   in the same change that switches the page to the engine.
-6. **Golden numbers in CI**: `proof.ts` already gives the camera-height range and the pan residual. Turn them into a
-   browser test that fails when the pan residual goes above 0 or the camera height varies.
+The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
+above it has merged. Phase 1.5 is step 1; step 2 has not started.
+
+1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
+   map redraws only on change (3.9). The canvas is sized to its device pixels (3.9). The boundary test closes the
+   holes the review found (globals, `ShaderChunk` writes, `import()` of anything outside the package, deep imports
+   from the app). Packs are checked for colour tokens and clips, and palettes are per theme and per pack. Held seats
+   live in the ECS. Tests use their own fixture. The tools work from any folder, and `check.ts --map` draws the lot.
+   A throwing system is switched off, not fatal. Eased `focusOn` and `fitBox`.
+2. **The lane tree to a `WorldDoc`, as a pure function.** `src/client/office/plan.js` takes the lane tree and returns
+   a doc: team rooms as wall paths, one desk and chair per lane with stable ids, workers as characters, doors that
+   connect every room. It runs headless in Bun. Tests cover 1 lane, a full team, several teams of uneven sizes, and N
+   lanes for N up to the largest office the page supports. Each generated doc passes `validateWorld` and the
+   coplanar lint, every room is reachable, and adding a lane changes only what the diff says (a desk, a chair, a
+   worker, and the room when it grows). It does not render anything yet.
+3. **The Japandi pack**, after the world lanes now in `src/client/world/` merge: `furniture.js` and `look.js`
+   reshaped into one `defineObject` file per piece, with a `{ light, dark }` palette, checked with `check.ts`. Until
+   then the generator places the starter pack's objects.
+4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
+   `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
+   back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the
+   doc did not change. Lane state goes into components (a `lane` component on each worker) and the app's own
+   systems (status, balls) go through `createWorld(..., { systems })`. The walk to the lead's desk is an optional
+   setting: when it is on, the generator adds `{ do: "visit", target: leadDesk, wait, then: { do: "sit", target:
+   ownChair, clip: "type" } }`. The setting chooses between this and today's world; the old world stays until the new
+   one is the default. The small shared changes from 2.5 (`page.ts` watches `packages/`) land here, as their own
+   commit.
+5. **Instancing, measured.** Seed an office of 12 or more lanes and measure draw calls and frame time while panning
+   and walking. Add `InstancedMesh` for `instance: true` objects only if the numbers ask for it, and report the
+   before and after. Per-room light at night belongs here too.
+6. **The outside generator, last.** The city around the office becomes an app-side generator that adds ground
+   objects around the lot, or a separate pack when a second world wants it.
+
+The page switches for good only when step 4's world is the default, and that change deletes
+`src/client/world/{camera,scene,rooms,kit,walk}.js` and `plan.js`'s `wallCuts` and `cameraSide`. Golden numbers in
+CI (the pan residual, the camera height, renders while still) come from `proof.ts` and can be added at any step.
