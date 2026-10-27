@@ -6,6 +6,14 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ### Added
 
+- The engine's own colours can be recoloured. `definePack({ overrides: { light, dark } })` names engine tokens (the
+  wall caps `cap`, the ground `ground` and `ground-dark`, the slab's sides `foundation`, the background `bg`, or any
+  other in `PALETTES`) for every world that uses the pack; a later pack wins. A world doc's optional `palette`
+  (`{ light, dark }`) recolours any token, the engine's or a pack's (`"<pack>/<token>"`), over the packs. `checkPack`
+  names a bad `overrides` map (`pack.overrides`: not split by theme, a token in one theme only, not hex, not an
+  engine token, or the pack's own token) and `validateWorld` a bad doc palette (`world.palette`). `createCatalog`
+  takes `{ palette }` as a second argument. `diffWorld` reports `palette: true` when only the doc's colours changed,
+  and `apply` recolours everything. A doc without a palette is unchanged, and `api.txt` did not change.
 - A wall finish may declare `bands`: `[{ to, color, pattern? }]` from the floor up, for a skirting, battens or a
   rail under the plaster. `to` is metres above the floor top, each higher than the last and below `WALL_H`. Above
   the last band the finish's own colour and pattern show. `buildArchitecture` cuts each wall piece and post at the

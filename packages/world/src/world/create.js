@@ -304,13 +304,15 @@ export function createWorld(canvas, world, opts = {}) {
     apply(next) {
       const diff = driver.apply(next);
       if (!diff) return null;
-      if (diff.packs) palette = driver.catalog.palette(theme);
-      if (diff.lot || diff.packs) { clearArch(); stage.setShadowBox(shadowBox()); }
-      const ids = diff.packs ? driver.lot.objects.map((o) => o.id) : [...diff.objects.added, ...diff.objects.changed];
+      const recolour = diff.packs || diff.palette;
+      if (recolour) palette = driver.catalog.palette(theme);
+      if (diff.lot || recolour) { clearArch(); stage.setShadowBox(shadowBox()); }
+      const ids = recolour ? driver.lot.objects.map((o) => o.id) : [...diff.objects.added, ...diff.objects.changed];
       for (const id of diff.objects.removed) dropObject(id);
       for (const id of ids) buildObject(id);
       for (const id of diff.characters.removed) dropCharacter(id);
-      for (const id of diff.packs ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
+      for (const id of recolour ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
+      if (recolour) applyTime();
       if (!running) draw(driver.tick(0, 0));
       return diff;
     },
