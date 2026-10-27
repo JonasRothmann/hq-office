@@ -21,16 +21,16 @@ const target = (from: string, spec: string) => (spec.startsWith(".") ? resolve(d
 type Import = { spec: string; names: string[]; def: string | null };
 function importsOf(code: string): Import[] {
   const out: Import[] = [];
-  for (const m of code.matchAll(/^import\s+(?:([\w$]+)\s*,?\s*)?(?:\{([^}]*)\}\s*)?(?:from\s*)?(["'])([^"']+)\3;/gm)) {
+  for (const m of code.matchAll(/^import\s+(?:([\w$]+)\s*,?\s*)?(?:\*\s*as\s+[\w$]+\s*)?(?:\{([^}]*)\}\s*)?(?:from\s*)?(["'])([^"']+)\3;/gm)) {
     const names = (m[2] ?? "").split(",").map((s) => s.trim()).filter(Boolean).map((s) => s.split(/\s+as\s+/)[0]);
     out.push({ spec: m[4], names, def: m[1] ?? null });
   }
   return out;
 }
 
-// Folders written ahead of the page that will load them, each with when it will. Their modules still have to link.
-const NOT_LOADED_YET: Record<string, string> = {
-  "office/": "the world doc generator and its packs: the page loads them in step 4 of docs/engine/rfc.md 12",
+// Folders the page never loads, each with why. Their modules still have to link.
+const NOT_LOADED: Record<string, string> = {
+  "office/lab/": "generated offices for the world lab (packages/world/tools/serve.ts), never the page",
 };
 
 // A dynamic import with a literal path (the world's modules are loaded this way, only when the world starts).
@@ -81,7 +81,7 @@ describe("client modules", () => {
       for (const spec of [...importsOf(code).map((i) => i.spec), ...dynamicOf(code)]) { const to = target(f, spec); if (to) visit(to); }
     };
     entries.forEach(visit);
-    expect(modules.filter((f) => !seen.has(f) && !Object.keys(NOT_LOADED_YET).some((dir) => name(f).startsWith(dir))).map(name)).toEqual([]);
+    expect(modules.filter((f) => !seen.has(f) && !Object.keys(NOT_LOADED).some((dir) => name(f).startsWith(dir))).map(name)).toEqual([]);
   });
 
   test("every stylesheet opens with a comment", () => {

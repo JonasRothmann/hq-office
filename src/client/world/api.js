@@ -1,7 +1,7 @@
 // The world's one door for other areas (spec section 6): THREE, frame hooks, desk anchors, projection, parenting.
 // Bus events: "world:ready", "world:select" (lane name), "world:hover" (lane name or null), "world:layout" (the names
-// of the lanes at desks). Either renderer binds itself here: the classic one (world.js) or the engine's
-// (office-view/view.js), so the areas that use this door never know which one draws.
+// of the lanes at desks). The office (office-view/view.js, on the @hq/world engine) binds itself here, so the areas
+// that use this door never reach into the engine.
 import * as THREE from "../vendor/three/three.module.min.js";
 
 export { THREE };
@@ -9,7 +9,7 @@ export { THREE };
 let world = null;
 const frames = new Set();
 
-// The renderer binds itself here when it mounts; the functions below answer null or nothing until then.
+// The office binds itself here when it mounts; the functions below answer null or nothing until then.
 export function bindWorld(w) { world = w; }
 export function runFrame(now, dt) { for (const fn of [...frames]) { try { fn(now, dt); } catch (e) { console.error("world frame hook failed", e); } } }
 

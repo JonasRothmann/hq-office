@@ -1,6 +1,6 @@
 // The lane tree in the page: with no tree the worker card shows no path; with one it shows the lane's level and the
 // chain up to HQ, each step selecting that lane; SETTINGS saves the level names and the card follows them. (The 3D
-// office groups a team's offices in one wing: test/client/world-plan.test.ts.) Needs Chrome (CHROME_BIN); skipped
+// office seats a team in its own rooms: test/client/office-plan.test.ts.) Needs Chrome (CHROME_BIN); skipped
 // without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";

@@ -41,10 +41,11 @@ afterAll(async () => {
 });
 
 test.skipIf(!chromeFound)("settings this browser remembered from before are sent up once", async () => {
-  // A page of this origin that is not the office, to write what an older version left in local storage.
+  // A page of this origin that is not the office, to write what an older version left in local storage: the pixel
+  // room's choices and OFFICE (the renderer choice the office no longer has), which go up and are ignored.
   await page.s("Page.navigate", { url: `${server.base}/api/settings` });
   await until(`document.readyState === "complete"`);
-  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto", performance: "balanced" })); localStorage.setItem("hq-sound", "1")`);
+  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto", performance: "balanced", office: "classic" })); localStorage.setItem("hq-sound", "1")`);
   expect(await serverSettings()).toEqual({});
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
