@@ -1,13 +1,17 @@
-// The owner's settings (sound, performance, level names): kept on the server, with a copy in this browser for the first paint.
+// The owner's settings (sound, performance, level names, the land round the office): kept on the server, with a copy in this browser for the first paint.
 import { emit, on } from "../core/bus.js";
 import { post } from "../core/net.js";
 
 // The owner's choices, not per-view state such as the open tab. The defaults: the chime is off, the office moves
-// smoothly, and the lane tree's levels (one name per depth, comma-separated) are Manager, Lead, Engineer. Choices
+// smoothly, the lane tree's levels (one name per depth, comma-separated) are Manager, Lead, Engineer, and the office
+// stands in a valley. Choices
 // kept on the server for the pixel room of earlier versions (hero, season, hat, theme) are left there untouched.
-export const DEFAULTS = { sound: false, performance: "smooth", levels: "Manager, Lead, Engineer" };
+export const DEFAULTS = { sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", outside: "nature" };
 // How much the 3D office moves, and so what it costs (world/index.js).
 export const PERFORMANCE_CHOICES = ["smooth", "balanced", "saver"];
+// What surrounds the office (world/outside/): a valley, a town, or the garden alone. outsideSeed, when set (REROLL),
+// is what the land grows from; without it the land grows from the owner's name, so each installation has its own.
+export const OUTSIDE_CHOICES = ["nature", "city", "off"];
 const LOCAL_KEY = "hq-settings";
 // Before 0.3.0 the SOUND switch was remembered on its own, under this key.
 const LOCAL_SOUND_KEY = "hq-sound";
@@ -31,6 +35,8 @@ export function withDefaults(v) {
   s.sound = s.sound === true;
   if (!PERFORMANCE_CHOICES.includes(s.performance)) s.performance = DEFAULTS.performance;
   if (typeof s.levels !== "string" || !s.levels.split(",").some((n) => n.trim())) s.levels = DEFAULTS.levels;
+  if (!OUTSIDE_CHOICES.includes(s.outside)) s.outside = DEFAULTS.outside;
+  if (typeof s.outsideSeed !== "string" || !s.outsideSeed || s.outsideSeed.length > 40) delete s.outsideSeed;
   return s;
 }
 
@@ -71,7 +77,7 @@ export async function changeSettings(changes) {
     pending--;
   }
 }
-export const resetSettings = () => changeSettings({ ...DEFAULTS });
+export const resetSettings = () => changeSettings({ ...DEFAULTS, outsideSeed: null });
 
 on("state", (S) => {
   if (!S.settings || S.settings === lastServer) return;

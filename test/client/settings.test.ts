@@ -48,7 +48,7 @@ test.skipIf(!chromeFound)("settings this browser remembered from before are sent
   expect(await serverSettings()).toEqual({});
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS, outside: "nature" });
   expect(await page.evaluate(`document.getElementById("alerts").textContent`)).toBe("SOUND ON");
   await until(`localStorage.getItem("hq-sound") === null`);
   expect(await shownPerformance()).toBe("balanced");
@@ -60,7 +60,7 @@ test.skipIf(!chromeFound)("after the browser's data is cleared, the server's set
   await until(`document.getElementById("alerts").textContent === "SOUND ON"`);
   expect(await shownPerformance()).toBe("balanced");
   expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).performance`)).toBe("balanced");
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS, outside: "nature" });
 });
 
 test.skipIf(!chromeFound)("the server's settings win over a different copy in the browser", async () => {
@@ -83,6 +83,6 @@ test.skipIf(!chromeFound)("a change on the page reaches the server, and one on t
   // RESET puts back what the page offers; the old choices stay on the server, unused
   await page.evaluate(`document.querySelector("[data-reset]").click()`);
   for (let i = 0; i < 100 && (await serverSettings()).sound !== false; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: false, performance: "smooth", levels: LEVELS });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: false, performance: "smooth", levels: LEVELS, outside: "nature" });
   expect(errors).toEqual([]);
 });

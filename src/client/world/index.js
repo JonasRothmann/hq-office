@@ -3,7 +3,7 @@
 // A click on a worker or a desk selects its lane like a click on its name anywhere else (card/card.js select()).
 import { mountWorld } from "./world.js";
 import { on } from "../core/bus.js";
-import { S } from "../core/state.js";
+import { S, CONFIG } from "../core/state.js";
 import { select, selected } from "../card/card.js";
 import { effectiveTheme } from "../theme/index.js";
 import { settings } from "../settings/prefs.js";
@@ -42,14 +42,19 @@ function hqOf(S) {
 function render(S) {
   if (!world || !S?.lanes) return;
   const hq = hqOf(S);
+  // the owner's name (the land's seed) comes with the first state: set it before the first build
+  world.setOutside(settings.outside, seedOf(settings));
   world.setHq(hq.name, hq.status);
   world.setLanes(S.lanes, S.vitals ?? {});
 }
 
+// The land grows from the owner's name, until REROLL picks another seed.
+const seedOf = (s) => s.outsideSeed || CONFIG.owner || "hq";
+
 function start() {
   const first = S;
   const hq = first ? hqOf(first) : { name: "hq" };
-  world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets() });
+  world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets(), outside: settings.outside, outsideSeed: seedOf(settings) });
   world.setPerformance(settings.performance);
   world.setSelected(selected);
   world.setPaused(document.documentElement.classList.contains("roomopen")); // a room opened before this module ran
@@ -62,7 +67,7 @@ function start() {
 
   on("state", render);
   on("theme", (t) => world.setTheme(t));
-  on("settings", (s) => world.setPerformance(s.performance));
+  on("settings", (s) => { world.setPerformance(s.performance); world.setOutside(s.outside, seedOf(s)); });
   on("select", (lane) => world.setSelected(lane));
   on("stage", (what) => world.setPaused(what === "room"));
   on("world:select", (lane) => { if (S?.lanes.some((l) => l.name === lane)) select(lane, true); });

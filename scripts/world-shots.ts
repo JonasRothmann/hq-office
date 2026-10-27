@@ -4,9 +4,9 @@
 //   bun scripts/world-shots.ts [--only=SUBSTRING] [--out=DIR]
 //
 // Each shot is the lab at 1440x900 with a query (theme, lanes, rot, zoom, focus). A PNG over ~400 KB is saved as a
-// JPEG at quality 85 instead. The showroom shots (`--only=showroom`: the lab's ?scene=showroom, UI off) are always
-// JPEGs of at most 400 KB, in docs/design/nordic. WebGL runs on SwiftShader, so it works without a GPU (and slowly
-// under load).
+// JPEG at quality 85 instead. The showroom shots (`--only=showroom`: the lab's ?scene=showroom, UI off) and the
+// outside shots (`--only=outside-`, into docs/design/outside) are always JPEGs of at most 400 KB. WebGL runs on
+// SwiftShader, so it works without a GPU (and slowly under load).
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { newSession, freePort, startChrome } from "./room-hash.ts";
@@ -25,9 +25,21 @@ export const SHOTS: [string, string][] = [
   ["light-close", "theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
   ["light-poses", "theme=light&lanes=3&statuses=hq_turn,done,stale&zoom=2&focus=0,1"],
   ["light-4-rot1", "theme=light&lanes=4&rot=1"],
+  // the land around the office (src/client/world/outside/): --only=outside- writes them to docs/design/outside/
+  ["outside-nature-light-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=0"],
+  ["outside-nature-light-mid", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=1&focus=22,14"],
+  ["outside-nature-dark-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=dark&zoom=0"],
+  ["outside-nature-light-big", "scene=outside&mode=nature&seed=3&lot=60x40&theme=light"],
+  ["outside-city-light-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=0"],
+  ["outside-city-light-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=1&focus=20,-14"],
+  ["outside-city-dark-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=0"],
+  ["outside-city-dark-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=1&focus=20,-14"],
+  ["outside-city-light-big", "scene=outside&mode=city&seed=3&lot=60x40&theme=light"],
+  ["outside-city-light-rot1", "scene=outside&mode=city&seed=11&lot=24x14&theme=light&zoom=0&rot=1"],
 ];
 
-// The Nordic studio's showroom (one team room, the HQ suite, the break area), always JPEG, into docs/design/nordic.
+// The showroom (one team room, the HQ suite, the break area, in the office's own look), always JPEG; room=N dresses
+// the team room as the Nth of a floor.
 export const SHOWROOM: [string, string][] = [
   ["showroom-light-mid", "scene=showroom&theme=light&ui=0&zoom=1&at=10.5,3"],
   ["showroom-dark-mid", "scene=showroom&theme=dark&ui=0&zoom=1&at=10.5,3"],
@@ -41,15 +53,19 @@ export const SHOWROOM: [string, string][] = [
   // closer than the near step, to judge faces and clothes
   ["showroom-light-people", "scene=showroom&theme=light&ui=0&ppm=170&at=3.4,2.4"],
   ["showroom-light-people-break", "scene=showroom&theme=light&ui=0&ppm=150&at=16.2,2.3"],
+  ["showroom-light-room1", "scene=showroom&theme=light&ui=0&zoom=2&at=3.6,2.6&room=1"],
+  ["showroom-light-room2", "scene=showroom&theme=light&ui=0&zoom=2&at=3.6,2.6&room=2"],
+  ["showroom-light-room3", "scene=showroom&theme=light&ui=0&zoom=2&at=3.6,2.6&room=3"],
+  ["showroom-light-room4", "scene=showroom&theme=light&ui=0&zoom=2&at=3.6,2.6&room=4"],
 ];
 
 if (import.meta.main) {
   const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
   const outArg = process.argv.find((a) => a.startsWith("--out="))?.slice(6);
   const out = resolve(ROOT, outArg ?? "docs/design/shots");
-  const nordic = resolve(ROOT, outArg ?? "docs/design/nordic");
+  const outside = resolve(ROOT, outArg ?? "docs/design/outside");
   mkdirSync(out, { recursive: true });
-  mkdirSync(nordic, { recursive: true });
+  mkdirSync(outside, { recursive: true });
   const server = serveLab(freePort());
   const chrome = await startChrome({ webgl: true });
   const errors: string[] = [];
@@ -57,12 +73,13 @@ if (import.meta.main) {
     const { s, evaluate } = await newSession(chrome.cdp, errors);
     await s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     for (const [name, query] of [...SHOTS, ...SHOWROOM]) {
-      const dir = name.startsWith("showroom") ? nordic : out;
+      const dir = name.startsWith("outside-") ? outside : out;
       if (only && !name.includes(only)) continue;
       const t0 = Date.now();
       errors.length = 0;
       await s("Page.navigate", { url: "about:blank" });
-      await s("Page.navigate", { url: `http://127.0.0.1:${server.port}/docs/design/world-lab.html?${query}` });
+      const page = query.includes("scene=outside") ? "docs/design/outside/lab.html" : "docs/design/world-lab.html";
+      await s("Page.navigate", { url: `http://127.0.0.1:${server.port}/${page}?${query}` });
       let ready = false;
       for (let i = 0; i < 1200 && !ready; i++) {
         if (errors.some((e) => /Error/.test(e))) break; // a module or script error: the page will never be ready
@@ -74,7 +91,7 @@ if (import.meta.main) {
       const png = Buffer.from((await s("Page.captureScreenshot", { format: "png" })).data, "base64");
       for (const ext of ["png", "jpg"]) { const f = join(dir, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }
       let file = join(dir, `${name}.png`), bytes: Buffer = png;
-      if (png.length > MAX_BYTES || dir === nordic) {
+      if (png.length > MAX_BYTES || name.startsWith("showroom") || name.startsWith("outside-")) {
         for (const quality of [85, 78, 70, 60]) {
           bytes = Buffer.from((await s("Page.captureScreenshot", { format: "jpeg", quality })).data, "base64");
           if (bytes.length <= MAX_BYTES) break;
@@ -82,7 +99,7 @@ if (import.meta.main) {
         file = join(dir, `${name}.jpg`);
       }
       writeFileSync(file, bytes);
-      const info = await evaluate("(() => { const r = world.renderer.info.render; return `${r.calls} draw calls, ${Math.round(r.triangles / 1000)}k triangles`; })()").catch(() => "");
+      const info = await evaluate("(() => { const r = window.__outsideCost ?? world.renderer.info.render; return `${window.__outsideCost ? 'outside: ' : ''}${r.calls} draw calls, ${Math.round(r.triangles / 1000)}k triangles`; })()").catch(() => "");
       console.log(`${name}: ${file.slice(ROOT.length + 1)} ${(bytes.length / 1024).toFixed(0)} KB in ${((Date.now() - t0) / 1000).toFixed(1)} s; ${info}${errors.length ? `; errors: ${errors.slice(0, 3).join(" | ")}` : ""}`);
     }
   } finally {
