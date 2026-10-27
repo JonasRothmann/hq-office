@@ -3,8 +3,9 @@
 // does only what tick() and apply() return; tests run it headless.
 //
 // The policy: draw while the camera moves, a character moves, a host system says it is busy, or something was
-// invalidated (an edit, a theme or time change, a hover, a resize). Redraw the shadow map only when a character
-// moved, the cut walls changed, or an edit, theme or time change asked for it. A clip looping in place (breathing,
+// invalidated (an edit, a theme or time change, a hover, a resize). The step that ends a motion is drawn too: the
+// camera's snapped pose at rest and the clip a cross-fade ends on. Redraw the shadow map only when a character moved
+// or changed pose, the cut walls changed, or an edit, theme or time change asked for it. A clip looping in place (breathing,
 // typing) is not motion: it draws at idleFps (default 0, never) and never redraws shadows. Nothing else draws.
 import { analyse } from "../lot/lot.js";
 import { WorldError, errorsOf } from "../model/problems.js";
@@ -12,6 +13,7 @@ import { fromJSON } from "../model/world.js";
 import { diffWorld } from "../model/diff.js";
 import { createNav } from "../nav/nav.js";
 import { createSim } from "../sim/index.js";
+import { FADE } from "../sim/motion.js";
 import { cutaway, WALL_MODES } from "../arch/cutaway.js";
 import { createCamera, stepCamera, rotateCamera, zoomCamera, panCamera, fitCamera, focusCamera, ZOOMS } from "../camera/rig.js";
 
@@ -83,6 +85,8 @@ export function createDriver(world, opts = {}) {
   }
   bodiesMoved();
   cutNow();
+  // A cross-fade ran during the last step (a limb moved, so its shadow did): fadeT has already advanced by dt.
+  const fading = (dt) => sim.ecs.query("anim").some(([, a]) => a.from && a.fadeT - dt < FADE);
 
   const invalidate = ({ shadows = false } = {}) => { pending.render = true; if (shadows) pending.shadows = true; };
 
@@ -108,9 +112,11 @@ export function createDriver(world, opts = {}) {
      */
     tick(now, dtMs) {
       stats.frames++;
-      const moving = stepCamera(cam, dtMs);
+      // a camera that was moving at the start of this step changed the pose, even on the step that brings it to rest
+      const moving = !!(cam.turn || cam.zooming || cam.moving);
+      stepCamera(cam, dtMs);
       const busy = sim.step(dtMs / 1000);
-      const moved = bodiesMoved();
+      const moved = bodiesMoved() || fading(dtMs / 1000);
       const cutChanged = cutNow();
       const ambient = idleFps > 0 && last.size > 0 && now - lastDraw >= 1000 / idleFps - 1;
       if (!(moving || busy || moved || cutChanged || pending.render || ambient)) return NONE;
