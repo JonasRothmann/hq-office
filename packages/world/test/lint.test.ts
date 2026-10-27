@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildLot, lotPrims, cutaway, lintCoplanar, checkPack, definePack, defineObject, WALL_MODES } from "@hq/world/model";
 import { Kit } from "../src/catalog/kit.js";
+import { clashes, allPairs } from "../src/lint/coplanar.js";
 import tiny from "./fixtures/house.world.js";
 
 const T = 0.15;
@@ -81,4 +82,24 @@ describe("coplanar lint", () => {
     expect(cutaway(lot, { mode: "up" }).size).toBe(0);
     expect(cutaway(lot, { mode: "down" }).size).toBe(lot.walls.size);
   });
+
+  test("the sweep finds exactly the pairs the plain scan finds, in the same order, among thousands of crowded parts", () => {
+    // a fixed pseudo-random crowd: boxes on a few shared levels and grid lines (many touching edge to edge, some
+    // nudged a few mm, some overlapping), boxes turned by a quarter or an odd angle, and cylinders
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
+    const k = new Kit();
+    for (let i = 0; i < 3000; i++) {
+      const nudge = pick([0, 0, 0, 0.004, -0.006, 0.0005]);
+      const at = [pick([0, 0.5, 1, 1.5, 2, 3.25]) + Math.floor(rnd() * 12) + nudge, pick([0, 0.4, 0.74, 0.74, 1.2]), pick([0, 0.5, 1, 2.5]) + Math.floor(rnd() * 12)];
+      const size = [pick([0.5, 1, 0.25, 0.6]), pick([0.04, 0.4, 0.74]), pick([0.5, 1, 0.3])];
+      const r = rnd();
+      if (r < 0.1) k.cyl(`c${i}`, pick([0.2, 0.3]), size[1], at, "oak");
+      else k.box(`b${i}`, size as any, at, "oak", r < 0.25 ? { rot: [0, pick([Math.PI / 2, Math.PI, 0.3]), 0] } : {});
+    }
+    const sweep = clashes(k.prims), plain = clashes(k.prims, allPairs);
+    expect(sweep.length).toBeGreaterThan(100);
+    expect(sweep).toEqual(plain);
+  }, 60_000);
 });

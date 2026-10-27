@@ -17,5 +17,6 @@ export { createSim } from "../sim/index.js";
 export { cutaway, WALL_MODES } from "../arch/cutaway.js";
 export { buildArchitecture, objectPrims, lotPrims } from "../arch/build.js";
 export { lintCoplanar, describePair, describePairs } from "../lint/coplanar.js";
+export { lintViews } from "../lint/views.js";
 export { RIG, CLIPS, samplePose, blendPose } from "../anim/clips.js";
 export { PITCH, ZOOMS, createCamera, stepCamera, cameraPose, project, unproject, rotateCamera, zoomCamera, panCamera, fitCamera, focusCamera } from "../camera/rig.js";
