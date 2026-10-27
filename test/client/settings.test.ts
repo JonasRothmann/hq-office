@@ -18,7 +18,7 @@ const until = async (expr: string, ms = 8000) => {
 };
 const serverSettings = async () => (await (await fetch(`${server.base}/api/settings`)).json()).settings;
 const open = async () => {
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`document.getElementById("alerts")?.textContent.startsWith("SOUND") && !!document.getElementById("card")?.innerHTML`);
 };
 const shownPerformance = () => page.evaluate(`(() => { const p = document.getElementById("settings"); if (p.hidden) document.getElementById("settingsBtn").click(); return document.querySelector('[data-set="performance"].on')?.dataset.val; })()`);

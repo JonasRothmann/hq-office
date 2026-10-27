@@ -28,6 +28,9 @@ function importsOf(code: string): Import[] {
   return out;
 }
 
+// A dynamic import with a literal path (the world's modules are loaded this way, only when the world starts).
+const dynamicOf = (code: string) => [...code.matchAll(/\bimport\(\s*(["'])([^"']+)\1\s*\)/g)].map((m) => m[2]);
+
 const exportsOf = new Map<string, Set<string>>();
 for (const f of modules) exportsOf.set(f, new Set(transpiler.scan(readFileSync(f, "utf8")).exports));
 
@@ -50,6 +53,7 @@ describe("client modules", () => {
         for (const n of imp.names) expect({ from: name(f), to: name(to!), name: n, exported: exported.has(n) }).toEqual({ from: name(f), to: name(to!), name: n, exported: true });
         if (imp.def) expect({ from: name(f), to: name(to!), default: exported.has("default") }).toEqual({ from: name(f), to: name(to!), default: true });
       }
+      for (const spec of dynamicOf(code)) expect({ from: name(f), spec, exists: existsSync(target(f, spec) ?? "") }).toEqual({ from: name(f), spec, exists: true });
     });
   }
 
@@ -59,7 +63,8 @@ describe("client modules", () => {
     const visit = (f: string) => {
       if (seen.has(f)) return;
       seen.add(f);
-      for (const imp of importsOf(readFileSync(f, "utf8"))) { const to = target(f, imp.spec); if (to) visit(to); }
+      const code = readFileSync(f, "utf8");
+      for (const spec of [...importsOf(code).map((i) => i.spec), ...dynamicOf(code)]) { const to = target(f, spec); if (to) visit(to); }
     };
     entries.forEach(visit);
     expect(modules.filter((f) => !seen.has(f)).map(name)).toEqual([]);

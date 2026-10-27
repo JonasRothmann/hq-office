@@ -25,7 +25,7 @@ const size = (width: number, height: number, mobile: boolean) => Promise.all([
   page.s("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: 5 }),
 ]);
 const load = async (hash = "") => {
-  await page.s("Page.navigate", { url: `${server.base}/${hash}` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off${hash}` });
   await until(`!!document.getElementById("card")?.innerHTML && !!window.__roomsReady`);
 };
 const press = (key: string) => page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);

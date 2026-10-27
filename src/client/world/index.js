@@ -1,7 +1,6 @@
 // The 3D office on the page: the world drawn on #world behind the panels, fitted to the area right of the question
 // column and under the status pill, driven by the state (lanes, vitals, HQ), the theme and the owner's settings.
 // A click on a worker or a desk selects its lane like a click on its name anywhere else (card/card.js select()).
-import { mountWorld } from "./world.js";
 import { on } from "../core/bus.js";
 import { S, CONFIG } from "../core/state.js";
 import { select, selected } from "../card/card.js";
@@ -51,7 +50,9 @@ function render(S) {
 // The land grows from the owner's name, until REROLL picks another seed.
 const seedOf = (s) => s.outsideSeed || CONFIG.owner || "hq";
 
-function start() {
+// The world's module (and three.js with it) is fetched only here, so a page without the world never loads it.
+async function start() {
+  const { mountWorld } = await import("./world.js");
   const first = S;
   const hq = first ? hqOf(first) : { name: "hq" };
   world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets(), outside: settings.outside, outsideSeed: seedOf(settings) });
@@ -113,5 +114,9 @@ function start() {
   });
 }
 
-if (canvas && webgl()) start();
-else Object.defineProperty(window, "__world", { value: Object.freeze({ rooms: [], desks: [], stage: null, rotation: 0, unavailable: true }) });
+// ?world=off: the panels only, and three.js is never fetched (for tests and work on the panels).
+if (canvas && new URLSearchParams(location.search).get("world") !== "off" && webgl()) start();
+else {
+  document.documentElement.dataset.world = "off";
+  Object.defineProperty(window, "__world", { value: Object.freeze({ rooms: [], desks: [], stage: null, rotation: 0, unavailable: true }) });
+}

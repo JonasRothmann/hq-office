@@ -42,7 +42,7 @@ beforeAll(async () => {
   await server.post("/api/sync", {}); // HQ seen in w8:p1
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector("#noteText")`);
 }, 30_000);
 
