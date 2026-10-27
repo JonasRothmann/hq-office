@@ -52,7 +52,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => { await server?.stop(); await chrome?.close(); });
 
-test.skipIf(!chromeFound)("a second ⌘Enter after an answer does not answer the next question", async () => {
+test.skipIf(!chromeFound)("a second ⌘Enter after an answer does not answer the next question, however long it waits", async () => {
   await clear();
   const A = await ask({ lane: "bravo", kind: "decision", title: "Pick one", body: "Long.\n```\nx\n```", options: ["Yes", "No"], tier: "blocking" });
   const B = await ask({ lane: "charlie", kind: "action", title: "Rotate the key, then DONE" });
@@ -63,15 +63,41 @@ test.skipIf(!chromeFound)("a second ⌘Enter after an answer does not answer the
   await until(`document.querySelector('#reader .askview .opt.sel')?.dataset.opt === "Yes"`);
   await key("Enter", META);
   await until(`${readerAsk} === "${B}"`);
-  // The next question's send is not ready the moment it shows: a fresh action is needed.
-  expect(await page.evaluate(`document.querySelector("#reader .askview [data-send]").disabled`)).toBe(true);
-  await Bun.sleep(300);
+  // The advanced question is unconfirmed: its send is off, now and after any wait, and ⌘Enter sends nothing.
+  const send = `document.querySelector("#reader .askview [data-send]")`;
+  expect(await page.evaluate(`${send}.disabled`)).toBe(true);
   await key("Enter", META);
-  await Bun.sleep(1200);
+  await Bun.sleep(3000);
+  expect(await page.evaluate(`${send}.disabled`)).toBe(true);
+  await key("Enter", META);
+  await Bun.sleep(500);
   expect((await answerOf(A))?.answer).toBe("Yes");
   expect(await answerOf(B)).toBeNull();
-  // Once the guard is over, SEND is ready again and a deliberate press sends.
+  expect(await page.evaluate(`${readerAsk}`)).toBe(String(B));
+  // A click in the question confirms it: the send is on, and a deliberate ⌘Enter sends.
+  await page.evaluate(`document.querySelector("#reader .askview .rv-title").click()`);
+  await until(`${send}.disabled === false`);
+  await key("Enter", META);
+  await until(`!document.querySelector('#hud .ask[data-ask="${B}"]')`);
+  expect((await answerOf(B))?.answer).toBe("done");
+}, 60_000);
+
+test.skipIf(!chromeFound)("picking with 1–9 on an advanced question confirms it, and the send still needs its own press", async () => {
+  await clear();
+  const A = await ask({ lane: "bravo", kind: "action", title: "First thing, then DONE", body: "Steps.\n```\nmake\n```" });
+  const B = await ask({ lane: "charlie", kind: "decision", title: "Second thing", body: "Long.\n```\nx\n```", options: ["Yes", "No"] });
+  await load();
+  await page.evaluate(`${card(A)}.click()`);
+  await until(`${readerAsk} === "${A}" && !document.querySelector("#reader .askview [data-send]").disabled`);
+  await key("Enter", META);
+  await until(`${readerAsk} === "${B}"`);
+  await key("2");
+  await until(`document.querySelector('#reader .askview .opt.sel')?.dataset.opt === "No"`);
   await until(`document.querySelector("#reader .askview [data-send]").disabled === false`);
+  expect(await answerOf(B)).toBeNull();
+  await key("Enter", META);
+  for (let i = 0; i < 100 && !(await answerOf(B)); i++) await Bun.sleep(50);
+  expect((await answerOf(B))?.answer).toBe("No");
 }, 60_000);
 
 test.skipIf(!chromeFound)("a held ⌘Enter (key repeat) sends nothing", async () => {

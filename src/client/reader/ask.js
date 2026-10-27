@@ -31,27 +31,21 @@ export function canSend(a, d = drafts.get(a.id) || {}) {
 }
 // Sends in flight, by ask id: their buttons stay off until the server answers, whatever redraws them.
 const sending = new Set();
-// After an answer lands the next question can sit where the last one was, its send ready (an ACTION's DONE, an INFO's
-// OK, a pick kept from before). A second ⌘Enter or a double click would answer it unseen. So for GUARD_MS no send is
-// ready, except on a question the owner has since picked or typed in.
-const GUARD_MS = 1200;
-let guardUntil = 0;
-const freed = new Set();
-function guard() {
-  guardUntil = Date.now() + GUARD_MS;
-  freed.clear();
-  setTimeout(() => { for (const a of S?.open ?? []) emit("draft", a.id); }, GUARD_MS + 20);
-}
-// Whether a send button is on: the answer is complete, it is not already on its way, and no guard holds it.
-export const ready = (a, d = drafts.get(a.id) || {}) => canSend(a, d) && !sending.has(a.id) && (Date.now() >= guardUntil || freed.has(a.id));
-// The owner did something to this question: the guard no longer holds it.
-export function touched(id) { if (Date.now() < guardUntil && !freed.has(id)) { freed.add(id); emit("draft", id); } }
+// After an answer lands the reader moves on to the next question, and that one can have its send ready (an ACTION's
+// DONE, an INFO's OK, a pick kept from before). A second ⌘Enter or a double click would answer it unseen. So a question
+// the reader showed by itself is unconfirmed, and no send is ready until the owner does something to it: a click in
+// its view, a pick, typing, R. No timer: it waits as long as the owner takes. A question the owner opened is confirmed.
+const unconfirmed = new Set();
+// Whether a send button is on: the answer is complete, it is not already on its way, and the owner has touched it.
+export const ready = (a, d = drafts.get(a.id) || {}) => canSend(a, d) && !sending.has(a.id) && !unconfirmed.has(a.id);
+// The owner did something to this question: it is confirmed.
+export function touched(id) { if (unconfirmed.delete(id)) emit("draft", id); }
 // Picks an option, or unpicks it; the stack and the reader both draw the pick.
 export function pick(id, opt) {
   const d = drafts.get(id) || {};
   d.opt = d.opt === opt ? undefined : opt;
   drafts.set(id, d);
-  freed.add(id);
+  unconfirmed.delete(id);
   emit("draft", id);
 }
 // The open questions in the stack's order: the one after id, else the one before it.
@@ -88,9 +82,8 @@ export async function sendAnswer(id, btn) {
     drafts.delete(id);
     clearImages(id);
     sending.delete(id);
-    guard();
-    // Answered from the reader: on to the next question, the way a list of them is read.
-    if (reading) { if (next != null && askOf(next)) show("question", next); else hide(); }
+    // Answered from the reader: on to the next question, the way a list of them is read, unconfirmed.
+    if (reading) { if (next != null && askOf(next)) show("question", next, { advanced: true }); else hide(); }
   } catch (err) {
     sending.delete(id);
     toast(err.message);
@@ -176,12 +169,13 @@ function render() {
     part("rcomp").innerHTML = composer(a.id, `<textarea rows="1" placeholder="${hint}. ⌘↩ sends.">${esc(d.text || "")}</textarea>`, `<button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-send>${sendLabel(a)}</button>`);
   }
   const send = part("rcomp").querySelector("[data-send]");
-  if (send) { send.disabled = !ready(a); send.textContent = sendLabel(a); }
+  if (send) { send.disabled = !ready(a); send.textContent = sendLabel(a); send.title = unconfirmed.has(a.id) ? "Click or pick an option to answer this one" : ""; }
 }
 
 defineView("question", {
   el,
-  show(id, { same }) {
+  show(id, { same, advanced }) {
+    if (advanced) unconfirmed.add(id); else touched(id);
     if (!same) { shownId = id; compFor = null; secFor = ""; menuOpen = false; gone = false; part("rv-body").scrollTop = 0; }
     render();
   },
@@ -196,6 +190,7 @@ export const sendInReader = () => { const b = part("rcomp").querySelector("[data
 
 el.addEventListener("click", async (e) => {
   const t = e.target;
+  touched(shownId);
   const sum = t.closest(".tiermenu > summary");
   if (sum) { e.preventDefault(); toggleMenu(); return; }
   const opt = t.closest(".opt");
@@ -240,6 +235,7 @@ on("attach", (key) => { if (key === String(shownId)) render(); });
 on("state", (S, keys) => {
   if (keys && !keys.has("open")) return;
   for (const a of S.open) { const d = drafts.get(a.id); if (d?.opt && !a.options.includes(d.opt)) { delete d.opt; emit("draft", a.id); } }
+  for (const id of unconfirmed) if (!S.open.some((a) => a.id === id)) unconfirmed.delete(id);
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
   for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
 });

@@ -467,7 +467,9 @@ and `ppm` (current pixels per metre). Rules:
 - `WebGLRenderer({ antialias: true })`: MSAA on the default framebuffer, `outputColorSpace` sRGB,
   `NeutralToneMapping` (keeps flat albedo hues), DPR capped at 2.
 - Light rig: hemisphere (sky/ground) + ambient + one directional sun with shadows. `setTime("hh:mm")` moves the sun
-  and blends its colour through day `#FFFFFF`, sunset `#D96D32`, dusk `#575757` and night `#3E5898`.
+  and blends its colour through day `#FFFFFF`, sunset `#D96D32`, dusk `#575757` and night `#3E5898`. Night keeps
+  less of the day's fill. Each object with a `light` anchor has its own warm spot light aimed down (the `lamp` token),
+  lit by night only and never batched.
 - Shadows: one 2048² map. The shadow camera is orthographic, fitted to the lot's bounds in light space, and its
   centre is snapped to whole shadow texels, so a sun that moves (time of day) or a lot that grows never makes the
   shadows swim. The map redraws only when a caster moves (`autoUpdate = false`, `needsUpdate` on change).
@@ -742,11 +744,11 @@ Costs are estimates for a 2020-era laptop GPU (Apple M1 or Intel Iris Xe) at 144
 | Anti-aliasing | MSAA 4× on the default framebuffer | ~free on tile-based Apple GPUs; 10-20 % fill on Iris Xe |
 | Resolution | DPR capped at 2 | ×4 pixels vs DPR 1; the main GPU cost of everything below |
 | Tone mapping | Neutral, exposure 1 | free (in the material shader) |
-| Lights | ambient + hemisphere + 1 directional | < 0.3 ms |
+| Lights | ambient + hemisphere + 1 directional; by night one warm spot per lamp, no shadow | < 0.3 ms by day |
 | Shadows | 2048² PCF, 5 taps, world-fixed rotation, lot-fitted, texel-snapped, redrawn only on change | ~0.5-1 ms per redraw; 5 taps per pixel otherwise |
 | Contact darkening | baked vertex shade at wall bases and under objects | free |
 | Materials | Lambert, vertex colours, ≤ 4 classes | one program each |
-| Draw calls | architecture 3-4; one per type per class (a batch of instances), one per character | HQ at 12 lanes 42 calls, 83 with a shadow redraw; 24 lanes 54 and 107 |
+| Draw calls | architecture 3-4; one per type per class (a batch of instances), one per character | HQ at 12 lanes 42 calls, 83 with a shadow redraw; 24 lanes 54 and 107. With the polish pass's pieces: 55 and 109; 65 and 129 |
 | Frame loop | render on change at display rate; nothing when still | 0 when idle |
 | Later, optional | half-resolution SAO or GTAO | 2-6 ms; has its own noise, so only with a world-fixed pattern |
 | Later, optional | edge outline (depth and normal) | ~1 ms |
@@ -923,6 +925,21 @@ triangles (limit 450k). The ms per frame the tool prints is not a real measureme
 A screenshot of the 12-lane office before and after differs in 10 pixels of 1,024,000 (day) and 5 (night). At 12 lanes
 the scene now has 23 meshes for objects, 13 for characters and 6 for architecture (before: 100, 143, 6).
 
+**Draw calls, after the polish pass** (merged onto step 5; same command): the Japandi pieces add object types, and
+each new type is one more batch, so one call per material in each pass. At 12 lanes the objects are 36 meshes
+instead of 23, and the calls 109 with a shadow redraw instead of 83 (13 more meshes, drawn twice).
+
+| Lanes | Objects | Characters | Calls with shadow redraw / without | Triangles with / without |
+| --- | --- | --- | --- | --- |
+| 4 | 36 | 5 | 69 / 35 | 45k / 22k |
+| 12 | 103 | 13 | 109 / 55 | 112k / 56k |
+| 24 | 165 | 25 | 129 / 65 | 185k / 93k |
+
+`--only idle` on the test house after the merge: still for 3 s, 0 renders; a walk and sit, 77 renders and 77 shadow
+redraws; still again, 1; an `attach()`, 1 render and 1 shadow redraw. Pieces on cut walls hide in batches too: in
+the 12-lane office 15 of its 25 wall pieces hide from the default view (17 turned half way round), a pick or hover
+there never names them, and a doc palette recolours the batches.
+
 **Tests**: `bun test packages/world docs/engine/compare test/client/modules.test.ts test/client/world-package.test.ts`
 gives 288 pass, 0 fail (phase 1: 157; phase 1.5: 225). The package has 212 tests (phase 1: 94; phase 1.5: 162).
 The second review's probes are package tests now: `settle.test.ts` (8; 7 failed before the fix), `edits.test.ts`
@@ -1005,6 +1022,15 @@ step 4 has not started.
    - Cost: a 12-lane lot is about 2,200 primitives, 450 draw calls and 75k triangles. The bands make a wall four
      boxes instead of one, which makes the coplanar lint about a third slower. Step 5 brought the draw calls down
      (below).
+   - The polish pass, against the old renderer's shots. Engine: a pack's `overrides` and a doc's `palette`
+     recolour the engine's own tokens (the pack makes the wall tops smoked oak and the ground moss); lamps are warm
+     downlights and night keeps less fill, so rooms pool under their lamps; a piece tagged `wall` hides while its
+     wall is cut (`hangsOnCut`). Pack: the lit つくる sign, a clock, a corkboard, two prints and radiators, the long
+     dining table, a bike, a dog in its bed, a record player and a lounge chair; plants with leaf clusters; a rug
+     that shows on oak; cords that read. Each team room varies by index: a corkboard or a print between the windows,
+     a clock and a print on the side walls, and a signature (the bike, the dog or the reading chair). Halls get a
+     paper pendant every four tiles. Lights reach through walls (no point shadows), so a lamp by an outer wall
+     warms the ground outside.
 4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
    `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
    back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the
@@ -1028,7 +1054,8 @@ step 4 has not started.
    without). The lint is faster too: the coplanar lint sweeps each plane's runs along one axis, and `lintViews` lints
    every distinct primitive of all views once. `test/client/office-plan.test.ts` went from 33 s (14 s CPU) to about 5 s
    CPU, one 24-lane lint from about 0.6 s to 0.2 s, and its 24 views from about 6 s to under 1 s. Per-room light at night
-   is not part of this step and is still open.
+   came with the polish pass (step 3): each lamp is its own warm downlight, outside the batches. A batched piece on a
+   cut wall hides the way a hovered one does: its instance shrinks to nothing, and hover never shows it.
 6. **The outside generator, last.** The city around the office becomes an app-side generator that adds ground
    objects around the lot, or a separate pack when a second world wants it.
 

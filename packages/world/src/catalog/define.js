@@ -67,13 +67,15 @@ const themesOf = (palette = {}) => (palette.light || palette.dark ? { light: pal
 /**
  * A pack: its objects with ids prefixed by the pack's id, and its palette: { light: { token: hex }, dark: {...} }.
  * Objects and finishes in the pack name their own tokens bare ("cushion"); they resolve to "<pack>/cushion".
+ * `overrides` ({ light, dark } like the palette) recolours the engine's own tokens in every world that uses the pack:
+ * the wall caps (`cap`), the ground (`ground`, `ground-dark`), the slab's sides (`foundation`), the background (`bg`).
  * @stability stable  @returns {Pack}
  */
-export function definePack({ id, objects, palette = { light: {}, dark: {} } }) {
+export function definePack({ id, objects, palette = { light: {}, dark: {} }, overrides }) {
   const own = Object.freeze(tokensOf(palette));
   const local = (c) => (typeof c === "string" && own.includes(c) ? `${id}/${c}` : c);
   return Object.freeze({
-    id, palette,
+    id, palette, ...(overrides === undefined ? {} : { overrides }),
     objects: objects.map((o) => Object.freeze({
       ...o, id: o.id.includes("/") ? o.id : `${id}/${o.id}`, pack: id, tokens: own, ...(o.color ? { color: local(o.color) } : {}),
       ...(Array.isArray(o.bands) ? { bands: o.bands.map((b) => (b && typeof b === "object" ? { ...b, color: local(b.color) } : b)) } : {}),
@@ -90,10 +92,13 @@ export function definePack({ id, objects, palette = { light: {}, dark: {} } }) {
  * @property {object[]} problems
  */
 
-/** @stability stable  @returns {Catalog} */
-export function createCatalog(packs) {
+/**
+ * opts.palette: a world doc's own colours ({ light, dark }), over the engine's, the packs' and their overrides.
+ * @stability stable  @returns {Catalog}
+ */
+export function createCatalog(packs, { palette: docPalette } = {}) {
   const byId = new Map(), problems = [];
-  const extra = { light: {}, dark: {} };
+  const extra = { light: {}, dark: {} }, over = { light: {}, dark: {} };
   packs.forEach((pack, pi) => {
     if (!pack?.id || !Array.isArray(pack.objects)) {
       problems.push(problem("pack.shape", `packs[${pi}]`, "this is not a pack", "import a pack's index.js (its default export is definePack({ id, objects }))"));
@@ -105,12 +110,17 @@ export function createCatalog(packs) {
     }
     for (const [theme, map] of Object.entries(themesOf(pack.palette))) for (const [k, v] of Object.entries(map)) extra[theme][`${pack.id}/${k}`] = v;
   });
+  // the packs' overrides in pack order (a later pack wins), then the doc's own colours
+  for (const map of [...packs.map((p) => p?.overrides), docPalette]) {
+    if (!map || typeof map !== "object") continue;
+    for (const [theme, m] of Object.entries(themesOf(map))) if (over[theme] && m && typeof m === "object") Object.assign(over[theme], m);
+  }
   return {
     get: (id) => byId.get(id),
     has: (id) => byId.has(id),
     ids: () => [...byId.keys()],
     list: ({ kind, tag } = {}) => [...byId.values()].filter((o) => (!kind || o.kind === kind) && (!tag || o.tags.includes(tag))),
-    palette: (theme = "light") => ({ ...(PALETTES[theme] ?? PALETTES.light), ...(extra[theme] ?? extra.light) }),
+    palette: (theme = "light") => ({ ...(PALETTES[theme] ?? PALETTES.light), ...(extra[theme] ?? extra.light), ...(over[theme] ?? over.light) }),
     problems,
   };
 }
@@ -156,6 +166,10 @@ function packProblems(pack) {
   }
   // the tokens this pack's objects may name: the engine's, and the pack's own (bare, or with the pack's prefix)
   const own = tokensOf(pal);
+  if (pack.overrides !== undefined) {
+    out.push(...colourMapProblems("pack.overrides", `${pack.id}.overrides`, pack.overrides, Object.keys(PALETTES.light),
+      (t) => (own.includes(t) ? `'${t}' is this pack's own token: set it in palette, not overrides` : null)));
+  }
   const known = new Set([...Object.keys(PALETTES.light), ...own.map((t) => `${pack.id}/${t}`)]);
   const colour = (c, where, part) => {
     if (typeof c !== "string" || isHex(c) || known.has(c)) return;
@@ -188,6 +202,28 @@ function packProblems(pack) {
     else checkOpening(o, prims, at, out);
     for (const line of describePairs(lintCoplanar(prims))) out.push(problem("prim.coplanar", at, line, "they will z-fight (flicker); move one by at least 2 mm along the normal, or make a flat part a box at least 1 cm thick that stands on the other"));
   });
+  return out;
+}
+
+// What is wrong with a map that recolours known tokens ({ light: { token: "#hex" }, dark: {...} }): a pack's overrides
+// or a world doc's palette. known: the tokens it may name; own(t): the fix for a token it may not name, or null.
+export function colourMapProblems(code, where, map, known, own = () => null) {
+  const ok = (m) => m && typeof m === "object";
+  if (!ok(map) || !ok(map.light) || !ok(map.dark)) {
+    return [problem(code, where, "the colours are not split by theme", `write { light: { cap: "#hex" }, dark: { cap: "#hex" } }; a token needs a colour in both`)];
+  }
+  const out = [];
+  const light = Object.keys(map.light), dark = Object.keys(map.dark);
+  for (const t of light.filter((t) => !dark.includes(t))) out.push(problem(code, `${where}.dark`, `token '${t}' has a light colour but no dark one`, `add ${JSON.stringify(t)}: "#hex" to ${where}.dark`));
+  for (const t of dark.filter((t) => !light.includes(t))) out.push(problem(code, `${where}.light`, `token '${t}' has a dark colour but no light one`, `add ${JSON.stringify(t)}: "#hex" to ${where}.light`));
+  for (const theme of ["light", "dark"]) for (const [t, v] of Object.entries(map[theme])) {
+    if (!isHex(v)) out.push(problem(code, `${where}.${theme}.${t}`, `${JSON.stringify(v)} is not a hex colour`, `write it as "#rrggbb"`));
+  }
+  for (const t of new Set([...light, ...dark])) {
+    if (known.includes(t)) continue;
+    const near = closest(t, known);
+    out.push(problem(code, where, `'${t}' is not a token it can recolour (it would change nothing)`, own(t) ?? (near.length ? `did you mean ${near.join(" or ")}?` : `name one of ${known.slice(0, 12).join(", ")}`)));
+  }
   return out;
 }
 

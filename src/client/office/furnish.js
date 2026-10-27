@@ -15,26 +15,48 @@ export const SEATS_AT = [
 
 // The rest of a team room, and its windows (tiles on the back wall, used where that wall is an outer one). The chairs
 // close rows 1 and 4, so the back row and the east column are the only way from the west seats to the door at (5, 4):
-// both stay clear past the corners. A linen rug under the island, a paper pendant over each facing pair; the plant in
-// the west corner varies by room.
+// both stay clear past the corners. A linen rug under the island, a paper pendant over each facing pair, radiators
+// under the inner windows. What hangs on the walls does not block. Each room varies by its index (D15): the plant in
+// the west corner, the pier between the windows (a corkboard or a print), a clock and a print on the side walls, and
+// one signature piece in the front west corner, a dead end no worker needs (a 2×1 one closes (1, 4), and the chair
+// at (2, 4) is still reached from (3, 4)).
 const CORNER = ["japandi/plant-fig", "japandi/plant-snake", "japandi/plant-monstera", "japandi/vase"];
+const SIGNATURE = [
+  { type: "japandi/bike", facing: "n" },
+  { type: "japandi/dog-bed", facing: "e" },
+  { type: "japandi/lounge-chair", facing: "e" },
+];
 export const TEAM_ROOM = {
-  objects: (room) => [
-    { id: "rug", type: "japandi/rug-linen", at: [1, 1], facing: "s" },
-    { id: "pendant-w", type: "japandi/pendant-washi", at: [1, 2], facing: "s" },
-    { id: "pendant-e", type: "japandi/pendant-washi", at: [4, 2], facing: "s" },
-    { id: "plant", type: CORNER[hash(room.id) % CORNER.length], at: [0, 0], facing: "s" },
-    { id: "lamp", type: "japandi/floor-lamp", at: [6, 0], facing: "s" },
-  ],
+  objects: (room) => {
+    const i = room.index ?? hash(room.id), odd = i % 2 === 1;
+    return [
+      { id: "rug", type: "japandi/rug-linen", at: [1, 1], facing: "s" },
+      { id: "pendant-w", type: "japandi/pendant-washi", at: [1, 2], facing: "s" },
+      { id: "pendant-e", type: "japandi/pendant-washi", at: [4, 2], facing: "s" },
+      { id: "plant", type: CORNER[hash(room.id) % CORNER.length], at: [0, 0], facing: "s" },
+      { id: "lamp", type: "japandi/floor-lamp", at: [6, 0], facing: "s" },
+      { id: "radiator-w", type: "japandi/radiator", at: [2, 0], facing: "s" },
+      { id: "radiator-e", type: "japandi/radiator", at: [4, 0], facing: "s" },
+      { id: "pier", type: odd ? "japandi/print-tall" : "japandi/corkboard", at: [3, 0], facing: "s" },
+      { id: "wall-w", type: odd ? "japandi/print-wide" : "japandi/clock", at: [0, 1], facing: "e" },
+      { id: "wall-e", type: odd ? "japandi/clock" : "japandi/print-wide", at: [6, 1], facing: "w" },
+      { id: "signature", ...SIGNATURE[i % SIGNATURE.length], at: [0, 4] },
+    ];
+  },
   windows: [[1, 0], [2, 0], [4, 0], [5, 0]],
 };
 
 // The HQ suite (7×5, back north; its door is on the south or east side at the front corner, kept clear): HQ's desk
-// facing the camera under a ceramic pendant, the bookshelf and the workbench on the back wall, a sofa on a boro rug.
+// facing the camera under a ceramic pendant, the bookshelf, the record player under the lit sign and the workbench on
+// the back wall, a print on the west wall, a sofa on a boro rug.
 export const SUITE_AT = {
   seat: { desk: [2, 2], deskFacing: "n", chair: [3, 1], chairFacing: "s", beside: [4, 2] },
   objects: [
     { id: "bookshelf", type: "japandi/bookshelf", at: [0, 0], facing: "s" },
+    { id: "records", type: "japandi/record-player", at: [2, 0], facing: "s" },
+    { id: "sign", type: "japandi/sign", at: [2, 0], facing: "s" },
+    { id: "clock", type: "japandi/clock", at: [3, 0], facing: "s" },
+    { id: "print", type: "japandi/print-wide", at: [0, 2], facing: "e" },
     { id: "workbench", type: "japandi/workbench", at: [4, 0], facing: "s" },
     { id: "plant", type: "japandi/plant-fig", at: [6, 0], facing: "s" },
     { id: "pendant", type: "japandi/pendant-ceramic", at: [2, 2], facing: "s" },
@@ -45,39 +67,54 @@ export const SUITE_AT = {
   ],
 };
 
-// The break area (its own size w × d is 5 or 7 wide; the floor stage's is 12 deep, the hall coming in on its west
-// side at z 5..7): the kitchenette, and a sofa and tea table under a ceramic pendant, on the back wall; the tatami
-// lounge in the west corner beside a shoji screen; the tea corner where the room is wide; a lamp, a sideboard and a
-// fig along the east wall, and a sofa and tea table on a boro rug at the front of the west side, where it is deep.
-// The rest stays open for standing.
+// The break area, in two shapes. The floor stage's is 5 wide and 12 deep, the hall coming in on its west side at
+// z 5..7 and the front door at (3, 11): the kitchenette and the tea corner on the back wall, the long dining table
+// under a paper pendant, the tatami lounge behind a shoji screen on the east side, a lamp, a sideboard and a fig along
+// the east wall, and a sofa and tea table on a boro rug at the front of the west side, the bike parked by the front
+// wall. Row 4 and the tiles between the hall and the door stay open, so every corner is reached. The wings' is 7 wide
+// and 5 deep: the kitchenette, a sofa and tea table under a ceramic pendant and the tea corner on the back wall, the
+// tatami lounge in the west corner beside a shoji screen. Each has a clock and a print on its walls.
 export const BREAK_AT = {
-  objects: (w, d) => [
-    { id: "kitchenette", type: "japandi/kitchenette", at: [0, 0], facing: "s" },
-    { id: "sofa", type: "japandi/sofa", at: [2, 0], facing: "s" },
-    { id: "tea-table", type: "japandi/tea-table", at: [2, 1], facing: "s" },
-    { id: "pendant", type: "japandi/pendant-ceramic", at: [2, 1], facing: "s" },
-    { id: "tatami", type: "japandi/tatami", at: [0, 3], facing: "s" },
-    { id: "shoji", type: "japandi/shoji", at: [2, 4], facing: "s" },
-    ...(w >= 7
-      ? [{ id: "plant", type: "japandi/plant-monstera", at: [4, 0], facing: "s" }, { id: "tea-corner", type: "japandi/tea-corner", at: [5, 0], facing: "s" }]
-      : [{ id: "plant", type: "japandi/plant-monstera", at: [w - 1, 0], facing: "s" }]),
-    ...(d >= 9
-      ? [
-        { id: "lamp", type: "japandi/floor-lamp", at: [w - 1, 5], facing: "w" },
-        { id: "sideboard", type: "japandi/sideboard", at: [w - 1, 6], facing: "w" },
-        { id: "fig", type: "japandi/plant-fig", at: [w - 1, 8], facing: "w" },
-        { id: "rug", type: "japandi/rug-boro", at: [0, 8], facing: "s" },
-        { id: "front-table", type: "japandi/tea-table", at: [0, 8], facing: "n" },
-        { id: "front-pendant", type: "japandi/pendant-ceramic", at: [0, 8], facing: "n" },
-        { id: "front-sofa", type: "japandi/sofa", at: [0, 9], facing: "n" },
-        { id: "front-lamp", type: "japandi/floor-lamp", at: [0, 10], facing: "s" },
-      ]
-      : []),
-  ],
+  objects: (w, d) => (d >= 9
+    ? [
+      { id: "kitchenette", type: "japandi/kitchenette", at: [0, 0], facing: "s" },
+      { id: "tea-corner", type: "japandi/tea-corner", at: [2, 0], facing: "s" },
+      { id: "plant", type: "japandi/plant-monstera", at: [w - 1, 0], facing: "s" },
+      { id: "clock", type: "japandi/clock", at: [w - 1, 1], facing: "w" },
+      { id: "dining", type: "japandi/dining-table", at: [0, 2], facing: "s" },
+      { id: "pendant", type: "japandi/pendant-washi", at: [1, 2], facing: "s" },
+      { id: "print", type: "japandi/print-tall", at: [w - 1, 3], facing: "w" },
+      { id: "tatami", type: "japandi/tatami", at: [w - 2, 5], facing: "s" },
+      { id: "shoji", type: "japandi/shoji", at: [w - 2, 7], facing: "s" },
+      { id: "lamp", type: "japandi/floor-lamp", at: [w - 1, 8], facing: "w" },
+      { id: "sideboard", type: "japandi/sideboard", at: [w - 1, 9], facing: "w" },
+      { id: "fig", type: "japandi/plant-fig", at: [w - 1, 11], facing: "w" },
+      { id: "rug", type: "japandi/rug-boro", at: [0, 8], facing: "s" },
+      { id: "front-table", type: "japandi/tea-table", at: [0, 8], facing: "n" },
+      { id: "front-pendant", type: "japandi/pendant-ceramic", at: [0, 8], facing: "n" },
+      { id: "front-sofa", type: "japandi/sofa", at: [0, 9], facing: "n" },
+      { id: "front-lamp", type: "japandi/floor-lamp", at: [0, 10], facing: "s" },
+      { id: "bike", type: "japandi/bike", at: [0, 11], facing: "n" },
+    ]
+    : [
+      { id: "kitchenette", type: "japandi/kitchenette", at: [0, 0], facing: "s" },
+      { id: "sofa", type: "japandi/sofa", at: [2, 0], facing: "s" },
+      { id: "tea-table", type: "japandi/tea-table", at: [2, 1], facing: "s" },
+      { id: "pendant", type: "japandi/pendant-ceramic", at: [2, 1], facing: "s" },
+      { id: "tatami", type: "japandi/tatami", at: [0, 3], facing: "s" },
+      { id: "shoji", type: "japandi/shoji", at: [2, 4], facing: "s" },
+      { id: "plant", type: "japandi/plant-monstera", at: [4, 0], facing: "s" },
+      { id: "tea-corner", type: "japandi/tea-corner", at: [5, 0], facing: "s" },
+      { id: "clock", type: "japandi/clock", at: [4, 0], facing: "s" },
+      { id: "print", type: "japandi/print-wide", at: [0, 1], facing: "e" },
+    ]),
 };
 
-// Types that hang overhead or lie flat: they do not block, so a worker may stand under or on them.
-export const OVER = new Set(["japandi/rug-linen", "japandi/rug-boro", "japandi/pendant-washi", "japandi/pendant-ceramic"]);
+// Types that hang overhead, lie flat or hang on a wall: they do not block, so a worker may stand under or on them.
+export const OVER = new Set([
+  "japandi/rug-linen", "japandi/rug-boro", "japandi/pendant-washi", "japandi/pendant-ceramic",
+  "japandi/radiator", "japandi/clock", "japandi/corkboard", "japandi/print-tall", "japandi/print-wide", "japandi/sign",
+]);
 
 export function hash(s) {
   let h = 2166136261;
@@ -92,6 +129,7 @@ export const FOOT = {
   "japandi/desk": [2, 1], "japandi/sofa": [2, 1], "japandi/tea-table": [2, 1], "japandi/kitchenette": [2, 1],
   "japandi/bookshelf": [2, 1], "japandi/sideboard": [2, 1], "japandi/workbench": [2, 1], "japandi/tea-corner": [2, 1], "japandi/shoji": [2, 1],
   "japandi/pendant-ceramic": [2, 1], "japandi/pendant-washi": [2, 2], "japandi/tatami": [2, 2],
+  "japandi/bike": [2, 1], "japandi/record-player": [2, 1], "japandi/dining-table": [4, 2],
   "japandi/rug-boro": [3, 2], "japandi/rug-linen": [5, 4],
 };
 

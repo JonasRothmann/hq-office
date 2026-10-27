@@ -3,7 +3,7 @@
 // office's (they turn it). They act on one target, marked KEYS: the card used last, or the reader. A held key repeats
 // only J and K: a repeated ⌘Enter, Enter or pick is dropped.
 import { $, toast } from "../core/dom.js";
-import { askOf, pick, pickInReader, ready, sendAnswer, sendInReader, toggleMenu } from "../reader/ask.js";
+import { askOf, pick, pickInReader, ready, sendAnswer, sendInReader, toggleMenu, touched } from "../reader/ask.js";
 import { sendReplyInReader } from "../reader/update.js";
 import { close, current } from "../reader/shell.js";
 import { focused, keyTarget, move, open, openFocused } from "./stack.js";
@@ -85,7 +85,7 @@ document.addEventListener("keydown", (e) => {
   } else if (k === "r" || k === "R") {
     e.preventDefault();
     if (keyTarget()?.where === "stack") openFocused({ focus: true });
-    else document.querySelector("#reader .rview:not([hidden]) .rv-foot textarea")?.focus();
+    else { if (current?.kind === "question") touched(current.ref); document.querySelector("#reader .rview:not([hidden]) .rv-foot textarea")?.focus(); }
   } else if (k === "m" || k === "M") {
     const t = target();
     if (!t) return;

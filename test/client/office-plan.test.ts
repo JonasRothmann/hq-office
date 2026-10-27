@@ -135,6 +135,7 @@ function owners(r: any, hq = "hq") {
   return new Map(r.doc.objects.map((o: any) => {
     const [kind, ...rest] = o.id.split(":");
     const owner = rest.join(":");
+    if (kind === "hall-light") return [o.id, o.at.join(",")]; // a hall's light keeps its tile as the hall grows
     return [o.id, kind === "desk" || kind === "chair" ? seat.get(owner) : room.get(owner)];
   }));
 }

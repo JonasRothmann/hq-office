@@ -173,11 +173,13 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
   field). Cmd-Enter and 1 to 9 act on it and nothing else. A long card is never their target outside the reader:
   they say to open it first. Before, the reader's question won over a card just used, so a pick on one card and
   Cmd-Enter answered another.
-- No send right after an answer. When an answer lands the next question can sit where the last one was with its send
-  ready (an ACTION's DONE, an INFO's OK, a pick kept from before). For 1.2 s after an answer lands, no send button is
-  on and Cmd-Enter sends nothing, except on a question the owner picked or typed in since. Held keys do not repeat a
-  send or a pick. We chose this guard over making the advance wait for the send: the advance already waits for it,
-  and the stray press comes after (a second Cmd-Enter, or a double click that lands on the next card's SEND).
+- No send on a question the reader moved to by itself. When an answer lands the next question can sit where the last
+  one was with its send ready (an ACTION's DONE, an INFO's OK, a pick kept from before). That question is unconfirmed:
+  its send button is off and Cmd-Enter and 1 to 9 do not send it, however long it waits, until the owner touches it
+  (a click in its view, a pick, typing, R). A question the owner opened is confirmed from the start. Held keys do not
+  repeat a send or a pick. We chose a touch rule over a timer: a timer failed under load and let a stray press send
+  "done" later. We chose it over making the advance wait for the send: the advance already waits for it, and the
+  stray press comes after (a second Cmd-Enter, or a double click that lands on the next card's SEND).
 - A send in flight keeps its button off until the server answers, whatever redraws it. A reply to an update and a
   message to a room clear only the box they were sent from, though the reader may have moved on.
 - On a phone the reader covers the stack. A question that arrives meanwhile shows as a red banner at the reader's top
