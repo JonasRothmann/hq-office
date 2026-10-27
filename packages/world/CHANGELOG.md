@@ -24,6 +24,14 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ### Changed
 
+- `createWorld` draws the objects of a type with two or more copies as one batch: an `InstancedMesh` per material,
+  an instance per object. `instance: false` on a definition opts out; `instance: true` is now the default. Each
+  object keeps an anchor group (`object:<id>`) for `attach()`, `pick` and `hover`; a batched object's meshes are its
+  batch's (`batch:<type>`), so the anchor holds only what the host attached. Hover lifts the object out of its batch
+  and highlights its own copy. An edit redraws only the types of the objects it touched. A character is one
+  `SkinnedMesh` per material, bound to the rig's bones, instead of a mesh per joint. A 12-lane office draws 83 calls
+  with a shadow redraw instead of 497 (42 instead of 249 without), 24 lanes 107 instead of 861; the triangles are
+  the same, and a shot of the office differs in 10 pixels of a million. No export changed.
 - `lintCoplanar` skips two faces in one plane when their bounding boxes are apart, before it clips them. The
   findings are the same; linting a lot with many like objects (an office of 24 desks, in 24 views) takes 3 s
   instead of 16 s. No export changed, so `api.txt` did not.

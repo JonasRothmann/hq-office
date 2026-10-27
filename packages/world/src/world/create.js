@@ -1,8 +1,9 @@
 // createWorld: a world file on a canvas. The driver (view/driver.js, pure) owns the lot, the sim, the camera and
-// the frame policy; this file is the three.js side. It builds the architecture for the cut walls, one group per
-// object and one mesh per character, mirrors the sim onto them, and draws only when the driver says so: nothing while
-// the view is still, and the shadow map only when a character moved or an edit asked. apply() takes an edited doc
-// and rebuilds only what changed. The canvas's backing store matches its device pixels (view/size.js).
+// the frame policy; this file is the three.js side. It builds the architecture for the cut walls, an anchor group per
+// object (its meshes, or an instance in its type's batch) and one skinned mesh per character, mirrors the sim onto
+// them, and draws only when the driver says so: nothing while the view is still, and the shadow map only when a
+// character moved or an edit asked. apply() takes an edited doc and rebuilds only what changed: the objects it
+// touched and their types' batches. The canvas's backing store matches its device pixels (view/size.js).
 import * as THREE from "three";
 import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
@@ -13,8 +14,9 @@ import { createDriver } from "../view/driver.js";
 import { canvasSize } from "../view/size.js";
 import { createStage } from "../render/stage.js";
 import { createMaterials } from "../render/materials.js";
-import { primsToGroup } from "../render/meshes.js";
+import { primsToGroup, primsToGeometries } from "../render/meshes.js";
 import { buildCharacter } from "../render/character.js";
+import { planBatches, staleTypes, typesOf } from "../view/batches.js";
 
 const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
 
@@ -104,11 +106,16 @@ export function createWorld(canvas, world, opts = {}) {
   }
   function clearArch() { for (const g of archCache.values()) { if (g !== arch) disposeGroup(g); } if (arch) { scene.remove(arch); disposeGroup(arch); arch = null; } archCache.clear(); archKey = ""; }
 
-  // --- objects: one group per object, in its own frame (attach() parents app objects to it)
+  // --- objects: one anchor group per object, in its own frame (attach() parents app objects to it; pick and hover name
+  // it). A type with one copy draws in its objects' anchors (a "body" group each); a type with more draws as a batch,
+  // an InstancedMesh per material with an instance per object (view/batches.js). An edit redraws only the types it
+  // touched.
   const objectsGroup = new THREE.Group();
   objectsGroup.name = "objects";
   scene.add(objectsGroup);
-  const objectGroups = new Map(), lamps = new Map();
+  const objectGroups = new Map(), lamps = new Map(), typeMeshes = new Map();
+  let plan = planBatches([]), byId = new Map(), byIdLot = null;
+  const objectOf = (id) => { if (byIdLot !== driver.lot) { byIdLot = driver.lot; byId = new Map(driver.lot.objects.map((o) => [o.id, o])); } return byId.get(id); };
   function dropObject(id) {
     const g = objectGroups.get(id);
     const kept = g ? g.children.filter((c) => !c.userData.engine) : [];
@@ -117,16 +124,16 @@ export function createWorld(canvas, world, opts = {}) {
     if (l) { scene.remove(l); l.dispose(); lamps.delete(id); }
     return kept;
   }
-  function buildObject(id) {
+  // The anchor and the lamp; drawType gives it its meshes.
+  function placeObject(id) {
     const kept = dropObject(id);
-    const o = driver.lot.objects.find((x) => x.id === id);
+    const o = objectOf(id);
     if (!o) return;
-    const g = primsToGroup(buildPrims(o.def), palette, materials, { name: `object:${o.id}` });
+    const g = new THREE.Group();
+    g.name = `object:${o.id}`;
     g.position.set(...o.pos);
     g.rotation.y = o.q * (Math.PI / 2);
     g.userData.entity = o.id;
-    for (const m of g.children) m.userData.engine = true;
-    g.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
     for (const c of kept) g.add(c);
     objectsGroup.add(g);
     objectGroups.set(o.id, g);
@@ -136,7 +143,70 @@ export function createWorld(canvas, world, opts = {}) {
       scene.add(l);
       lamps.set(o.id, l);
     }
-    if (hovered === o.id) { hovered = null; highlight(o.id); }
+  }
+  const bodyOf = (o, name) => {
+    const body = primsToGroup(buildPrims(o.def), palette, materials, { name });
+    body.userData.engine = true;
+    body.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
+    return body;
+  };
+  function undrawType(type) {
+    for (const m of typeMeshes.get(type) ?? []) { m.parent?.remove(m); disposeGroup(m); if (m.isInstancedMesh) m.dispose(); }
+    typeMeshes.delete(type);
+  }
+  function drawType(type) {
+    undrawType(type);
+    const ids = plan.batches.get(type) ?? plan.single.get(type);
+    if (!ids) return;
+    const made = [];
+    if (plan.batches.has(type)) {
+      for (const [key, geo] of primsToGeometries(buildPrims(objectOf(ids[0]).def), palette)) {
+        const [finish, pattern] = key.split("|");
+        const mesh = new THREE.InstancedMesh(geo, materials.get(finish, pattern || null), ids.length);
+        ids.forEach((id, i) => mesh.setMatrixAt(i, matrixOf(objectOf(id))));
+        mesh.computeBoundingSphere();
+        mesh.castShadow = finish !== "glass";
+        mesh.receiveShadow = finish !== "glow";
+        mesh.name = `batch:${type}`;
+        mesh.userData = { finish, ids };
+        objectsGroup.add(mesh);
+        made.push(mesh);
+      }
+    } else {
+      for (const id of ids) { const body = bodyOf(objectOf(id), "body"); objectGroups.get(id).add(body); made.push(body); }
+    }
+    typeMeshes.set(type, made);
+  }
+  const _place = new THREE.Object3D();
+  function matrixOf(o) {
+    _place.position.set(...o.pos);
+    _place.rotation.set(0, o.q * (Math.PI / 2), 0);
+    _place.updateMatrix();
+    return _place.matrix;
+  }
+  const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
+  // Hover lifts an object out of its batch (its instance shrinks to nothing and its own body stands in its place)
+  // and turns its matte meshes to the highlight.
+  function lift(id, on) {
+    const g = objectGroups.get(id), type = plan.typeOf.get(id);
+    if (!g) return;
+    if (plan.batches.has(type)) {
+      const i = plan.batches.get(type).indexOf(id);
+      const o = objectOf(id); // gone after an edit that removed it, which redraws its batch anyway
+      if (o) for (const m of typeMeshes.get(type) ?? []) { m.setMatrixAt(i, on ? HIDDEN : matrixOf(o)); m.instanceMatrix.needsUpdate = true; }
+      const old = g.getObjectByName("lifted");
+      if (old) { g.remove(old); disposeGroup(old); }
+      if (on && o) g.add(bodyOf(o, "lifted"));
+    }
+    g.traverse((m) => {
+      if (!m.isMesh || m.userData.finish !== "matte") return;
+      if (on) { m.userData.mat = m.material; m.material = materials.highlight; } else if (m.userData.mat) m.material = m.userData.mat;
+    });
+  }
+  function setHover(id) {
+    if (hovered) lift(hovered, false);
+    hovered = id && objectGroups.has(id) ? id : null;
+    if (hovered) lift(hovered, true);
   }
 
   // --- characters: the sim owns their state; the meshes only mirror it (renderSync)
@@ -223,7 +293,9 @@ export function createWorld(canvas, world, opts = {}) {
   }
 
   applyTime();
-  for (const o of driver.lot.objects) buildObject(o.id);
+  plan = planBatches(driver.lot.objects);
+  for (const o of driver.lot.objects) placeObject(o.id);
+  for (const type of typesOf(plan)) drawType(type);
   for (const id of sim.characters()) buildCharacterMesh(id);
   syncArch();
   if (opts.startActs !== false) driver.startActs();
@@ -247,23 +319,20 @@ export function createWorld(canvas, world, opts = {}) {
     const r = canvas.getBoundingClientRect();
     const x = clientX - r.left, y = clientY - r.top;
     ray.setFromCamera(new THREE.Vector2((x / r.width) * 2 - 1, -(y / r.height) * 2 + 1), camera);
-    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity);
+    for (const m of meshes.values()) m.refreshBounds();
+    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => entityOf(h));
     const ground = unproject(pose, [x, y], FLOOR_Y);
     const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
     const lot = driver.lot;
-    if (hit) return { kind: meshes.has(hit.object.userData.entity) ? "character" : "object", id: hit.object.userData.entity, tile };
+    if (hit) { const id = entityOf(hit); return { kind: meshes.has(id) ? "character" : "object", id, tile }; }
     if (tile[0] < 0 || tile[1] < 0 || tile[0] >= lot.w || tile[1] >= lot.d) return null;
     return { kind: "tile", tile, room: lot.roomAt.get(tileKey(...tile)) };
   }
+  // an instance names its object through its batch's ids
+  const entityOf = (h) => h.object.userData.entity ?? h.object.userData.ids?.[h.instanceId];
   function highlight(id) {
     if (id === hovered) return;
-    const swap = (gid, on) => objectGroups.get(gid)?.traverse((m) => {
-      if (!m.isMesh || m.userData.finish !== "matte") return;
-      if (on) { m.userData.mat = m.material; m.material = materials.highlight; } else if (m.userData.mat) m.material = m.userData.mat;
-    });
-    if (hovered) swap(hovered, false);
-    hovered = id;
-    if (id) swap(id, true);
+    setHover(id);
     driver.invalidate();
     if (!running) render();
   }
@@ -290,9 +359,12 @@ export function createWorld(canvas, world, opts = {}) {
     setTheme(t) {
       theme = t === "dark" ? "dark" : "light";
       palette = driver.catalog.palette(theme);
+      const h = hovered;
+      setHover(null);
       clearArch();
-      for (const o of driver.lot.objects) buildObject(o.id);
+      for (const type of typesOf(plan)) drawType(type);
       for (const id of sim.characters()) buildCharacterMesh(id);
+      setHover(h);
       applyTime();
       if (!running) draw(driver.tick(0, 0));
     },
@@ -307,8 +379,15 @@ export function createWorld(canvas, world, opts = {}) {
       if (diff.packs) palette = driver.catalog.palette(theme);
       if (diff.lot || diff.packs) { clearArch(); stage.setShadowBox(shadowBox()); }
       const ids = diff.packs ? driver.lot.objects.map((o) => o.id) : [...diff.objects.added, ...diff.objects.changed];
+      const h = hovered;
+      setHover(null);
+      const nextPlan = planBatches(driver.lot.objects);
+      const stale = diff.packs ? new Set([...typesOf(plan), ...typesOf(nextPlan)]) : staleTypes(plan, nextPlan, [...ids, ...diff.objects.removed]);
       for (const id of diff.objects.removed) dropObject(id);
-      for (const id of ids) buildObject(id);
+      for (const id of ids) placeObject(id);
+      plan = nextPlan;
+      for (const type of stale) drawType(type);
+      setHover(h);
       for (const id of diff.characters.removed) dropCharacter(id);
       for (const id of diff.packs ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
       if (!running) draw(driver.tick(0, 0));
@@ -352,6 +431,7 @@ export function createWorld(canvas, world, opts = {}) {
     dispose() {
       running = false; cancelAnimationFrame(raf); ro?.disconnect();
       clearArch();
+      for (const type of [...typeMeshes.keys()]) undrawType(type);
       for (const id of [...objectGroups.keys()]) dropObject(id);
       for (const id of [...meshes.keys()]) dropCharacter(id);
       materials.dispose(); renderer.dispose();

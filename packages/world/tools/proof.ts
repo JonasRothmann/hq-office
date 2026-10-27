@@ -7,9 +7,12 @@
 //   6. sizing: at DPR 1, 1.5 and 2, full size and a fractional box at a fractional place, the backing store against
 //      the device-pixel box, and two screenshots (what the screen shows, after the browser composites the canvas)
 //      compared across a pan after undoing its whole-pixel shift; the old sizing (clientWidth) for contrast;
-//   7. idle: on the real clock, renders and shadow-map redraws while still, while walking, still again, and on attach().
+//   7. idle: on the real clock, renders and shadow-map redraws while still, while walking, still again, and on attach();
+//   8. perf: for each of --worlds, the draw calls and triangles of a frame that redraws the shadow map and of one that
+//      does not, the meshes per scene group, and ms per frame (SwiftShader, so only a relative number).
 //
-//   bun packages/world/tools/proof.ts [--world path] [--root DIR] [--out DIR] [--only turn,pan,walls,walk,night,sizing,idle]
+//   bun packages/world/tools/proof.ts [--world path] [--worlds a.js,b.js] [--root DIR] [--out DIR]
+//        [--only turn,pan,walls,walk,night,sizing,idle,perf]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { serve, PKG } from "./serve.ts";
@@ -21,7 +24,8 @@ import { decodePng } from "./png.ts";
 const args = process.argv.slice(2);
 const arg = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 const world = arg("world") ? fileArg(arg("world")!) : join(PKG, "test/fixtures/house.world.js");
-const root = rootFor([world], arg("root"));
+const worlds = arg("worlds")?.split(",").map(fileArg);
+const root = rootFor([world, ...(worlds ?? [])], arg("root"));
 const out = fileArg(arg("out") ?? "shots");
 const worldUrl = "/" + relative(root, world);
 const only = arg("only")?.split(",");
@@ -150,10 +154,30 @@ try {
       const walk = await span(0, () => w.act("ada", { do: "sit", target: "chair-2" }));
       const after = await span(3000);
       // an attached object casts a shadow at once: one render, one shadow redraw
-      const attach = await span(0, async () => { const m = w.three.scene.getObjectByName("object:plant-1").children[0].clone(); m.userData = {}; w.attach(m, "chair-1"); await wait(500); });
+      const attach = await span(0, async () => { const src = (() => { let f; w.three.scene.getObjectByName("objects").traverse((o) => { if (!f && o.isMesh && !o.isInstancedMesh && !o.isSkinnedMesh) f = o; }); return f; })(); const m = new src.constructor(src.geometry, src.material); w.attach(m, "chair-1"); await wait(500); });
       return { still, walk, after, attach };
     })()`);
     console.log(JSON.stringify(report.idle));
+  }
+
+  // 8. perf: what a frame draws, with and without a shadow redraw, for each world
+  if (want("perf")) {
+    report.perf = [];
+    for (const w of worlds ?? [world]) {
+      await tab.load(labUrl(server.port, "/" + relative(root, w), { rot: 0, zoom: 0 }));
+      const r = await tab.evaluate(`(() => {
+        const w = __lab.world;
+        w.advance(0);
+        w.invalidate({ shadows: true }); const s = w.advance(1);          // a frame that redraws the shadow map
+        w.camera.pan(3, 2); const p = w.advance(0);                       // a frame that does not
+        const meshes = {};
+        for (const g of w.three.scene.children) { let n = 0; g.traverse((o) => { if (o.isMesh && o.visible) n++; }); if (n) meshes[g.name || g.type] = n; }
+        const t0 = performance.now(); for (let i = 0; i < 10; i++) { w.camera.pan(i % 2 ? -3 : 3, 0); w.advance(0); } const ms = (performance.now() - t0) / 10;
+        return { shadowFrame: { draws: s.draws, triangles: s.triangles, shadowRedraws: s.stats.shadowRedraws }, frame: { draws: p.draws, triangles: p.triangles }, meshes, msPerFrame: +ms.toFixed(1), objects: w.lot.objects.length, characters: s.characters.length };
+      })()`);
+      report.perf.push({ world: relative(root, w), ...r });
+      console.log(JSON.stringify(report.perf.at(-1)));
+    }
   }
   report.errors = tab.errors;
 } finally {
