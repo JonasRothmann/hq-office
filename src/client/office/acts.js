@@ -25,6 +25,9 @@ const PLACES = {
   break: (at, clip) => ({ do: "walk", to: at.spot, clip }),
 };
 
+// The walk to the lead's desk (docs/engine/rfc.md 12, step 4) goes here when it is built: a place "lead" whose act is
+// { do: "visit", target: at.lead, wait, then: { do: "sit", target: at.chair, clip } }, with at.lead (the lead's desk)
+// from plan.js, and a setting that turns it on.
 export function actFor(who, status, at) {
   const row = rowOf(status);
   return { who, ...PLACES[row.place](at, row.clip) };
