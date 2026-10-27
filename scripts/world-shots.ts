@@ -4,7 +4,9 @@
 //   bun scripts/world-shots.ts [--only=SUBSTRING] [--out=DIR]
 //
 // Each shot is the lab at 1440x900 with a query (theme, lanes, rot, zoom, focus). A PNG over ~400 KB is saved as a
-// JPEG at quality 85 instead. WebGL runs on SwiftShader, so it works without a GPU (and slowly under load).
+// JPEG at quality 85 instead. The showroom shots (`--only=showroom`: the lab's ?scene=showroom, UI off) are always
+// JPEGs of at most 400 KB, in docs/design/nordic. WebGL runs on SwiftShader, so it works without a GPU (and slowly
+// under load).
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { newSession, freePort, startChrome } from "./room-hash.ts";
