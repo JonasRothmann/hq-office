@@ -28,6 +28,11 @@ function importsOf(code: string): Import[] {
   return out;
 }
 
+// Folders written ahead of the page that will load them, each with when it will. Their modules still have to link.
+const NOT_LOADED_YET: Record<string, string> = {
+  "office/": "the world doc generator and its packs: the page loads them in step 4 of docs/engine/rfc.md 12",
+};
+
 // A dynamic import with a literal path (the world's modules are loaded this way, only when the world starts).
 const dynamicOf = (code: string) => [...code.matchAll(/\bimport\(\s*(["'])([^"']+)\1\s*\)/g)].map((m) => m[2]);
 
@@ -76,7 +81,7 @@ describe("client modules", () => {
       for (const spec of [...importsOf(code).map((i) => i.spec), ...dynamicOf(code)]) { const to = target(f, spec); if (to) visit(to); }
     };
     entries.forEach(visit);
-    expect(modules.filter((f) => !seen.has(f)).map(name)).toEqual([]);
+    expect(modules.filter((f) => !seen.has(f) && !Object.keys(NOT_LOADED_YET).some((dir) => name(f).startsWith(dir))).map(name)).toEqual([]);
   });
 
   test("every stylesheet opens with a comment", () => {
