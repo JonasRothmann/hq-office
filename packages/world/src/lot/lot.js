@@ -5,7 +5,7 @@
 import { tileKey, sideEdge, parseEdge, edgeTiles, edgeBetween, pathEdges, QUARTER, SIDES, turn, turnSide, FLOOR_Y } from "../model/grid.js";
 import { detectRooms } from "../model/rooms.js";
 import { problem, WorldError, errorsOf } from "../model/problems.js";
-import { createCatalog, suggest } from "../catalog/define.js";
+import { createCatalog, suggest, checkPack } from "../catalog/define.js";
 import { createNav } from "../nav/nav.js";
 import { planAct } from "../nav/act.js";
 
@@ -42,6 +42,7 @@ export function analyse(world) {
   const { doc } = world;
   const catalog = createCatalog(world.packs ?? []);
   const P = [...catalog.problems];
+  for (const pack of world.packs ?? []) if (pack?.id && Array.isArray(pack.objects)) P.push(...checkPack(pack)); // kept per pack: free after the first time
   if (doc.format !== 1) P.push(problem("world.format", "format", `format ${doc.format} is not one this engine reads`, "set format: 1"));
   const missing = (doc.packs ?? []).filter((id) => !(world.packs ?? []).some((p) => p.id === id));
   for (const id of missing) P.push(problem("world.pack", "packs", `pack '${id}' is named but not given`, `import the pack and pass it in defineWorld({ packs: [...] })`));

@@ -5,12 +5,14 @@
 //        [--walls up|cutaway|down] [--focus ROOM] [--focus-on x,z] [--advance MS] [--size 1280x800] [--clean]
 //        [--root DIR] [--out shot.jpg]
 //
-// --root (default: the current directory) is what the lab serves; the world file must be under it. The world runs on a manual clock: nothing
-// moves until --advance ms have been simulated (acts walk and sit in that time). WebGL runs on SwiftShader.
+// Paths are relative to the current directory, from anywhere. The lab serves the folder that holds the world and every
+// file it imports (its packs), or --root. The world runs on a manual clock: nothing moves until --advance ms have been
+// simulated (acts walk and sit in that time). WebGL runs on SwiftShader.
 import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, relative } from "node:path";
 import { serve } from "./serve.ts";
 import { startChrome, openTab } from "./chrome.ts";
+import { fileArg, rootFor, shown } from "./paths.ts";
 
 export type ShotOptions = { rot?: number; zoom?: number; theme?: string; time?: string; walls?: string; focus?: string; focusOn?: string; clean?: boolean };
 
@@ -26,22 +28,24 @@ if (import.meta.main) {
   const arg = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
   const world = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
   if (!world) { console.error("usage: bun tools/shot.ts <world.js> [--rot N] [--zoom N] [--theme T] [--time HH:MM] [--walls MODE] [--out FILE]"); process.exit(2); }
-  const root = resolve(arg("root") ?? ".");
-  const out = resolve(arg("out") ?? "shot.jpg");
+  const root = rootFor([world], arg("root"));
+  const out = fileArg(arg("out") ?? "shot.jpg");
   const [w, h] = (arg("size") ?? "1280x800").split("x").map(Number);
   const num = (k: string) => (arg(k) !== undefined ? Number(arg(k)) : undefined);
   const server = serve({ root });
   const chrome = await startChrome();
   try {
     const tab = await openTab(chrome.cdp, { w, h });
-    const worldUrl = "/" + relative(root, resolve(world)).split("\\").join("/");
+    const rel = relative(root, fileArg(world));
+    if (rel.startsWith("..")) throw new Error(`${shown(fileArg(world))} is not under --root ${shown(root)}`);
+    const worldUrl = "/" + rel.split("\\").join("/");
     await tab.load(labUrl(server.port, worldUrl, { rot: num("rot"), zoom: num("zoom"), theme: arg("theme"), time: arg("time"), walls: arg("walls"), focus: arg("focus"), focusOn: arg("focus-on"), clean: !args.includes("--chrome") }));
     const state = await tab.evaluate(`JSON.stringify(window.__lab.world.advance(${Number(arg("advance") ?? 0)}))`);
     const shot = await tab.screenshot(out.endsWith(".png") ? "png" : "jpeg");
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, shot);
     const s = JSON.parse(state);
-    console.log(`${relative(process.cwd(), out)}: rot ${s.rot} zoom ${s.zoom} walls ${s.walls} ${s.theme} ${s.time}; camera y ${s.camera.y}; ${s.draws} draw calls, ${Math.round(s.triangles / 1000)}k triangles; ${s.characters.map((c: any) => `${c.id} ${c.clip}`).join(", ")}`);
+    console.log(`${shown(out)}: rot ${s.rot} zoom ${s.zoom} walls ${s.walls} ${s.theme} ${s.time}; camera y ${s.camera.y}; ${s.draws} draw calls, ${Math.round(s.triangles / 1000)}k triangles; ${s.characters.map((c: any) => `${c.id} ${c.clip}`).join(", ")}`);
     if (tab.errors.length) console.log(`page said: ${tab.errors.join(" | ")}`);
   } finally {
     await chrome.close();

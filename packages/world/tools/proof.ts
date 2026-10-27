@@ -7,16 +7,18 @@
 //
 //   bun packages/world/tools/proof.ts [--world path] [--root DIR] [--out DIR]
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { serve, PKG } from "./serve.ts";
 import { startChrome, openTab } from "./chrome.ts";
 import { labUrl } from "./shot.ts";
+import { fileArg, rootFor } from "./paths.ts";
 
 const args = process.argv.slice(2);
 const arg = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
-const root = resolve(arg("root") ?? PKG);
-const out = resolve(arg("out") ?? "shots");
-const worldUrl = "/" + relative(root, resolve(arg("world") ?? join(PKG, "test/fixtures/house.world.js")));
+const world = arg("world") ? fileArg(arg("world")!) : join(PKG, "test/fixtures/house.world.js");
+const root = rootFor([world], arg("root"));
+const out = fileArg(arg("out") ?? "shots");
+const worldUrl = "/" + relative(root, world);
 mkdirSync(out, { recursive: true });
 const save = (name: string, dataUrl: string) => { writeFileSync(join(out, name), Buffer.from(dataUrl.split(",")[1], "base64")); return name; };
 

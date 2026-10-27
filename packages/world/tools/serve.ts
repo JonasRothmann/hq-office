@@ -2,7 +2,7 @@
 // The lab server: serves a root folder (where your world files live) at /, this package at /@hq/world/, three.js at
 // /three.js, and gives the lab an import map built from package.json's exports. Files only, on 127.0.0.1.
 //
-//   bun packages/world/tools/serve.ts [--root .] [--port 4791] [--three path/to/three.module.js]
+//   bun packages/world/tools/serve.ts [--root .] [--port 4791] [--three path/to/three.module.js]   (--root: from the current directory)
 //   then open http://127.0.0.1:4791/  (the tiny house) or /?world=/path/under/root/x.world.js
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";

@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 // List the objects of one or more packs (default: the starter pack): id, kind, footprint, slots, anchors, tags.
 //
-//   bun packages/world/tools/catalog.ts [path/to/pack/index.js ...] [--json]
+//   bun packages/world/tools/catalog.ts [path/to/pack/index.js ...] [--json]     (paths from the current directory)
 import "./resolve.ts";
-import { resolve, join } from "node:path";
+import { join } from "node:path";
 import { createCatalog } from "../src/model/index.js";
+import { fileArg } from "./paths.ts";
 
 const args = process.argv.slice(2);
 const paths = args.filter((a) => !a.startsWith("--"));
-const packs = await Promise.all((paths.length ? paths : [join(import.meta.dir, "..", "packs", "starter", "index.js")]).map(async (p) => (await import(resolve(p))).default));
+const packs = await Promise.all((paths.length ? paths : [join(import.meta.dir, "..", "packs", "starter", "index.js")]).map(async (p) => (await import(fileArg(p))).default));
 const catalog = createCatalog(packs);
 const rows = catalog.list().map((o: any) => ({
   id: o.id, kind: o.kind,

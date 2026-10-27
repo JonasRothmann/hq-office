@@ -7,6 +7,7 @@ export { defineWorld, toJSON, fromJSON, FORMAT } from "./world.js";
 export { diffWorld } from "./diff.js";
 export { detectRooms } from "./rooms.js";
 export { analyse, validateWorld, buildLot } from "../lot/lot.js";
+export { lotMap } from "../lot/map.js";
 export { defineObject, definePack, createCatalog, checkPack, buildPrims } from "../catalog/define.js";
 export { PALETTES } from "../catalog/palette.js";
 export { createNav } from "../nav/nav.js";
