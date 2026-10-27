@@ -30,14 +30,14 @@ const tileText = ([x, z]) => `(${x},${z})`;
  * @property {number} d
  * @property {Map<string, string>} floor        tile → floor finish id
  * @property {Map<string, { key: string, axis: string, x: number, z: number, finish: string, outside: string, opening?: { type: string, def: object } }>} walls
- * @property {import("./rooms.js").Room[]} rooms
+ * @property {import("../model/rooms.js").Room[]} rooms
  * @property {Map<string, string>} roomAt       tile → room id or "outside"
  * @property {Placed[]} objects
  * @property {Set<string>} blocked
  * @property {{ id: string, tile: [number, number], facing: string, look: object }[]} characters
  */
 
-/** @returns {{ lot: Lot|null, problems: import("./problems.js").Problem[], catalog: object }} */
+/** @returns {{ lot: Lot|null, problems: import("../model/problems.js").Problem[], catalog: object }} */
 export function analyse(world) {
   const { doc } = world;
   const catalog = createCatalog(world.packs ?? []);
@@ -163,7 +163,7 @@ export function analyse(world) {
     cids.add(c.id);
     const [x, z] = c.at ?? [];
     if (!isInt(x) || !isInt(z) || !inLot(x, z)) { P.push(problem("character.at", `${at}.at`, `at ${JSON.stringify(c.at)} is not a tile in the lot`, `use [x, z] with 0 <= x < ${w} and 0 <= z < ${d}`)); return; }
-    if (blocked.has(tileKey(x, z))) P.push(problem("character.blocked", `${at}.at`, `${c.id} starts on tile ${tileText([x, z])}, inside '${occupied.get(tileKey(x, z))}'`, `start on a free tile such as ${freeNear([x, z], [1, 1], occupied, inLot, walls).map(tileText).join(", ")}`));
+    if (blocked.has(tileKey(x, z))) P.push(problem("character.blocked", `${at}.at`, `${c.id} starts on tile ${tileText([x, z])}, inside '${objects.find((o) => o.tiles.some(([tx, tz]) => tx === x && tz === z))?.id}'`, `start on a free tile such as ${freeNear([x, z], [1, 1], occupied, inLot, walls).map(tileText).join(", ")}`));
     if (!SIDES.includes(c.facing)) P.push(problem("character.facing", `${at}.facing`, `facing '${c.facing}' is not n, e, s or w`, "use n, e, s or w"));
     characters.push({ id: c.id, tile: [x, z], facing: c.facing, look: c.look ?? {} });
   });

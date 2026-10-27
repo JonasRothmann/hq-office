@@ -34,6 +34,7 @@
 @hq/world detectRooms
 @hq/world diffWorld
 @hq/world fitCamera
+@hq/world focusCamera
 @hq/world formatProblems
 @hq/world fromJSON
 @hq/world lintCoplanar
@@ -89,6 +90,7 @@
 @hq/world/model detectRooms
 @hq/world/model diffWorld
 @hq/world/model fitCamera
+@hq/world/model focusCamera
 @hq/world/model formatProblems
 @hq/world/model fromJSON
 @hq/world/model lintCoplanar

@@ -1,17 +1,16 @@
-// createWorld: a world file on a canvas. It validates the world (throwing every problem with its fix), builds the lot,
-// the nav grid, the architecture for the wall mode and rotation, the objects and the characters, and runs the loop:
-// a frame on every animation frame while anything moves, none while the view is still, and no cap during interaction.
+// createWorld: a world file on a canvas. The driver (view/driver.js, pure) owns the lot, the sim, the camera and
+// the frame policy; this file is the three.js side. It builds the architecture for the cut walls, one group per
+// object and one mesh per character, mirrors the sim onto them, and draws only when the driver says so: nothing while
+// the view is still, and the shadow map only when a character moved or an edit asked. apply() takes an edited doc
+// and rebuilds only what changed. The canvas's backing store matches its device pixels (view/size.js).
 import * as THREE from "three";
-import { buildLot } from "../lot/lot.js";
-import { WorldError } from "../model/problems.js";
 import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
-import { createNav } from "../nav/nav.js";
-import { createSim } from "../sim/index.js";
 import { floorAt as floorOf } from "../sim/motion.js";
-import { cutaway, WALL_MODES } from "../arch/cutaway.js";
 import { buildArchitecture } from "../arch/build.js";
-import { createCamera, stepCamera, cameraPose, project as projectPose, unproject, rotateCamera, zoomCamera, panCamera, fitCamera } from "../camera/rig.js";
+import { cameraPose, project as projectPose, unproject } from "../camera/rig.js";
+import { createDriver } from "../view/driver.js";
+import { canvasSize } from "../view/size.js";
 import { createStage } from "../render/stage.js";
 import { createMaterials } from "../render/materials.js";
 import { primsToGroup } from "../render/meshes.js";
@@ -28,57 +27,73 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  * @property {number} [rot]
  * @property {number} [zoom]                 0..2; default: the nearest step that fits the lot at every rotation
  * @property {"raf"|"manual"} [clock]        manual: nothing moves until advance(ms) (tests, shots)
- * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's CSS size
+ * @property {number} [idleFps]              draw clips looping in place (breathing, typing) this often while nothing
+ *                                           else moves; default 0: a still view draws nothing
+ * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's own box, in device pixels
  * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
- * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number }} [debug]   reproduce the old defects, for comparisons
+ * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number, oldSizing?: boolean }} [debug]
+ *   reproduce the old defects, for comparisons
  */
 
 /** @stability stable */
 export function createWorld(canvas, world, opts = {}) {
-  const { lot, catalog } = buildLot(world);
-  const nav = createNav(lot);
+  const debug = opts.debug ?? {};
+  const events = new Map();
+  let hovered = null, night = 0;
+  const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
+
+  // --- size: the backing store is the canvas's device-pixel box exactly
+  const deviceBoxes = typeof ResizeObserverEntry !== "undefined" && "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
+  const hostStyle = { w: canvas.style.width, h: canvas.style.height };
+  function measure(entry) {
+    if (opts.size) return canvasSize({ css: opts.size, dpr: opts.size.dpr ?? 1 });
+    const dpr = window.devicePixelRatio || 1;
+    if (debug.oldSizing) { const w = canvas.clientWidth || 800, h = canvas.clientHeight || 600, d = Math.min(dpr, 2); return { w, h, dpr: d, bw: Math.floor(w * d), bh: Math.floor(h * d), style: null }; }
+    const box = entry?.contentBoxSize?.[0], dev = entry?.devicePixelContentBoxSize?.[0];
+    let css;
+    if (box && deviceBoxes) css = { w: box.inlineSize, h: box.blockSize };
+    else {
+      if (!deviceBoxes) { canvas.style.width = hostStyle.w; canvas.style.height = hostStyle.h; } // measure the host's box, not ours
+      const r = canvas.getBoundingClientRect();
+      css = { w: r.width, h: r.height };
+    }
+    if (!(css.w > 0 && css.h > 0)) css = { w: 800, h: 600 }; // not laid out yet
+    return canvasSize({ css, dpr, device: dev ? { w: dev.inlineSize, h: dev.blockSize } : null });
+  }
+  const s0 = measure(null);
+
+  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
+  const { sim, cam } = driver;
   let theme = opts.theme === "dark" ? "dark" : "light";
   let time = opts.time ?? (theme === "dark" ? "21:00" : "14:00");
-  let wallMode = WALL_MODES.includes(opts.walls) ? opts.walls : "cutaway";
-  let focusRoom = opts.focusRoom ?? null;
-  let palette = catalog.palette(theme);
-  const debug = opts.debug ?? {};
+  let palette = driver.catalog.palette(theme);
 
   const stage = createStage(canvas);
   if (debug.shadowRadius) stage.sun.shadow.radius = debug.shadowRadius;
   const materials = createMaterials({ screenNoise: !!debug.screenNoise });
   const { scene, renderer } = stage;
-  const size = () => opts.size ?? { w: canvas.clientWidth || 800, h: canvas.clientHeight || 600, dpr: Math.min(window.devicePixelRatio || 1, 2) };
-  const s0 = size();
-  const cam = createCamera({ w: s0.w, h: s0.h, dpr: s0.dpr ?? 1, rot: opts.rot ?? 0, snap: !debug.noSnap, offset: opts.offset ?? { x: 0, y: 0 }, bounds: { minX: 0, minZ: 0, maxX: lot.w, maxZ: lot.d } });
-  const lotBox = indoorBox(lot);
-  fitCamera(cam, lotBox);
-  if (opts.zoom !== undefined) { cam.zoom = opts.zoom; cam.ppm = [22.6, 45.3, 90.5][opts.zoom] ?? cam.ppm; }
-  stage.resize(s0.w, s0.h, s0.dpr);
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
-  stage.setShadowBox({ min: [-2, 0, -2], max: [lot.w + 2, 3.2, lot.d + 2] });
+  const shadowBox = () => ({ min: [-2, 0, -2], max: [driver.lot.w + 2, 3.2, driver.lot.d + 2] });
+  stage.setShadowBox(shadowBox());
+  function applySize(s) {
+    if (s.style && !deviceBoxes && !opts.size) { canvas.style.width = `${s.style.w}px`; canvas.style.height = `${s.style.h}px`; }
+    stage.resize(s.bw, s.bh);
+    driver.resize({ w: s.w, h: s.h, dpr: s.dpr });
+  }
+  applySize(s0);
 
-  const events = new Map();
-  const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
-
-  // --- architecture: one group per cut set, cached; walls never scale, an edge is full or kerb
+  // --- architecture: one group per cut set and theme, cached; walls never scale, an edge is full or kerb
   const archCache = new Map();
   let arch = null, archKey = "";
-  const cutNow = () => {
-    const at = (rot) => cutaway(lot, { mode: wallMode, rot, focus: focusRoom });
-    if (!cam.turn) return at(cam.rot);
-    // during a turn: the walls cut at either end stay cut, so no wall rises in front of the view mid-turn
-    return new Set([...at(cam.rot - Math.sign(cam.turn.to - cam.turn.from)), ...at(cam.rot)]);
-  };
   function syncArch() {
-    const cut = cutNow();
-    const key = `${theme}|${[...cut].sort().join(" ")}`;
-    if (key === archKey) return false;
+    const cut = driver.cut;
+    const key = `${theme}|${driver.cutText}`;
+    if (key === archKey) return;
     if (!archCache.has(key)) {
-      if (archCache.size > 24) { for (const g of archCache.values()) disposeGroup(g); archCache.clear(); }
-      archCache.set(key, primsToGroup(buildArchitecture(lot, catalog, cut), palette, materials, { name: "architecture" }));
+      if (archCache.size > 24) clearArch();
+      archCache.set(key, primsToGroup(buildArchitecture(driver.lot, driver.catalog, cut), palette, materials, { name: "architecture" }));
     }
     if (arch) scene.remove(arch);
     arch = archCache.get(key);
@@ -86,53 +101,69 @@ export function createWorld(canvas, world, opts = {}) {
     scene.add(arch);
     archKey = key;
     stage.invalidateShadows();
-    return true;
   }
+  function clearArch() { for (const g of archCache.values()) { if (g !== arch) disposeGroup(g); } if (arch) { scene.remove(arch); disposeGroup(arch); arch = null; } archCache.clear(); archKey = ""; }
 
   // --- objects: one group per object, in its own frame (attach() parents app objects to it)
   const objectsGroup = new THREE.Group();
   objectsGroup.name = "objects";
   scene.add(objectsGroup);
-  const objectGroups = new Map();
-  const lamps = [];
-  function buildObjects() {
-    for (const g of objectGroups.values()) { objectsGroup.remove(g); disposeGroup(g, true); }
-    objectGroups.clear();
-    for (const l of lamps) scene.remove(l);
-    lamps.length = 0;
-    for (const o of lot.objects) {
-      const g = primsToGroup(buildPrims(o.def), palette, materials, { name: `object:${o.id}` });
-      g.position.set(...o.pos);
-      g.rotation.y = o.q * (Math.PI / 2);
-      g.userData.entity = o.id;
-      g.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
-      objectsGroup.add(g);
-      objectGroups.set(o.id, g);
-      if (o.anchors.light) {
-        const l = new THREE.PointLight(palette.lamp ?? "#ffe3ad", 0, 5, 1.6);
-        l.position.set(...o.anchors.light);
-        scene.add(l);
-        lamps.push(l);
-      }
+  const objectGroups = new Map(), lamps = new Map();
+  function dropObject(id) {
+    const g = objectGroups.get(id);
+    const kept = g ? g.children.filter((c) => !c.userData.engine) : [];
+    if (g) { for (const c of kept) g.remove(c); objectsGroup.remove(g); disposeGroup(g); objectGroups.delete(id); }
+    const l = lamps.get(id);
+    if (l) { scene.remove(l); l.dispose(); lamps.delete(id); }
+    return kept;
+  }
+  function buildObject(id) {
+    const kept = dropObject(id);
+    const o = driver.lot.objects.find((x) => x.id === id);
+    if (!o) return;
+    const g = primsToGroup(buildPrims(o.def), palette, materials, { name: `object:${o.id}` });
+    g.position.set(...o.pos);
+    g.rotation.y = o.q * (Math.PI / 2);
+    g.userData.entity = o.id;
+    for (const m of g.children) m.userData.engine = true;
+    g.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
+    for (const c of kept) g.add(c);
+    objectsGroup.add(g);
+    objectGroups.set(o.id, g);
+    if (o.anchors.light) {
+      const l = new THREE.PointLight(palette.lamp ?? "#ffe3ad", 2.2 * night, 5, 1.6);
+      l.position.set(...o.anchors.light);
+      scene.add(l);
+      lamps.set(o.id, l);
     }
+    if (hovered === o.id) { hovered = null; highlight(o.id); }
   }
 
-  // --- characters: the simulation (pure, an ECS) owns their state; the meshes only mirror it (renderSync)
-  const sim = createSim(lot, nav, { systems: opts.systems, emit: (name, data) => emit(name, data) });
+  // --- characters: the sim owns their state; the meshes only mirror it (renderSync)
   const charGroup = new THREE.Group();
   charGroup.name = "characters";
   scene.add(charGroup);
   const meshes = new Map();
-  const floorAt = (x, z) => floorOf(lot, x, z);
-  function buildCharacters() {
-    for (const m of meshes.values()) { charGroup.remove(m.root); m.dispose(); }
-    meshes.clear();
-    for (const [id, c] of sim.ecs.query("character")) {
-      const mesh = buildCharacter(id, c.look, palette, materials);
-      charGroup.add(mesh.root);
-      meshes.set(id, mesh);
-    }
-    renderSync();
+  const floorAt = (x, z) => floorOf(driver.lot, x, z);
+  function dropCharacter(id) {
+    const m = meshes.get(id);
+    if (!m) return [];
+    const kept = m.root.children.filter((c) => !c.userData.engine);
+    for (const c of kept) m.root.remove(c);
+    charGroup.remove(m.root);
+    m.dispose();
+    meshes.delete(id);
+    return kept;
+  }
+  function buildCharacterMesh(id) {
+    const kept = dropCharacter(id);
+    const c = sim.ecs.get(id, "character");
+    if (!c) return;
+    const mesh = buildCharacter(id, c.look, palette, materials);
+    for (const j of mesh.root.children) j.userData.engine = true;
+    for (const k of kept) mesh.root.add(k);
+    charGroup.add(mesh.root);
+    meshes.set(id, mesh);
   }
   function renderSync() {
     for (const [id, , b] of sim.ecs.query("character", "body")) {
@@ -145,17 +176,8 @@ export function createWorld(canvas, world, opts = {}) {
     }
   }
 
-  // --- the frame
-  let dirty = true;
-  function simulate(dtMs) {
-    const moving = stepCamera(cam, dtMs);
-    let busy = moving;
-    busy = sim.step(dtMs / 1000) || busy;
-    renderSync();
-    if (meshes.size) stage.invalidateShadows();
-    syncArch();
-    return busy;
-  }
+  // --- drawing
+  const stats = { renders: 0, shadowRedraws: 0 };
   let pose = cameraPose(cam);
   function render() {
     pose = cameraPose(cam);
@@ -167,43 +189,56 @@ export function createWorld(canvas, world, opts = {}) {
     camera.near = 1; camera.far = 400;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
+    renderSync();
     emit("frame", { pose });
+    stats.renders++;
+    if (renderer.shadowMap.needsUpdate) stats.shadowRedraws++;
     renderer.render(scene, camera);
-    dirty = false;
+  }
+  // What the driver decided for one frame (or several, merged, for advance).
+  function draw(f) {
+    if (!f.render) return;
+    syncArch();
+    if (f.shadows) stage.invalidateShadows();
+    render();
   }
 
-  // Every animation frame while something moves (no cap during interaction); nothing while the view is still. Idle
-  // animation alone (characters breathing, typing) may be limited with opts.idleFps.
-  let raf = 0, last = 0, lastDraw = 0, running = false;
+  // Every animation frame: the driver steps and decides; most frames of a still view draw nothing. A frame that
+  // throws is logged once; the loop goes on (a throwing system is already switched off by the sim).
+  let raf = 0, last = 0, running = false, failed = false;
   function loop(now) {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const dt = last ? Math.min(100, now - last) : STEP;
     last = now;
-    const busy = simulate(dt);
-    const ambient = meshes.size > 0 && (!opts.idleFps || now - lastDraw >= 1000 / opts.idleFps - 1);
-    if (busy || dirty || ambient) { render(); lastDraw = now; }
+    try { draw(driver.tick(now, dt)); } catch (e) { if (!failed) console.error("@hq/world: a frame failed", e); failed = true; }
   }
-  function start() { if (running || (opts.clock ?? "raf") !== "raf") return; running = true; last = 0; raf = requestAnimationFrame(loop); }
+  const manual = (opts.clock ?? "raf") !== "raf";
+  function start() { if (running || manual) return; running = true; last = 0; raf = requestAnimationFrame(loop); }
 
   function applyTime() {
-    const { night } = stage.setTime(time, palette);
-    for (const l of lamps) { l.intensity = 2.2 * night; l.color.set(palette.lamp); }
-    dirty = true;
+    night = stage.setTime(time, palette).night;
+    for (const l of lamps.values()) { l.intensity = 2.2 * night; l.color.set(palette.lamp); }
+    driver.invalidate({ shadows: true });
   }
 
-  buildObjects();
-  buildCharacters();
   applyTime();
+  for (const o of driver.lot.objects) buildObject(o.id);
+  for (const id of sim.characters()) buildCharacterMesh(id);
   syncArch();
-  if (opts.startActs !== false) for (const a of world.doc.acts) sim.act(a.who, a).catch((e) => console.error(e));
-  render();
+  if (opts.startActs !== false) driver.startActs();
+  draw(driver.tick(0, 0));
   start();
 
   let ro = null;
   if (!opts.size && typeof ResizeObserver !== "undefined") {
-    ro = new ResizeObserver(() => { const s = size(); cam.w = s.w; cam.h = s.h; cam.dpr = s.dpr ?? 1; stage.resize(s.w, s.h, s.dpr); dirty = true; if ((opts.clock ?? "raf") !== "raf") render(); });
-    ro.observe(canvas);
+    ro = new ResizeObserver((entries) => {
+      const entry = entries.find((e) => e.target === canvas);
+      applySize(measure(deviceBoxes ? entry : null));
+      if (!running) render();
+    });
+    if (deviceBoxes) ro.observe(canvas, { box: "device-pixel-content-box" });
+    else { ro.observe(canvas); if (canvas.parentElement) ro.observe(canvas.parentElement); }
   }
 
   // --- picking and hover
@@ -215,11 +250,11 @@ export function createWorld(canvas, world, opts = {}) {
     const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity);
     const ground = unproject(pose, [x, y], FLOOR_Y);
     const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
+    const lot = driver.lot;
     if (hit) return { kind: meshes.has(hit.object.userData.entity) ? "character" : "object", id: hit.object.userData.entity, tile };
     if (tile[0] < 0 || tile[1] < 0 || tile[0] >= lot.w || tile[1] >= lot.d) return null;
     return { kind: "tile", tile, room: lot.roomAt.get(tileKey(...tile)) };
   }
-  let hovered = null;
   function highlight(id) {
     if (id === hovered) return;
     const swap = (gid, on) => objectGroups.get(gid)?.traverse((m) => {
@@ -229,75 +264,104 @@ export function createWorld(canvas, world, opts = {}) {
     if (hovered) swap(hovered, false);
     hovered = id;
     if (id) swap(id, true);
-    dirty = true;
+    driver.invalidate();
     if (!running) render();
   }
 
   const view = {
-    lot, catalog, nav,
+    get lot() { return driver.lot; },
+    get catalog() { return driver.catalog; },
+    get nav() { return driver.nav; },
     camera: {
-      rotate(dir) { rotateCamera(cam, dir); dirty = true; emit("camera", { rot: cam.rot }); },
-      zoom(step) { zoomCamera(cam, step); dirty = true; },
-      pan(dx, dy) { panCamera(cam, dx, dy); dirty = true; },
-      focusOn(x, z) { cam.focus = [x, z]; dirty = true; },
-      fit() { fitCamera(cam, lotBox); dirty = true; },
+      rotate(dir) { driver.rotate(dir); emit("camera", { rot: cam.rot }); },
+      zoom(step) { driver.zoom(step); },
+      pan(dx, dy) { driver.pan(dx, dy); },
+      /** Centre on a ground point, eased unless { ease: false }. */
+      focusOn(x, z, o) { driver.focusOn(x, z, o); },
+      /** Centre on a box ({ minX, minZ, maxX, maxZ }, a room's for example) at the nearest zoom that fits it, eased. */
+      fitBox(box, o) { driver.fitBox(box, o); },
+      fit(o) { driver.fit(o); },
       pose: () => cameraPose(cam),
-      get state() { return { rot: cam.rot, az: cam.az, zoom: cam.zoom, ppm: cam.ppm, focus: [...cam.focus], turning: !!cam.turn } },
+      get state() { return { rot: cam.rot, az: cam.az, zoom: cam.zoom, ppm: cam.ppm, focus: [...cam.focus], turning: !!cam.turn, moving: !!cam.moving }; },
     },
-    setWalls(mode, room = null) { if (WALL_MODES.includes(mode)) wallMode = mode; focusRoom = room; syncArch(); dirty = true; if (!running) render(); },
+    /** A room's tiles as a box, for camera.fitBox. */
+    roomBox: (id) => driver.roomBox(id),
+    setWalls(mode, room = null) { driver.setWalls(mode, room); if (!running) draw(driver.tick(0, 0)); },
     setTheme(t) {
       theme = t === "dark" ? "dark" : "light";
-      palette = catalog.palette(theme);
-      for (const g of archCache.values()) disposeGroup(g);
-      archCache.clear(); archKey = "";
-      buildObjects(); buildCharacters(); applyTime(); syncArch();
-      if (!running) render();
+      palette = driver.catalog.palette(theme);
+      clearArch();
+      for (const o of driver.lot.objects) buildObject(o.id);
+      for (const id of sim.characters()) buildCharacterMesh(id);
+      applyTime();
+      if (!running) draw(driver.tick(0, 0));
     },
-    setTime(t) { time = t; applyTime(); if (!running) render(); },
-    act: sim.act,
-    character: sim.character,
+    setTime(t) { time = t; applyTime(); if (!running) draw(driver.tick(0, 0)); },
+    /**
+     * Change the world without a restart: a World or a doc (validated whole; a WorldError changes nothing). Only what
+     * changed is rebuilt, the sim keeps running, and the same doc twice is a no-op. Returns the diff, or null.
+     */
+    apply(next) {
+      const diff = driver.apply(next);
+      if (!diff) return null;
+      if (diff.packs) palette = driver.catalog.palette(theme);
+      if (diff.lot || diff.packs) { clearArch(); stage.setShadowBox(shadowBox()); }
+      const ids = diff.packs ? driver.lot.objects.map((o) => o.id) : [...diff.objects.added, ...diff.objects.changed];
+      for (const id of diff.objects.removed) dropObject(id);
+      for (const id of ids) buildObject(id);
+      for (const id of diff.characters.removed) dropCharacter(id);
+      for (const id of diff.packs ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
+      if (!running) draw(driver.tick(0, 0));
+      return diff;
+    },
+    act: (id, a) => sim.act(id, a),
+    character: (id) => sim.character(id),
     sim,
     pick,
     hover(clientX, clientY) { const p = pick(clientX, clientY); highlight(p?.kind === "object" ? p.id : null); emit("hover", p); return p; },
     project(p) { const q = projectPose(pose, p); const d = pose.dpr; return { x: Math.round(q.x * d) / d, y: Math.round(q.y * d) / d, visible: q.x >= 0 && q.y >= 0 && q.x <= pose.w && q.y <= pose.h }; },
     anchor(id, name) {
-      const o = lot.objects.find((x) => x.id === id);
+      const o = driver.lot.objects.find((x) => x.id === id);
       if (o) return o.anchors[name] ?? null;
       const c = sim.ecs.get(id, "body");
       return c ? [c.x, floorAt(c.x, c.z) + c.hips + 0.95, c.z] : null;
     },
-    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); dirty = true; return true; },
+    /** Parent an app object to an object's or character's group; it stays through edits that rebuild that entity. */
+    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); driver.invalidate(); return true; },
     on(name, fn) { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(fn); return () => events.get(name).delete(fn); },
-    advance(ms) { let left = ms; while (left > 1e-6) { const d = Math.min(STEP, left); simulate(d); left -= d; } render(); return view.inspect(); },
-    render() { render(); },
+    /** With clock "manual": step by ms, then draw once. */
+    advance(ms) {
+      const f = { render: true, shadows: false };
+      let left = ms;
+      while (left > 1e-6) { const d = Math.min(STEP, left); f.shadows = driver.tick(0, d).shadows || f.shadows; left -= d; }
+      draw(f);
+      return view.inspect();
+    },
+    render() { syncArch(); render(); },
+    /** Request a frame (the host changed something the engine cannot see, such as an attached object). */
+    invalidate(o) { driver.invalidate(o); },
     bindInput(el = canvas) { return bindInput(view, el, emit); },
     inspect() {
-      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: wallMode, focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
+      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
         camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
+        size: { w: cam.w, h: cam.h, dpr: cam.dpr, buffer: [canvas.width, canvas.height] },
+        stats: { ...stats, frames: driver.stats.frames },
         characters: sim.characters().map((id) => sim.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
     },
     three: { renderer, scene, camera },
-    get dirty() { return dirty; },
     dispose() {
       running = false; cancelAnimationFrame(raf); ro?.disconnect();
-      for (const g of archCache.values()) disposeGroup(g);
-      for (const g of objectGroups.values()) disposeGroup(g, true);
-      for (const m of meshes.values()) m.dispose();
+      clearArch();
+      for (const id of [...objectGroups.keys()]) dropObject(id);
+      for (const id of [...meshes.keys()]) dropCharacter(id);
       materials.dispose(); renderer.dispose();
     },
   };
   return view;
 }
 
-// The floored part of the lot (what the view fits), or the whole lot when nothing is floored.
-function indoorBox(lot) {
-  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
-  for (const k of lot.floor.keys()) { const [x, z] = k.split(",").map(Number); minX = Math.min(minX, x); minZ = Math.min(minZ, z); maxX = Math.max(maxX, x + 1); maxZ = Math.max(maxZ, z + 1); }
-  return minX === Infinity ? { minX: 0, minZ: 0, maxX: lot.w, maxZ: lot.d } : { minX, minZ, maxX, maxZ };
-}
-
-function disposeGroup(g, keepMaterials = true) {
-  g.traverse((o) => { o.geometry?.dispose(); if (!keepMaterials) o.material?.dispose?.(); });
+function disposeGroup(g) {
+  g.traverse((o) => { if (o.userData.engine !== false) o.geometry?.dispose(); });
 }
 
 // Drag to pan, wheel to step the zoom, click to pick (emits "pick"), move to hover. Returns a function that unbinds.

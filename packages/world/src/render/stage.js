@@ -2,7 +2,6 @@
 // fitted to the lot and snapped to whole shadow texels. The shadow map redraws only when told something moved.
 import * as THREE from "three";
 
-const MAX_DPR = 2;
 const SHADOW_MAP = 2048;
 const SHADOW_RADIUS = 1.5; // texels; the taps are world-fixed (materials.js), so a soft edge stays still
 
@@ -38,7 +37,7 @@ export function skyAt(hours) {
 
 export function createStage(canvas, { antialias = true } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias, alpha: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
+  renderer.setPixelRatio(1); // sizes are in device pixels already (view/size.js)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1;
@@ -108,9 +107,9 @@ export function createStage(canvas, { antialias = true } = {}) {
     return { night };
   }
 
-  function resize(w, h, dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)) {
-    renderer.setPixelRatio(dpr);
-    renderer.setSize(w, h, false);
+  // The backing store, in device pixels (whole numbers); the canvas's CSS size is left to the page.
+  function resize(bw, bh) {
+    renderer.setSize(bw, bh, false);
   }
 
   return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };

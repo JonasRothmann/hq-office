@@ -4,6 +4,7 @@
 //   - the camera orbits the focus at a fixed pitch and distance, so its height never changes;
 //   - a turn animates only the azimuth, along the arc; it never moves the focus and never changes the zoom;
 //   - a zoom eases the scale (in log space) about the focus; the focus stays on the same screen point;
+//   - only focusCamera and fitCamera move the focus on their own (eased, when asked); a pan moves it with the cursor;
 //   - at rest, the rendered focus is snapped so the world lands on whole device pixels: a pan moves the picture by
 //     whole pixels, and a still scene renders identically, shifted.
 
@@ -11,6 +12,7 @@ export const PITCH = Math.PI / 6;              // 30°: a tile projects to an ex
 export const ZOOMS = [22.6, 45.3, 90.5];       // px per metre: far, medium, near
 export const TURN_MS = 380;
 export const ZOOM_MS = 260;
+export const FOCUS_MS = 420;
 const DIST = 100;                               // metres from the focus; any value works for an orthographic camera
 const SIN_P = Math.sin(PITCH), COS_P = Math.cos(PITCH);
 
@@ -30,11 +32,14 @@ const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) 
  * @property {{ minX: number, minZ: number, maxX: number, maxZ: number }|null} bounds   the focus is clamped to these
  * @property {{ x: number, y: number }} offset   where the focus sits on screen, CSS px from the viewport's centre
  * @property {boolean} snap
+ * @property {{ from: number, to: number, t: number }|null} turn         a turn in progress
+ * @property {{ from: number, to: number, t: number }|null} zooming      a zoom in progress
+ * @property {{ from: number[], to: number[], t: number }|null} moving   an eased focus move in progress
  */
 
 /** @stability stable  @returns {CameraState} */
 export function createCamera({ w = 800, h = 600, dpr = 1, rot = 0, zoom = 1, focus = [0, 0], bounds = null, offset = { x: 0, y: 0 }, snap = true } = {}) {
-  return { w, h, dpr, rot, az: azimuth(rot), zoom, ppm: ZOOMS[zoom], focus: [...focus], bounds, offset: { ...offset }, snap, turn: null, zooming: null };
+  return { w, h, dpr, rot, az: azimuth(rot), zoom, ppm: ZOOMS[zoom], focus: [...focus], bounds, offset: { ...offset }, snap, turn: null, zooming: null, moving: null };
 }
 
 /** @stability stable */
@@ -53,6 +58,7 @@ export function zoomCamera(cam, step) {
 // A drag of dx, dy CSS px: the ground under the cursor follows it.
 /** @stability stable */
 export function panCamera(cam, dx, dy) {
+  cam.moving = null; // the hand wins over an eased move
   const r = [Math.cos(cam.az), -Math.sin(cam.az)], f = [Math.sin(cam.az), Math.cos(cam.az)];
   cam.focus[0] -= (r[0] * dx) / cam.ppm + (f[0] * dy) / (cam.ppm * SIN_P);
   cam.focus[1] -= (r[1] * dx) / cam.ppm + (f[1] * dy) / (cam.ppm * SIN_P);
@@ -60,22 +66,30 @@ export function panCamera(cam, dx, dy) {
 }
 
 function clampFocus(cam) {
+  cam.focus = clampPoint(cam, cam.focus);
+}
+function clampPoint(cam, [x, z]) {
   const b = cam.bounds;
-  if (!b) return;
-  cam.focus[0] = Math.max(b.minX, Math.min(b.maxX, cam.focus[0]));
-  cam.focus[1] = Math.max(b.minZ, Math.min(b.maxZ, cam.focus[1]));
+  return b ? [Math.max(b.minX, Math.min(b.maxX, x)), Math.max(b.minZ, Math.min(b.maxZ, z))] : [x, z];
 }
 
-// Centre on a box and pick the nearest zoom step at which it fits at EVERY rotation, so a turn never needs a refit.
-// `height` is how tall the box's contents stand (walls).
+// Move the focus to a ground point, eased over FOCUS_MS, and to zoom step `zoom` if given. A turn in progress goes on.
 /** @stability stable */
-export function fitCamera(cam, b, { height = 3.01, margin = 24 } = {}) {
-  cam.focus = [(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2];
+export function focusCamera(cam, [x, z], { zoom } = {}) {
+  cam.moving = { from: [...cam.focus], to: clampPoint(cam, [x, z]), t: 0 };
+  if (zoom !== undefined && zoom !== cam.zoom) zoomCamera(cam, zoom);
+}
+
+// Centre on a box (the lot, a room) and pick the nearest zoom step at which it fits at EVERY rotation, so a turn
+// never needs a refit. `height` is how tall the box's contents stand (walls). ease: glide there (focusCamera).
+/** @stability stable */
+export function fitCamera(cam, b, { height = 3.01, margin = 24, ease = false } = {}) {
+  const focus = [(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2];
   let needW = 0, needH = 0;
   for (let rot = 0; rot < 4; rot++) {
     const az = azimuth(rot), ca = Math.cos(az), sa = Math.sin(az);
     for (const [x, z] of [[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]]) for (const y of [0, height]) {
-      const dx = x - cam.focus[0], dz = z - cam.focus[1];
+      const dx = x - focus[0], dz = z - focus[1];
       const u = dx * ca - dz * sa;
       const v = y * COS_P - (dx * sa + dz * ca) * SIN_P;
       needW = Math.max(needW, Math.abs(u) * 2);
@@ -84,6 +98,9 @@ export function fitCamera(cam, b, { height = 3.01, margin = 24 } = {}) {
   }
   let step = 0;
   for (let s = ZOOMS.length - 1; s >= 0; s--) if (needW * ZOOMS[s] <= cam.w - margin * 2 && needH * ZOOMS[s] <= cam.h - margin * 2) { step = s; break; }
+  if (ease) { focusCamera(cam, focus, { zoom: step }); return step; }
+  cam.focus = focus;
+  cam.moving = null;
   cam.zoom = step;
   cam.ppm = ZOOMS[step];
   cam.zooming = null;
@@ -104,6 +121,13 @@ export function stepCamera(cam, dt) {
     z.t = Math.min(1, z.t + dt / ZOOM_MS);
     cam.ppm = Math.exp(Math.log(z.from) + (Math.log(z.to) - Math.log(z.from)) * easeInOut(z.t));
     if (z.t >= 1) { cam.ppm = z.to; cam.zooming = null; } else moving = true;
+  }
+  if (cam.moving) {
+    const m = cam.moving;
+    m.t = Math.min(1, m.t + dt / FOCUS_MS);
+    const k = easeInOut(m.t);
+    cam.focus = [m.from[0] + (m.to[0] - m.from[0]) * k, m.from[1] + (m.to[1] - m.from[1]) * k];
+    if (m.t >= 1) { cam.focus = [...m.to]; cam.moving = null; } else moving = true;
   }
   return moving;
 }
@@ -130,7 +154,7 @@ export function cameraPose(cam) {
   const forward = [-sa * COS_P, -SIN_P, -ca * COS_P];
   const up = cross(right, forward);
   let [fx, fz] = cam.focus;
-  const atRest = !cam.turn && !cam.zooming;
+  const atRest = !cam.turn && !cam.zooming && !cam.moving;
   const snapped = cam.snap && atRest;
   if (snapped) {
     // the focus's coordinates along screen right and screen up, rounded to whole device pixels
