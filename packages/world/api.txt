@@ -38,6 +38,7 @@
 @hq/world focusCamera
 @hq/world formatProblems
 @hq/world fromJSON
+@hq/world hangsOnCut
 @hq/world lintCoplanar
 @hq/world lotMap
 @hq/world lotPrims
@@ -96,6 +97,7 @@
 @hq/world/model focusCamera
 @hq/world/model formatProblems
 @hq/world/model fromJSON
+@hq/world/model hangsOnCut
 @hq/world/model lintCoplanar
 @hq/world/model lotMap
 @hq/world/model lotPrims

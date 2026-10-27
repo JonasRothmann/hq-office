@@ -14,6 +14,12 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   engine token, or the pack's own token) and `validateWorld` a bad doc palette (`world.palette`). `createCatalog`
   takes `{ palette }` as a second argument. `diffWorld` reports `palette: true` when only the doc's colours changed,
   and `apply` recolours everything. A doc without a palette is unchanged, and `api.txt` did not change.
+- `hangsOnCut(object, cut)`: whether a placed object tagged `wall` (a clock, a print, a radiator) hangs on a wall
+  that is cut. Such an object hangs on the wall behind it, on the side opposite its facing. `createWorld` hides it
+  while that wall is cut, so nothing floats over a kerb, and a pick passes through it.
+- Lamps light by night as warm downlights: each light anchor is a soft cone aimed straight down, so it makes a pool
+  under the lamp and does not burn a white patch on the wall beside a lamp in a corner. Night keeps less of the
+  day's fill (ambient and sky), so rooms are darker away from their lamps. The lamp's colour is the `lamp` token.
 - A wall finish may declare `bands`: `[{ to, color, pattern? }]` from the floor up, for a skirting, battens or a
   rail under the plaster. `to` is metres above the floor top, each higher than the last and below `WALL_H`. Above
   the last band the finish's own colour and pattern show. `buildArchitecture` cuts each wall piece and post at the

@@ -52,6 +52,10 @@ The engine draws the wall caps, the ground and the background in its own tokens 
 "#4a3a2e" }, dark: { cap: "#3a2e25" } } })`, and a world doc's own `palette: { light, dark }` recolours any token over
 that.
 
+An object tagged `wall` (a clock, a print) hangs on the wall behind it, on the side opposite its facing. The view
+hides it while that wall is cut (`hangsOnCut`). An object with a `light` anchor lights the room by night as a warm
+downlight in the `lamp` colour.
+
 ## Entries
 
 | Entry | What | Runs in |

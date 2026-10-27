@@ -8,6 +8,7 @@ import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
 import { floorAt as floorOf } from "../sim/motion.js";
 import { buildArchitecture } from "../arch/build.js";
+import { hangsOnCut } from "../arch/cutaway.js";
 import { cameraPose, project as projectPose, unproject } from "../camera/rig.js";
 import { createDriver } from "../view/driver.js";
 import { canvasSize } from "../view/size.js";
@@ -41,7 +42,7 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
 export function createWorld(canvas, world, opts = {}) {
   const debug = opts.debug ?? {};
   const events = new Map();
-  let hovered = null, night = 0;
+  let hovered = null;
   const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
 
   // --- size: the backing store is the canvas's device-pixel box exactly
@@ -100,6 +101,7 @@ export function createWorld(canvas, world, opts = {}) {
     arch.userData.cut = cut;
     scene.add(arch);
     archKey = key;
+    for (const o of driver.lot.objects) { const g = objectGroups.get(o.id); if (g) g.visible = !hangsOnCut(o, cut); }
     stage.invalidateShadows();
   }
   function clearArch() { for (const g of archCache.values()) { if (g !== arch) disposeGroup(g); } if (arch) { scene.remove(arch); disposeGroup(arch); arch = null; } archCache.clear(); archKey = ""; }
@@ -114,7 +116,7 @@ export function createWorld(canvas, world, opts = {}) {
     const kept = g ? g.children.filter((c) => !c.userData.engine) : [];
     if (g) { for (const c of kept) g.remove(c); objectsGroup.remove(g); disposeGroup(g); objectGroups.delete(id); }
     const l = lamps.get(id);
-    if (l) { scene.remove(l); l.dispose(); lamps.delete(id); }
+    if (l) { stage.removeLamp(l); lamps.delete(id); }
     return kept;
   }
   function buildObject(id) {
@@ -125,17 +127,13 @@ export function createWorld(canvas, world, opts = {}) {
     g.position.set(...o.pos);
     g.rotation.y = o.q * (Math.PI / 2);
     g.userData.entity = o.id;
+    g.visible = !hangsOnCut(o, driver.cut);
     for (const m of g.children) m.userData.engine = true;
     g.traverse((m) => { if (m.isMesh) m.userData.entity = o.id; });
     for (const c of kept) g.add(c);
     objectsGroup.add(g);
     objectGroups.set(o.id, g);
-    if (o.anchors.light) {
-      const l = new THREE.PointLight(palette.lamp ?? "#ffe3ad", 2.2 * night, 5, 1.6);
-      l.position.set(...o.anchors.light);
-      scene.add(l);
-      lamps.set(o.id, l);
-    }
+    if (o.anchors.light) lamps.set(o.id, stage.addLamp(o.anchors.light));
     if (hovered === o.id) { hovered = null; highlight(o.id); }
   }
 
@@ -217,8 +215,7 @@ export function createWorld(canvas, world, opts = {}) {
   function start() { if (running || manual) return; running = true; last = 0; raf = requestAnimationFrame(loop); }
 
   function applyTime() {
-    night = stage.setTime(time, palette).night;
-    for (const l of lamps.values()) { l.intensity = 2.2 * night; l.color.set(palette.lamp); }
+    stage.setTime(time, palette);
     driver.invalidate({ shadows: true });
   }
 
@@ -247,7 +244,7 @@ export function createWorld(canvas, world, opts = {}) {
     const r = canvas.getBoundingClientRect();
     const x = clientX - r.left, y = clientY - r.top;
     ray.setFromCamera(new THREE.Vector2((x / r.width) * 2 - 1, -(y / r.height) * 2 + 1), camera);
-    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity);
+    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => h.object.userData.entity && h.object.parent?.visible !== false); // not a piece hidden on a cut wall
     const ground = unproject(pose, [x, y], FLOOR_Y);
     const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
     const lot = driver.lot;
