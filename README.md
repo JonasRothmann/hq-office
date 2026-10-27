@@ -131,6 +131,23 @@ Workers show their status by pose: seated and typing when working, standing besi
 
 Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit offices glow.
 
+## The desk HUD
+
+Every lane's desk in the office carries a small glass chip:
+
+- The first row has the lane's name, a status dot and the status word (working, needs you, on HQ, waiting, done, parked). A red badge counts the lane's open blocking questions, even while it works. A lane that waits on you has a red edge.
+- The second row has the model and effort (`opus 5.5 · high`), one dot per running subagent coloured by its model family (Opus violet, Sonnet teal, Haiku amber) with the exact count, and the context in use as a bar and a number (`412k / 1M`). Anything unknown shows as a dash.
+
+Chips never overlap each other or a panel. When desks are close together, or the view is zoomed out, every chip shrinks to one line: the name, the status dot and the context bar. Hover over a chip (or tab to it) to see all of it and the lane's title. Click a chip to open the lane's card.
+
+For a Claude Code lane on this machine, the server reads these values from the lane's own session transcript. Any other lane can report its own:
+
+```sh
+hud lane NAME --model claude-opus-5-5 --effort high --subagents 3 --context 412k/1M
+```
+
+Each flag is optional. `--context` takes `USED` or `USED/MAX`, written as `412000`, `412k` or `1M`. A report wins over the transcript until the transcript changes. The other `hud lane` flags work as before; vitals are sent only when one of these four is given.
+
 ## The work board
 
 The WORK tab lists every piece of work in flight: an issue key, its pull requests and the lane that owns it. HQ adds one with `hud track ISSUE --lane L --pr N`, and `hud lane NAME --issue X --pr N` links a lane's work too. Each item's state is worked out from facts, in this order: done (all PRs merged or closed, or `hud done ISSUE`), waiting on you (an open question names its lane, issue or PR), waiting on CI (a check is running), paused (`hud pause ISSUE REASON`, undone with `hud resume ISSUE`), moving (the lane is working, or something changed in the last 45 minutes), and otherwise stalled. Stalled work shows red at the top of the question column and at the top of `hud board` (`--json` for JSON).
