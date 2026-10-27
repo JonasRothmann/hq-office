@@ -25,13 +25,13 @@ export const SHOTS: [string, string][] = [
   ["light-4-rot1", "theme=light&lanes=4&rot=1"],
   // the land around the office (src/client/world/outside/): --only=outside- writes them to docs/design/outside/
   ["outside-nature-light-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=0"],
-  ["outside-nature-light-mid", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=1"],
+  ["outside-nature-light-mid", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=1&focus=22,14"],
   ["outside-nature-dark-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=dark&zoom=0"],
   ["outside-nature-light-big", "scene=outside&mode=nature&seed=3&lot=60x40&theme=light"],
   ["outside-city-light-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=0"],
-  ["outside-city-light-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=1"],
+  ["outside-city-light-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=1&focus=20,-14"],
   ["outside-city-dark-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=0"],
-  ["outside-city-dark-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=1"],
+  ["outside-city-dark-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=1&focus=20,-14"],
   ["outside-city-light-big", "scene=outside&mode=city&seed=3&lot=60x40&theme=light"],
   ["outside-city-light-rot1", "scene=outside&mode=city&seed=11&lot=24x14&theme=light&zoom=0&rot=1"],
 ];

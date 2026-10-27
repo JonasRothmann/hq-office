@@ -53,11 +53,10 @@ varying vec2 vOutXZ;${water ? "\nvarying vec2 vFlow;" : ""}`);
       // slow bands drifting downstream, broken up across the stream, brightest mid-river
       f = f.replace("#include <color_fragment>", `#include <color_fragment>
   {
-    float wob = sin(vFlow.y * 3.1 + vFlow.x * 0.21 + uTime * 0.4) * 0.9;
-    float band = sin(vFlow.x * 0.9 - uTime * 1.1 + wob);
-    float glint = smoothstep(0.86, 1.0, band) * (1.0 - smoothstep(0.55, 1.0, abs(vFlow.y)));
-    float edge = smoothstep(0.7, 1.0, abs(vFlow.y)) * 0.25;
-    diffuseColor.rgb = mix(diffuseColor.rgb, uSheen, glint * 0.32 + edge * 0.2);
+    float wob = sin(vFlow.y * 5.3 + vFlow.x * 0.37 + uTime * 0.5) * 0.7 + sin(vFlow.x * 0.13 - vFlow.y * 2.0) * 1.3;
+    float band = sin(vFlow.x * 1.7 - uTime * 1.3 + wob);
+    float glint = smoothstep(0.93, 1.0, band) * (1.0 - smoothstep(0.35, 0.8, abs(vFlow.y)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, uSheen, glint * 0.22);
   }`);
     }
     f = f.replace("#include <opaque_fragment>", `#include <opaque_fragment>

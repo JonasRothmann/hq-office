@@ -5,7 +5,7 @@ const DAY = {
   nature: {
     bg: "#b4c0a2",
     ground: ["#a8b98c", "#a3b487", "#b8bd8c", "#8f9f74", "#c2b894", "#8c8f7a", "#b9b78f"], // lawn grass meadow forest bank bed dry
-    water: "#86a7ad", sheen: "#e8f1ee", path: "#cdbf9f", pathEdge: "#b9aa88",
+    water: "#86a7ad", sheen: "#eef4f0", path: "#cfc2a3", pathEdge: "#c4b694",
     rock: "#a9a59b", flowers: ["#f2efe6", "#e8d27a", "#d9a8b4", "#a9a3cf", "#e6b07a"], reed: "#8f9a62",
     bridge: { deck: "#a8875f", rail: "#a5533f", post: "#6b4f3a" },
   },
@@ -48,7 +48,7 @@ const NIGHT = {
   nature: {
     bg: "#24324a",
     ground: ["#6a8a80", "#66857c", "#6f8a80", "#4f6b66", "#7a8484", "#46596a", "#748680"],
-    water: "#3f5f86", sheen: "#c9dcff", path: "#8a8f96", pathEdge: "#757b84",
+    water: "#3f5f86", sheen: "#c9dcff", path: "#8a8f96", pathEdge: "#80868e",
     rock: "#7d8590", flowers: ["#c9d2e6", "#b8bd9a", "#a993b6", "#8f8fc4", "#b39b8f"], reed: "#5a6e66",
     bridge: { deck: "#7a6a5c", rail: "#7d4a48", post: "#4a3d36" },
   },

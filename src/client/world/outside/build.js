@@ -128,7 +128,7 @@ function buildNature({ P, U, mat, add, layout }) {
       const C = [b.x + nx_ * w1, yAt(b.x + nx_ * w1, b.z + nz_ * w1), b.z + nz_ * w1], D = [b.x - nx_ * w1, yAt(b.x - nx_ * w1, b.z - nz_ * w1), b.z - nz_ * w1];
       const up = (B[0] - A[0]) * (D[2] - A[2]) - (B[2] - A[2]) * (D[0] - A[0]) < 0;
       if (up) s.pos.push(...A, ...B, ...D, ...A, ...D, ...C); else s.pos.push(...A, ...D, ...B, ...A, ...C, ...D);
-      const c = color(i % 3 ? N.path : N.pathEdge);
+      const c = color((i * 7) % 5 ? N.path : N.pathEdge);
       for (let k = 0; k < 6; k++) s.col.push(c.r, c.g, c.b);
     }
     const br = layout.bridge;

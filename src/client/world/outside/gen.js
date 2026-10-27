@@ -17,7 +17,7 @@ export const LEVEL = { road: -0.11, walk: -0.05 };
 export const WATER = { level: 0.17, bed: 0.0, bank: 3 };
 export const STOREY = 2.95;
 // The lot used for generating grows and shrinks in steps of this many metres (see growLot).
-export const LOT_STEP = 6;
+export const LOT_STEP = 4;
 
 // ---- numbers -------------------------------------------------------------------------------------------------------
 
@@ -59,9 +59,14 @@ export function fbm(x, z, s, octaves = 4) {
 }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// How tall something d metres out from the lot may stand without hiding the building: at 30° it hides about 1.75 ×
+// its height of ground behind it, and the lot keeps at least GARDEN metres of garden round the building.
+export const GARDEN = 3;
+export const sight = (d) => Math.max(0.6, (d + GARDEN) / 1.75);
 export const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
+const down2 = (v) => Math.floor(v * 100) / 100; // a size rounded down, so a cap still holds after rounding
 
 // ---- rects and lines -----------------------------------------------------------------------------------------------
 
@@ -89,6 +94,30 @@ export function nearestOnLine(x, z, pts) {
     if (d < best) { best = d; bi = i; bt = t; }
   }
   return { d: best, i: bi, t: bt };
+}
+
+// nearestOnLine for many queries near one line: segments bucketed by cell, each in every cell within `reach` of it.
+// A point further than `reach` from the line gets { d: reach, far: true }.
+export function lineIndex(pts, reach = 26, cell = 8) {
+  const grid = new Map(), key = (i, j) => i * 100003 + j;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const i0 = Math.floor((Math.min(a.x, b.x) - reach) / cell), i1 = Math.floor((Math.max(a.x, b.x) + reach) / cell);
+    const j0 = Math.floor((Math.min(a.z, b.z) - reach) / cell), j1 = Math.floor((Math.max(a.z, b.z) + reach) / cell);
+    for (let gi = i0; gi <= i1; gi++) for (let gj = j0; gj <= j1; gj++) { const k = key(gi, gj); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+  }
+  return (x, z) => {
+    const list = grid.get(key(Math.floor(x / cell), Math.floor(z / cell)));
+    let best = reach, bi = 0, bt = 0, far = true;
+    for (const i of list ?? []) {
+      const a = pts[i], b = pts[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1;
+      const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / L2, 0, 1);
+      const d = Math.hypot(a.x + dx * t - x, a.z + dz * t - z);
+      if (d < best) { best = d; bi = i; bt = t; far = false; }
+    }
+    return { d: best, i: bi, t: bt, far };
+  };
 }
 
 // Catmull-Rom through control points, sampled every `step` metres or so.
@@ -122,18 +151,24 @@ export function normLot(lot) {
   return { minX: +l.minX, minZ: +l.minZ, maxX: +l.maxX, maxZ: +l.maxZ, door: ["n", "s", "e", "w"].includes(l.door) ? l.door : "s" };
 }
 
-// The lot to generate for: the office's lot rounded out to LOT_STEP with a metre to spare. While the office's lot
-// still fits in the previous one, and that one is no more than two steps too big on any side, the previous one is
-// kept, so an office that grows by a room does not reshuffle the land around it.
+// The lot to generate for: the office's lot rounded out to LOT_STEP with half a metre to spare. While the office's
+// lot still fits in the previous one, with no side more than MAX_SLACK too big, the previous one is kept, so an
+// office that grows by a room does not reshuffle the land round it. A side the office grew past gets AHEAD metres
+// more, since offices are added on along it: a run of new rooms regenerates the land every second or third room.
+export const AHEAD = 10, MAX_SLACK = 18;
 export function growLot(lot, prev = null) {
   const l = normLot(lot);
   if (prev) {
     const fits = l.minX >= prev.minX && l.minZ >= prev.minZ && l.maxX <= prev.maxX && l.maxZ <= prev.maxZ;
     const slack = Math.max(l.minX - prev.minX, l.minZ - prev.minZ, prev.maxX - l.maxX, prev.maxZ - l.maxZ);
-    if (fits && slack <= 2 * LOT_STEP + 1 && prev.door === l.door) return prev;
+    if (fits && slack <= MAX_SLACK && prev.door === l.door) return prev;
   }
-  const lo = (v) => Math.floor((v - 1) / LOT_STEP) * LOT_STEP, hi = (v) => Math.ceil((v + 1) / LOT_STEP) * LOT_STEP;
-  return { minX: lo(l.minX), minZ: lo(l.minZ), maxX: hi(l.maxX), maxZ: hi(l.maxZ), door: l.door };
+  const lo = (v) => Math.floor((v - 0.5) / LOT_STEP) * LOT_STEP, hi = (v) => Math.ceil((v + 0.5) / LOT_STEP) * LOT_STEP;
+  const grew = (side) => (prev && prev.door === l.door ? (side === "minX" ? l.minX < prev.minX : side === "minZ" ? l.minZ < prev.minZ : side === "maxX" ? l.maxX > prev.maxX : l.maxZ > prev.maxZ) : false);
+  return {
+    minX: lo(l.minX) - (grew("minX") ? AHEAD : 0), minZ: lo(l.minZ) - (grew("minZ") ? AHEAD : 0),
+    maxX: hi(l.maxX) + (grew("maxX") ? AHEAD : 0), maxZ: hi(l.maxZ) + (grew("maxZ") ? AHEAD : 0), door: l.door,
+  };
 }
 
 // ---- the entry point -----------------------------------------------------------------------------------------------
@@ -205,7 +240,8 @@ function nature(R, s, lot, ext) {
     if (pass < 3) river = river.map((p, i) => (i === 0 || i === river.length - 1 ? p : { x: (river[i - 1].x + 2 * p.x + river[i + 1].x) / 4, z: (river[i - 1].z + 2 * p.z + river[i + 1].z) / 4 }));
   }
   const riverPts = river.map((p, i) => ({ x: r2(p.x), z: r2(p.z), w: r2(width(i)) }));
-  const halfAt = (x, z) => { const n = nearestOnLine(x, z, riverPts); const a = riverPts[n.i], b = riverPts[n.i + 1] ?? a; return { d: n.d, w: a.w + (b.w - a.w) * n.t }; };
+  const nearRiver = lineIndex(riverPts);
+  const halfAt = (x, z) => { const n = nearRiver(x, z); const a = riverPts[n.i], b = riverPts[n.i + 1] ?? a; return { d: n.d, w: n.far ? 0 : a.w + (b.w - a.w) * n.t }; };
 
   // The path: out from the middle of the door side, gently winding, over the river on a bridge if it meets it.
   const door = lot.door;
@@ -262,10 +298,9 @@ function nature(R, s, lot, ext) {
     const dl = dLot(x, z);
     const rv = halfAt(x, z), dr = rv.d - rv.w, pd = pondD(x, z);
     const valley = smooth(2, 20, Math.min(dr, pd + 2));
-    const amp = 7.5 * smooth(8, 46, dl) * valley;
-    const hill = Math.max(0, fbm(x / 40, z / 40, s + 1, 4) - 0.38) * 2.2;
+    const hill = Math.max(0, fbm(x / 34, z / 34, s + 1, 4) - 0.36) * 2.4;
     const detail = (fbm(x / 9, z / 9, s + 3, 2) - 0.5) * 0.35 * smooth(4, 14, dl);
-    const land = 0.42 + amp * hill + detail;
+    const land = 0.42 + Math.min(sight(dl) * 0.8, 8 * hill * smooth(6, 30, dl)) * valley + detail;
     let h = GROUND + (land - GROUND) * smooth(0.5, 7.5, dl);
     const dw = Math.min(dr, pd);
     if (dw < WATER.bank) h = WATER.bed + (h - WATER.bed) * smooth(-0.8, WATER.bank, dw);
@@ -288,7 +323,8 @@ function nature(R, s, lot, ext) {
 
   // Trees: a jittered grid, thick in the forest noise and thin near the clearing, never taller than the view over
   // the lot allows (a tree d metres out hides about 1.7 × its height of ground behind it).
-  const pathD = (x, z) => nearestOnLine(x, z, path).d;
+  const nearPath = lineIndex(path, 12);
+  const pathD = (x, z) => nearPath(x, z).d;
   const bridgeD = (x, z) => (bridge ? Math.hypot(x - bridge.x, z - bridge.z) - bridge.length / 2 : Infinity);
   let trees = [];
   const STEP = 3.1;
@@ -299,7 +335,7 @@ function nature(R, s, lot, ext) {
     const rv = halfAt(x, z), dr = rv.d - rv.w;
     if (dr < WATER.bank + 0.6 || pondD(x, z) < WATER.bank + 0.6 || pathD(x, z) < 2.2 || bridgeD(x, z) < 2) continue;
     const forest = forestAt(x, z);
-    const p = smooth(5, 22, dl) * (smooth(0.45, 0.62, forest) * 0.92 + 0.05);
+    const p = smooth(4, 13, dl) * (smooth(0.4, 0.56, forest) * 0.9 + 0.07) + (dl < 16 ? 0.12 * smooth(4, 8, dl) * smooth(0.35, 0.5, forest) : 0);
     if (roll > p) continue;
     const h = heightAt(x, z);
     const wet = dr < 10;
@@ -311,9 +347,9 @@ function nature(R, s, lot, ext) {
     else if (forest < 0.52 && sp < 0.4) kind = "shrub";
     else kind = sp < 0.1 ? "maple-red" : sp < 0.62 ? "maple" : sp < 0.82 ? "birch" : "conifer";
     const tall = { conifer: 5.2, birch: 4.6, maple: 4.2, "maple-red": 4.2, shrub: 1.3 }[kind];
-    const cap = Math.max(0.5, (dl - 1) / 1.75) / tall;
+    const cap = sight(dl - 1.3) / tall;
     const scale = Math.min(cap, 0.8 + sc * 0.5 + (kind === "conifer" ? smooth(1, 5, h) * 0.3 : 0));
-    trees.push({ kind, x: r2(x), z: r2(z), y: r3(h - 0.06), s: r2(scale), ry: r2(rot * 6.283), tone: r2(0.88 + sc * 0.2) });
+    trees.push({ kind, x: r2(x), z: r2(z), y: r3(h - 0.06), s: down2(scale), ry: r2(rot * 6.283), tone: r2(0.88 + sc * 0.2) });
   }
   trees = thin(trees, CAPS.trees, rng(s + 17));
 
@@ -529,13 +565,12 @@ function parcels(R, block, buildings, trees, lot) {
     const n = 1 + Math.floor(R() * 3);
     for (let k = 0; k < n; k++) {
       const x = yard.minX + 1.5 + R() * Math.max(0.1, yard.maxX - yard.minX - 3), z = yard.minZ + 1.2 + R() * Math.max(0.1, yard.maxZ - yard.minZ - 2.4);
-      const tall = Math.max(0.5, (rectGap(rect(x - 1, z - 1, x + 1, z + 1), lot) - 1) / 1.75) / 4.2;
-      trees.push({ kind: R() < 0.15 ? "maple-red" : "round", x: r2(x), z: r2(z), y: LEVEL.walk, s: r2(Math.min(tall, 0.75 + R() * 0.4)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
+      const tall = sight(rectGap(rect(x - 1.3, z - 1.3, x + 1.3, z + 1.3), lot)) / 4.2;
+      trees.push({ kind: R() < 0.15 ? "maple-red" : "round", x: r2(x), z: r2(z), y: LEVEL.walk, s: down2(Math.min(tall, 0.75 + R() * 0.4)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
     }
   }
 }
 
-const HEIGHT_PER = 1.75;
 function building(R, p, front, corner, mood, lot) {
   const side = 0.3 + R() * 0.5, setback = R() < 0.45 ? 0.2 : 0.6 + R() * 1.6, rear = 0.8 + R() * 1.5;
   let f = { ...p };
@@ -548,7 +583,7 @@ function building(R, p, front, corner, mood, lot) {
   const w = f.maxX - f.minX, d = f.maxZ - f.minZ;
   if (w < 4 || d < 4) return null;
   const dl = rectGap(f, lot);
-  const maxH = Math.max(3.2, (dl - 1) / HEIGHT_PER);
+  const maxH = Math.max(3.2, sight(dl));
   const roll = R();
   let style;
   if (corner && roll < 0.55) style = "shop";
@@ -603,8 +638,8 @@ function streetside(R, outer, lamps, trees, lot) {
         const x = e.a.x + ux * tt, z = e.a.z + uz * tt;
         const nx = e.face === Math.PI / 2 ? -0.25 : e.face === -Math.PI / 2 ? 0.25 : 0, nz = e.face === Math.PI ? 0.25 : e.face === 0 ? -0.25 : 0;
         const px = x + nx, pz = z + nz;
-        const tall = Math.max(0.45, (rectGap(rect(px - 1, pz - 1, px + 1, pz + 1), lot) - 0.5) / 1.75) / 4.2;
-        trees.push({ kind: "street", x: r2(px), z: r2(pz), y: LEVEL.walk, s: r2(Math.min(tall, 0.62 + R() * 0.2)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
+        const tall = sight(rectGap(rect(px - 1.3, pz - 1.3, px + 1.3, pz + 1.3), lot)) / 4.2;
+        trees.push({ kind: "street", x: r2(px), z: r2(pz), y: LEVEL.walk, s: down2(Math.min(tall, 0.62 + R() * 0.2)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
       }
     }
   }

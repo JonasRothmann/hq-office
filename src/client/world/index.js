@@ -2,6 +2,8 @@
 // column and under the status pill, driven by the state (lanes, vitals, HQ), the theme and the owner's settings.
 // A click on a worker or a desk selects its lane like a click on its name anywhere else (card/card.js select()).
 import { mountWorld } from "./world.js";
+// The land around the office, not yet mounted: world.js takes it over (docs/design/outside/notes.md) and this line goes.
+import "./outside/outside.js";
 import { on } from "../core/bus.js";
 import { S } from "../core/state.js";
 import { select, selected } from "../card/card.js";

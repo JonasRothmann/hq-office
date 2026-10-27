@@ -87,7 +87,9 @@ resize();
 const rot = ((Number(q.get("rot") ?? 0) | 0) % 4 + 4) % 4;
 for (let i = 0; i < rot; i++) view.rotate(1);
 view.fit(foot, true);
-if (q.has("zoom")) { view.zoom(Number(q.get("zoom"))); view.ppm = view.ppmTo; view.focus(0, 0, true); }
+// zoom 0 far, 1 mid, 2 near; focus=x,z looks at a ground point (default: the middle of the building)
+const [fx, fz] = (q.get("focus") ?? "0,0").split(",").map(Number);
+if (q.has("zoom")) { view.zoom(Number(q.get("zoom"))); view.ppm = view.ppmTo; view.focus(fx, fz, true); }
 
 // What the outside alone costs at this view: drawn once with the stand-in hidden.
 function cost() {
