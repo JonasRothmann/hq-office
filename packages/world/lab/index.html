@@ -35,12 +35,18 @@
     const num = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
     if (q.has("clean")) document.body.classList.add("clean");
     const canvas = document.getElementById("c");
+    // ?box=WxH&at=X,Y: a canvas of that CSS size and place (fractions allowed), to prove the sizing
+    if (q.has("box")) {
+      const [bw, bh] = q.get("box").split("x").map(Number), [bx, by] = (q.get("at") ?? "0,0").split(",").map(Number);
+      Object.assign(canvas.style, { position: "absolute", left: `${bx}px`, top: `${by}px`, width: `${bw}px`, height: `${bh}px` });
+    }
     const world = createWorld(canvas, mod.default, {
       theme: q.get("theme") ?? "light", time: q.get("time") ?? undefined, walls: q.get("walls") ?? "cutaway", focusRoom: q.get("focus"),
       rot: num("rot") ?? 0, zoom: num("zoom"), clock: q.has("manual") ? "manual" : "raf",
-      debug: { screenNoise: q.has("screenNoise"), noSnap: q.has("noSnap"), shadowRadius: num("shadowRadius") },
+      idleFps: num("idleFps"),
+      debug: { screenNoise: q.has("screenNoise"), noSnap: q.has("noSnap"), shadowRadius: num("shadowRadius"), oldSizing: q.has("oldSizing") },
     });
-    if (q.has("focusOn")) { const [x, z] = q.get("focusOn").split(",").map(Number); world.camera.focusOn(x, z); }
+    if (q.has("focusOn")) { const [x, z] = q.get("focusOn").split(",").map(Number); world.camera.focusOn(x, z, { ease: false }); }
     world.bindInput(canvas);
     world.on("pick", (p) => console.log("pick", JSON.stringify(p)));
     const info = document.getElementById("info");
@@ -107,6 +113,13 @@
       }
       return { png: out.toDataURL("image/png"), log };
     };
+    // The canvas's backing store against its device-pixel box (as the browser reports it) and its CSS box.
+    let deviceBox = null;
+    try { new ResizeObserver((e) => { const d = e[0].devicePixelContentBoxSize?.[0]; if (d) deviceBox = [d.inlineSize, d.blockSize]; }).observe(canvas, { box: "device-pixel-content-box" }); } catch {}
+    lab.sizing = () => { const r = canvas.getBoundingClientRect(); return { dpr: devicePixelRatio, buffer: [canvas.width, canvas.height], deviceBox, rect: [r.left, r.top, r.width, r.height], camera: world.inspect().size }; };
+    lab.frames = (n) => new Promise((ok) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : ok()); f(); });
+    // Pan by (dx, dy) CSS px and draw: the picture's shift in device px (screenshots before and after compare it).
+    lab.panShift = (dx, dy) => { const a = rawProject([5, 0, 5]); world.camera.pan(dx, dy); world.render(); const b = rawProject([5, 0, 5]); const d = world.camera.pose().dpr; return [(b.x - a.x) * d, (b.y - a.y) * d]; };
     lab.world = world;
     lab.ready = true;
   } catch (e) {

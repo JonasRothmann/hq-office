@@ -76,5 +76,5 @@ export async function openTab(cdp: Cdp, { w, h, dpr = 1 }: { w: number; h: numbe
     }
   };
   const screenshot = async (format: "png" | "jpeg" = "png") => Buffer.from((await s("Page.captureScreenshot", { format, ...(format === "jpeg" ? { quality: 88 } : {}) })).data, "base64");
-  return { s, evaluate, load, screenshot, errors };
+  return { s, evaluate, load, screenshot, errors, targetId };
 }
