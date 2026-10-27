@@ -100,7 +100,7 @@ function prTag(k, p) {
 }
 function workHtml(r) {
   return work(r).map((w) => {
-    const state = w.item ? `<span class="tag ws ${w.item.state}" title="${esc(w.item.why)}">${WS[w.item.state]}</span>` : `<span class="tag muted">NOT ON THE BOARD</span>`;
+    const state = w.item ? `<span class="tag ws ${esc(w.item.state)}" title="${esc(w.item.why)}">${esc(WS[w.item.state])}</span>` : `<span class="tag muted">NOT ON THE BOARD</span>`;
     // A PR's board state shows only when the room does not link its item's issue (which shows it already).
     const shown = w.kind === "issue" || !(w.item && r.issues.includes(w.item.issue));
     return `<span class="rwork">${w.kind === "issue" ? issueTag(w.key) : prTag(w.key, w.pr)}${shown ? state : ""}</span>`;
@@ -110,9 +110,9 @@ function workHtml(r) {
 // ---- the head: the room, its owner and work, who sits at the table ----
 
 function renderHead(r) {
-  setHTML(part("who"), `${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}`);
+  setHTML(part("who"), `${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${esc(r.members.length)} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}`);
   // A thread names the question or update it is on; that item opens in the reader, answered or not.
-  setHTML(part("works"), r.thread ? `<button class="tag key" type="button" data-read="${esc(r.thread.kind)}:${r.thread.ref}">${r.thread.kind === "question" ? "QUESTION" : "UPDATE"} #${r.thread.ref}</button>` : workHtml(r));
+  setHTML(part("works"), r.thread ? `<button class="tag key" type="button" data-read="${esc(r.thread.kind)}:${esc(r.thread.ref)}">${r.thread.kind === "question" ? "QUESTION" : "UPDATE"} #${esc(r.thread.ref)}</button>` : workHtml(r));
   setHTML(part("rv-title"), esc(r.title));
   // The owner at the head of the table, then the owning lane and its members (a click selects one).
   setHTML(part("rvseats"), `<span class="k">AT THE TABLE</span><span class="rlane you" title="You, at the head of the table"><i></i><b>${esc(CONFIG.owner.trim() || "You")}</b><span class="role">HEAD</span></span>${[r.owner, ...r.members].map((n) => laneChip(n)).join("")}`);
@@ -121,12 +121,12 @@ function renderHead(r) {
 // ---- the brief and the shelf ----
 
 function renderBrief(d) {
-  const head = `<div class="k"><span>BRIEF</span>${d?.briefAt ? `<span class="by">${esc(d.briefBy || "")} · ${ago(d.briefAt)}</span>` : ""}</div>`;
+  const head = `<div class="k"><span>BRIEF</span>${d?.briefAt ? `<span class="by">${esc(d.briefBy || "")} · ${esc(ago(d.briefAt))}</span>` : ""}</div>`;
   if (!d) { setHTML(part("rbrief"), head); return; }
   if (!d.brief) { setHTML(part("rbrief"), `${head}<div class="md none">No brief yet. The owning lane pins one with hud room brief ${esc(d.slug)}.</div>`); return; }
   // Folded after FOLD lines, so the thread is a short scroll away; unfolded, it stays so for this room.
   const lines = d.brief.split("\n").length, long = lines > FOLD, open = briefOpen.has(d.slug);
-  setHTML(part("rbrief"), `${head}<div class="md${long && !open ? " clamp" : ""}">${markdown(d.brief)}</div>${long ? `<button class="more" type="button" data-brief-fold>${open ? "FOLD THE BRIEF" : `ALL ${lines} LINES`}</button>` : ""}`);
+  setHTML(part("rbrief"), `${head}<div class="md${long && !open ? " clamp" : ""}">${markdown(d.brief)}</div>${long ? `<button class="more" type="button" data-brief-fold>${open ? "FOLD THE BRIEF" : `ALL ${esc(lines)} LINES`}</button>` : ""}`);
 }
 
 const icon = (paths) => `<svg viewBox="0 0 12 12" aria-hidden="true" shape-rendering="crispEdges">${paths}</svg>`;
@@ -137,14 +137,18 @@ const ICON = {
 };
 const LABEL = { "claude-artifact": "CLAUDE ARTIFACT", link: "LINK", file: "FILE", image: "IMAGE" };
 function host(u) { try { return new URL(u, location.href).host.replace(/^www\./, ""); } catch { return ""; } }
+// A picture shows only when this HUD serves it (an upload or a room's file): one anywhere else is a link card, so a
+// lane cannot make the owner's browser fetch an address it chose.
+function ours(u) { try { const x = new URL(u, location.href); return x.origin === location.origin && /^\/(uploads|room-files)\//.test(x.pathname); } catch { return false; } }
 function cardHtml(a) {
-  const meta = `<span class="am">${esc(a.by || "")} · ${ago(a.at)}</span>`;
-  if (a.kind === "image") {
-    return `<div class="art image"><button type="button" class="aimg" data-art-preview="${a.id}" aria-label="See ${esc(a.title)} full screen"><img src="${esc(a.url)}" alt="" loading="lazy"></button><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}</div></div>`;
+  const meta = `<span class="am">${esc(a.by || "")} · ${esc(ago(a.at))}</span>`;
+  if (a.kind === "image" && ours(a.url)) {
+    return `<div class="art image"><button type="button" class="aimg" data-art-preview="${esc(a.id)}" aria-label="See ${esc(a.title)} full screen"><img src="${esc(a.url)}" alt="" loading="lazy"></button><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}</div></div>`;
   }
-  const ext = a.kind === "file" ? (a.url.match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? "").toUpperCase() : "";
-  const label = a.kind === "file" ? `${ext || "FILE"} FILE` : a.kind === "link" ? host(a.url) || "LINK" : LABEL[a.kind];
-  return `<div class="art ${esc(a.kind)}"><div class="ak">${ICON[a.kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
+  const kind = a.kind === "image" ? "link" : a.kind;
+  const ext = kind === "file" ? (a.url.match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? "").toUpperCase() : "";
+  const label = kind === "file" ? `${ext || "FILE"} FILE` : kind === "link" ? host(a.url) || "LINK" : LABEL[kind];
+  return `<div class="art ${esc(kind)}"><div class="ak">${ICON[kind] ?? ICON.link}<span>${esc(label)}</span></div><div class="at" title="${esc(a.title)}">${esc(a.title)}</div><div class="af">${meta}<a class="btn-s open" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN</a></div></div>`;
 }
 function renderShelf(d) {
   const items = d?.artifactList ?? [];
@@ -158,7 +162,7 @@ function renderShelf(d) {
 function deliveryHtml(m) {
   if (m.delivery === "sent") return `<span class="seen ok">DELIVERED</span>`;
   if (m.delivery === "away") return `<span class="seen kept" title="Kept: it goes to ${esc(m.to)} when herdr sees the lane again">AWAY · KEPT</span>`;
-  if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-room-retry="${m.id}">RETRY</button>`;
+  if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-room-retry="${esc(m.id)}">RETRY</button>`;
   return `<span class="seen">SENDING…</span>`;
 }
 // A message's text as markdown with its line breaks kept. A long one without code shows its first part and MORE.
@@ -173,8 +177,8 @@ function messageHtml(m, byId, live) {
   const lane = m.who !== "owner";
   const p = m.reply ? byId.get(m.reply) : null;
   const quote = p ? `<div class="quote">↩ ${p.who === "owner" ? "you" : esc(p.who)} ${clock(p.at)}: ${esc(short(p.text, 80))}</div>` : m.reply ? `<div class="quote">↩ an earlier message</div>` : "";
-  return `<article class="msg ${lane ? "lane" : "you"}${lane && (!m.read || fresh.has(m.id)) ? " unread" : ""}" data-rmsg="${m.id}">
-      <div class="meta"><span class="who">${lane ? esc(m.who) : "YOU"}</span>${lane ? "" : `<span class="to">→ ${esc(m.to)}</span>`}<span class="tag">${clock(m.at)}</span>${lane ? "" : deliveryHtml(m)}${lane && live ? `<button class="btn-s" type="button" data-room-reply="${m.id}">REPLY</button>` : ""}</div>
+  return `<article class="msg ${lane ? "lane" : "you"}${lane && (!m.read || fresh.has(m.id)) ? " unread" : ""}" data-rmsg="${esc(m.id)}">
+      <div class="meta"><span class="who">${lane ? esc(m.who) : "YOU"}</span>${lane ? "" : `<span class="to">→ ${esc(m.to)}</span>`}<span class="tag">${esc(clock(m.at))}</span>${lane ? "" : deliveryHtml(m)}${lane && live ? `<button class="btn-s" type="button" data-room-reply="${esc(m.id)}">REPLY</button>` : ""}</div>
       ${quote}<div class="text md">${textHtml(m)}</div>
     </article>`;
 }
@@ -187,7 +191,7 @@ function renderThread(d, r) {
   if (!d) { setHTML(thread, `<div class="empty">LOADING…</div>`); return; }
   for (const m of d.messages) if (m.who !== "owner" && !m.read) fresh.add(m.id);
   const byId = new Map(d.messages.map((m) => [m.id, m]));
-  const html = `<div class="k"><span>THREAD</span></div>` + (d.earlier ? `<div class="earlier">${d.earlier} EARLIER ${d.earlier === 1 ? "MESSAGE" : "MESSAGES"} NOT SHOWN</div>` : "")
+  const html = `<div class="k"><span>THREAD</span></div>` + (d.earlier ? `<div class="earlier">${esc(d.earlier)} EARLIER ${d.earlier === 1 ? "MESSAGE" : "MESSAGES"} NOT SHOWN</div>` : "")
     + (d.messages.map((m) => messageHtml(m, byId, !r.archivedAt)).join("") || `<div class="empty">No messages yet. Write to ${esc(r.owner)} below: it is typed into the lane, and its reply lands here.</div>`);
   // At the newest message (just opened, or within 40px of it), stay on it; reading older ones, what you read stays put.
   const pinned = stick || body.scrollHeight - body.scrollTop - body.clientHeight < 40, place = pinned ? null : keepScroll(body, "data-rmsg");
@@ -223,7 +227,7 @@ function renderSend(r) {
   const away = laneInfo(d.to).away;
   setHTML(el.querySelector(".tostate"), away ? `<span class="aw">AWAY</span> kept until the lane is back` : `typed into ${esc(d.to)}`);
   const p = d.reply && detail?.messages.find((m) => m.id === d.reply);
-  setHTML(el.querySelector(".rquote"), p ? `<span>↩ ${esc(p.who)} ${clock(p.at)}: ${esc(short(p.text, 70))}</span><button class="btn-s" type="button" data-room-unreply aria-label="Do not reply to it">×</button>` : "");
+  setHTML(el.querySelector(".rquote"), p ? `<span>↩ ${esc(p.who)} ${esc(clock(p.at))}: ${esc(short(p.text, 70))}</span><button class="btn-s" type="button" data-room-unreply aria-label="Do not reply to it">×</button>` : "");
   sendState();
 }
 function sendState() {
@@ -312,6 +316,8 @@ export function leaveRoom() {
   history.replaceState(null, "", location.pathname + location.search);
   route();
 }
+// Another area (the stack) asks for a room through the bus: "room:go" (slug).
+on("room:go", goRoom);
 addEventListener("popstate", route);
 addEventListener("hashchange", route);
 
@@ -394,5 +400,7 @@ new ResizeObserver(toEnd).observe(body);
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("more", (k) => { if (openSlug && String(k).startsWith("room") && detail) renderThread(detail, roomOf(openSlug)); });
 on("state", (S, keys) => { if (!keys || keys.has("rooms")) route(); });
+// The page loads this folder after main.js: the first state may be in already.
+route();
 // The page tells the test tools when this module has run.
 window.__roomsReady = true;
