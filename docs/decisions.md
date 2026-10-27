@@ -150,9 +150,13 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
 - Needs you lists the blocking and open questions, unread updates and rooms with new lane messages. Its count is the
   number of open questions. The item the reader shows stays listed while it shows, even once it is read, so the
   reader and its card stay paired.
+- A blocking question shows under every filter, Rooms included. The filter is kept in this browser, and a saved Rooms
+  hid every question after a reload. We chose this over resetting the filter on load: a reset covers only a reload,
+  while a question can also turn blocking, or arrive, under Rooms.
 - A question is short when it has no secrets, at most four options, a body of at most 200 characters and no table,
-  code or heading (`isShort` in `src/server/owner-inbox.ts`). A short card shows its options and SEND; anything
-  longer shows a preview, its shape (lines, tables, code, links) and opens in the reader.
+  code or heading (`isShort` in `src/server/owner-inbox.ts`). A short card shows all of it: the body, its links as
+  chips, its images as thumbnails, its options and SEND. Anything longer shows a preview, its shape (lines, tables,
+  code, links) and opens in the reader. Every card and the reader's head name the kind: DECISION, ACTION or INFO.
 - Answered from the reader, the reader moves on to the next question in the stack's order, or closes.
 - FROM HQ is no longer a separate feed: updates are inbox items. The top bar's FROM HQ opens the newest unread one.
   SENT AND ANSWERED and the secrets drop moved into Tell HQ's view. Replying to an update stays (a note that starts
@@ -162,7 +166,24 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
   and the phone's CHAT, BRIEF and SHELF tabs are gone. Pills show rooms with new messages (up to three) and the room
   that is open. On a desktop a room no longer pauses the office; on a phone the reader covers it and it rests.
 - Keys work only while no text field has focus. Esc steps back in this order: a dialog, the tier menu, the text
-  field, the reader, the worker card. Cmd-Enter outside a field sends the reader's answer (or a focused short card's).
-  J and K move through the stack; with the reader open it follows them.
+  field, the reader, the worker card. J and K move through the stack; with the reader open it follows them. Enter
+  opens the selected card, and only when no button, link or tab has focus: Enter on a control is the control's. M
+  opens the tier and priority menu. Q and E stay the office's (they turn it), so no inbox key shadows them.
+- The keys act on one target, marked KEYS: the card or the reader the owner used last (a click, a pick, J or K, a
+  field). Cmd-Enter and 1 to 9 act on it and nothing else. A long card is never their target outside the reader:
+  they say to open it first. Before, the reader's question won over a card just used, so a pick on one card and
+  Cmd-Enter answered another.
+- No send right after an answer. When an answer lands the next question can sit where the last one was with its send
+  ready (an ACTION's DONE, an INFO's OK, a pick kept from before). For 1.2 s after an answer lands, no send button is
+  on and Cmd-Enter sends nothing, except on a question the owner picked or typed in since. Held keys do not repeat a
+  send or a pick. We chose this guard over making the advance wait for the send: the advance already waits for it,
+  and the stray press comes after (a second Cmd-Enter, or a double click that lands on the next card's SEND).
+- A send in flight keeps its button off until the server answers, whatever redraws it. A reply to an update and a
+  message to a room clear only the box they were sent from, though the reader may have moved on.
+- On a phone the reader covers the stack. A question that arrives meanwhile shows as a red banner at the reader's top
+  (the newest one); a tap opens it. The chime alone was easy to miss.
+- `S.inbox` is built from what `state()` already loaded (`S.open`, `S.updates`, `S.rooms`): a state part gets the
+  state built so far. The shelves are read for the listed rooms only, once per state version. A link whose URL is
+  only on the shelf of a room archived more than 7 days ago is no longer named after that shelf.
 - Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
   on). Nothing is fetched from another site; a picture shows only when it is on this HUD.

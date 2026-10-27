@@ -59,7 +59,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - **Something drawn in or over the office**: `onFrame((now, dt) => ...)`, `deskAnchor(lane)` and `project(v)` from `src/client/world/api.js` (HTML over a desk), or `addToWorld(obj, lane)` for a three.js object at a lane's desk; listen for `world:ready` before using them.
 - **A route**: add `{ method, path | prefix | pattern, handle }` to `src/server/routes/<resource>.ts`, or add the file. GET handlers return a Response; POST handlers get `{ body, m }` and return the JSON reply (nothing means `{ ok: true }`); writes are bumped for you.
 - **A table**: `src/server/schema/<table>.sql` with `CREATE TABLE IF NOT EXISTS`. Changing an existing table is a migration: ask HQ first.
-- **Server logic and state**: `src/server/<name>.ts`, imported by its route file; `addStatePart("<name>", () => value)` from `state.ts` puts it in `/api/state` as `S.<name>`.
+- **Server logic and state**: `src/server/<name>.ts`, imported by its route file; `addStatePart("<name>", () => value)` from `state.ts` puts it in `/api/state` as `S.<name>`. The function gets the state built so far (`(s) => ...`): build on `s.open` or `s.rooms` instead of querying them again.
 
 ## Releasing
 
