@@ -154,15 +154,18 @@ test("the tier route checks what it is given", async () => {
 });
 
 test("open asks are ordered blocking first, then priority, then due time, then oldest (B5)", async () => {
-  const t = Date.now() - 3600_000;
-  const make = async (title: string, over: Record<string, unknown>) => (await post("/api/asks", { lane: "order", title, created_at: t, ...over })).id;
+  // created_at is the server's clock (no caller sets it), so "old" is made first and "new" last, a moment apart.
+  const make = async (title: string, over: Record<string, unknown>) => {
+    await Bun.sleep(5);
+    return (await post("/api/asks", { lane: "order", title, ...over })).id;
+  };
+  await make("nb normal old", {});
   await make("nb urgent", { priority: "urgent" });
-  await make("b low old", { tier: "blocking", priority: "low", created_at: t - 1000 });
-  await make("b normal late", { tier: "blocking", created_at: t - 5000 });
-  await make("b normal due", { tier: "blocking", due: t + 7200_000 });
+  await make("b low old", { tier: "blocking", priority: "low" });
+  await make("b normal late", { tier: "blocking" });
+  await make("b normal due", { tier: "blocking", due: Date.now() + 7200_000 });
   await make("b high", { tier: "blocking", priority: 1 });
-  await make("nb normal new", { created_at: t + 10 });
-  await make("nb normal old", { created_at: t - 10 });
+  await make("nb normal new", {});
   const order = (await state()).open.filter((a: any) => a.lane === "order").map((a: any) => a.title);
   expect(order).toEqual(["b high", "b normal due", "b normal late", "b low old", "nb urgent", "nb normal old", "nb normal new"]);
 });
@@ -179,6 +182,42 @@ test("each lane counts its open blocking asks; a working lane stays moving, an i
   expect(lane("resting").status).toBe("needs_you");
   expect(lane("order").blocking).toBe(4);
   expect(lane("order").asks).toBe(7);
+});
+
+// The page puts due and created_at in HTML attributes, so an agent's string there was an injection (review finding 1).
+test("an ask's due is a time in ms or refused with 400; its created_at is always the server's clock", async () => {
+  const evil = `1" autofocus tabindex="0" onfocus="document.title='pwned'" x="`;
+  const refused = await send("/api/asks", { title: "evil due", due: evil });
+  expect(refused.status).toBe(400);
+  expect((await refused.json()).error).toMatch(/^due must be/);
+  expect((await state()).open.some((a: any) => a.title === "evil due")).toBe(false);
+
+  const before = Date.now();
+  const a = await ask((await post("/api/asks", { title: "evil created_at", created_at: evil })).id);
+  expect(typeof a.created_at).toBe("number");
+  expect(a.created_at).toBeGreaterThanOrEqual(before);
+  expect(a.created_at).toBeLessThanOrEqual(Date.now());
+  // A number is ignored too: the age the page shows is the server's.
+  expect((await ask((await post("/api/asks", { title: "backdated", created_at: 1000 })).id)).created_at).toBeGreaterThanOrEqual(before);
+
+  // What hud sends (ms), and what a person might write: digits, HH:MM today in local time, a date or a date-time.
+  const due = async (v: unknown) => (await ask((await post("/api/asks", { title: `due ${String(v)}`, due: v })).id)).due;
+  expect(await due(1_800_000_000_000)).toBe(1_800_000_000_000);
+  expect(await due("1800000000000")).toBe(1_800_000_000_000);
+  // HH:MM is today in the server's local time; bun test runs this file in UTC, so only the shape is checked here.
+  const [late, early] = [await due("17:30"), await due("9:05")];
+  expect(late - early).toBe((8 * 60 + 25) * 60_000);
+  expect(Math.abs(late - new Date().setUTCHours(17, 30, 0, 0))).toBeLessThanOrEqual(14 * 3600_000);
+  expect(await due("2026-11-02")).toBe(Date.parse("2026-11-02"));
+  expect(await due("2026-11-02T17:00Z")).toBe(Date.parse("2026-11-02T17:00Z"));
+  expect(await due("2026-11-02T17:00:00+01:00")).toBe(Date.parse("2026-11-02T17:00:00+01:00"));
+  expect(await due(undefined)).toBeNull();
+  expect(await due("")).toBeNull();
+  for (const bad of ["25:00", "12:60", "soon", "NaN", "Infinity", "-5", "x 1", "2026-13-45", -5, 0, { at: 1 }, [1], true]) {
+    const r = await send("/api/asks", { title: "bad due", due: bad });
+    expect([JSON.stringify(bad), r.status]).toEqual([JSON.stringify(bad), 400]);
+  }
+  expect((await state()).open.some((a: any) => a.title === "bad due")).toBe(false);
 });
 
 describe("a database made by v0.10.1", () => {

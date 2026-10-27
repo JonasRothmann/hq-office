@@ -127,10 +127,10 @@ function metaHtml(a) {
   const move = a.tier_locked
     ? `<p class="lockwhy">${LOCK} ${lane || "The lane"} cannot go on without the answer, so it stays blocking until answered.</p>`
     : `<button class="btn-s tier-set" type="button" data-tier="${blocking ? "nonblocking" : "blocking"}">${blocking ? "MAKE NON-BLOCKING" : "MAKE BLOCKING"}</button>`;
-  const menu = `<details class="tiermenu"${menuOpen ? " open" : ""}><summary title="Tier and priority (M)"><span class="tag tierchip${blocking ? " blocking" : ""}">${a.tier_locked ? LOCK : ""}${tier}</span><span class="tag prio p${p}">${PRIO_NAME[p]}</span></summary>
+  const menu = `<details class="tiermenu"${menuOpen ? " open" : ""}><summary title="Tier and priority (M)"><span class="tag tierchip${blocking ? " blocking" : ""}">${a.tier_locked ? LOCK : ""}${tier}</span><span class="tag prio p${esc(p)}">${esc(PRIO_NAME[p])}</span></summary>
     <div class="pop"><div class="k">PRIORITY</div><div class="prios">${PRIORITIES.map((name, i) => `<button class="btn-s prio-set${i === p ? " on" : ""}" type="button" data-prio="${name}">${PRIO_NAME[i].toUpperCase()}</button>`).join("")}</div>
     <div class="k">TIER</div>${move}${moved}</div></details>`;
-  return `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${lane}">${lane}</button>` : `<b class="lname">HQ</b>`}${where ? `<span class="where">${where}</span>` : ""}${kindTag(a)}${menu}${editedTag(a.id)}${threadTag(a.id)}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span><span class="idt">#${a.id} · asked ${clock(a.created_at)} · <span data-since="${a.created_at}"></span></span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`;
+  return `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${lane}">${lane}</button>` : `<b class="lname">HQ</b>`}${where ? `<span class="where">${where}</span>` : ""}${kindTag(a)}${menu}${editedTag(a.id)}${threadTag(a.id)}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span><span class="idt">#${esc(a.id)} · asked ${esc(clock(a.created_at))} · <span data-since="${esc(a.created_at)}"></span></span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`;
 }
 
 function optsHtml(a) {
@@ -147,7 +147,7 @@ function secretsHtml(a) {
 // A thread sits under the body, out of view under a long one: the head says there is one and takes you to it.
 function threadTag(id) {
   const th = itemOf(`ask:${id}`)?.thread;
-  return th ? `<button class="tag thread-jump${th.unread ? " new" : ""}" type="button" data-thread-jump>THREAD${th.unread ? ` · ${th.unread} NEW` : ""}</button>` : "";
+  return th ? `<button class="tag thread-jump${th.unread ? " new" : ""}" type="button" data-thread-jump>THREAD${th.unread ? ` · ${esc(th.unread)} NEW` : ""}</button>` : "";
 }
 
 // The box's buttons: REPLY (to the thread, the question stays open), then the answer's own send.
@@ -163,7 +163,7 @@ function renderClosed(a) {
   el.dataset.lane = a.lane || "";
   el.classList.remove("blocking");
   const answered = a.status === "answered";
-  setHTML(part("meta"), `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : `<b class="lname">HQ</b>`}${kindTag(a)}<span class="tag ${answered ? "done" : "muted"}">${answered ? "ANSWERED" : "WITHDRAWN"}</span><span class="spacer"></span><span class="idt">#${a.id} · ${answered ? "answered" : "withdrawn"} ${clock(a.answered_at)}</span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`);
+  setHTML(part("meta"), `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : `<b class="lname">HQ</b>`}${kindTag(a)}<span class="tag ${answered ? "done" : "muted"}">${answered ? "ANSWERED" : "WITHDRAWN"}</span><span class="spacer"></span><span class="idt">#${esc(a.id)} · ${answered ? "answered" : "withdrawn"} ${esc(clock(a.answered_at))}</span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`);
   setHTML(part("rv-title"), linkify(a.title));
   part("doc").hidden = !a.body;
   setHTML(part("doc"), a.body ? doc(a.body) : "");

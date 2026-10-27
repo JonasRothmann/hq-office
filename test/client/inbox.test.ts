@@ -4,6 +4,9 @@
 // the office; a saved filter never hides a blocking question; the quick SEND stays off until its send settles.
 // Needs Chrome (CHROME_BIN); skipped without it. A throwaway server on a spare port, the world off.
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
 
@@ -12,6 +15,8 @@ const chromeFound = !!findChrome();
 let chrome: Awaited<ReturnType<typeof startChrome>>;
 let server: Awaited<ReturnType<typeof startServer>>;
 let page: Awaited<ReturnType<typeof newSession>>;
+// The throwaway server's data folder is this test's own, so a test can write what the API would refuse.
+const DATA = mkdtempSync(join(tmpdir(), "hq-office-inbox-"));
 const errors: string[] = [];
 const until = async (expr: string, ms = 15000) => {
   for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(50)) if (await page.evaluate(expr).catch(() => false)) return true;
@@ -45,12 +50,12 @@ const upload = async () => (await (await fetch(`${server.base}/api/uploads?name=
 beforeAll(async () => {
   if (!chromeFound) return;
   chrome = await startChrome();
-  server = await startServer(ROOT);
+  server = await startServer(ROOT, { HUD_DATA_DIR: DATA });
   for (const name of ["bravo", "charlie"]) await server.post("/api/lanes", { name, phase: "running", title: "x", machine: "local" });
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 }, 60_000);
-afterAll(async () => { await server?.stop(); await chrome?.close(); });
+afterAll(async () => { await server?.stop(); await chrome?.close(); rmSync(DATA, { recursive: true, force: true }); });
 
 test.skipIf(!chromeFound)("a second ⌘Enter after an answer does not answer the next question, however long it waits", async () => {
   await clear();
@@ -243,6 +248,23 @@ test.skipIf(!chromeFound)("the quick SEND stays off until its send settles, what
   await page.evaluate(`window.__go()`);
   await until(`!${card(A)}`);
   expect((await answerOf(A))?.answer).toBe("done");
+}, 60_000);
+
+test.skipIf(!chromeFound)("an ask's due and created_at never add an attribute to the stack's card or the reader, whatever the database holds", async () => {
+  await clear();
+  const A = await ask({ lane: "bravo", kind: "action", title: "Hostile times" });
+  // Straight into the throwaway database: SQLite keeps a string in an INTEGER column, so the page must not trust it.
+  const evil = '1" data-pwned="1';
+  const db = new Database(join(DATA, "hud.db"));
+  db.query("UPDATE asks SET due = ?, created_at = ? WHERE id = ?").run(evil, evil, A);
+  db.close();
+  await load();
+  await until(`!!${card(A)}`);
+  expect(await page.evaluate(`[${card(A)}.dataset.due, ${card(A)}.dataset.created, !!document.querySelector("[data-pwned]")]`)).toEqual([evil, evil, false]);
+  await page.evaluate(`${card(A)}.click()`);
+  await until(`${readerAsk} === "${A}"`);
+  expect(await page.evaluate(`[document.querySelector(".askview [data-since]").dataset.since, !!document.querySelector("[data-pwned]")]`)).toEqual([evil, false]);
+  await server.post(`/api/asks/${A}/withdraw`, {});
 }, 60_000);
 
 test.skipIf(!chromeFound)("no page errors", () => {

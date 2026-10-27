@@ -91,7 +91,7 @@ document.addEventListener("keydown", (e) => {
     if (t.inReader) { sendInReader(); return; }
     if (!t.short) { openFirst(); return; }
     const a = askOf(t.id);
-    if (a && ready(a)) sendAnswer(a.id, document.querySelector(`.ask[data-ask="${a.id}"] [data-quick]`));
+    if (a && ready(a)) sendAnswer(a.id, document.querySelector(`.ask[data-ask="${CSS.escape(String(a.id))}"] [data-quick]`));
     return;
   }
   if (mod) return;

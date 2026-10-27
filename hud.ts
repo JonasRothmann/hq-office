@@ -87,6 +87,10 @@ async function call(method: string, path: string, body?: unknown) {
 function dueAt(hhmm?: string) {
   if (!hhmm) return undefined;
   const [h, m] = hhmm.split(":").map(Number);
+  if (!/^\d{1,2}(:\d{2})?$/.test(hhmm) || h > 23 || (m ?? 0) > 59) {
+    console.error(`--due: give a time today as HH:MM, such as 17:30, not "${hhmm}"`);
+    process.exit(2);
+  }
   const d = new Date();
   d.setHours(h, m ?? 0, 0, 0);
   return d.getTime();

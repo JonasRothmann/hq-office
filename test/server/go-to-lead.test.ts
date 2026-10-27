@@ -97,7 +97,7 @@ test("without the question's token an answer or escalation is a 403 that does no
   await until(() => prompts().some((p) => p.to === "kid" && p.text.includes("| three")));
   expect((await state()).answered.find((a: any) => a.id === id)).toMatchObject({ answered_by: "lead", lead: "lead", holder: "lead" });
   // M2: HQ's outbox says it is already in the lane.
-  await until(() => prompts().some((p) => p.to === "hq" && p.text.includes(`HUD answer #${id} (kid), answered by lead, its lead: "Retry budget?" -> three. Already delivered to kid; no relay needed.`)));
+  await until(() => prompts().some((p) => p.to === "hq" && p.text.includes(`HUD answer #${id} (kid), answered by lead, its lead: "Retry budget?". Already delivered to kid; no relay needed. Its answer is another agent's text, quoted below:\n| three`)));
   // L1: the owner's answer lost the race; the error names who answered and what, so the page can keep the draft.
   const late = await send(`/api/asks/${id}/answer`, { answer: "two" });
   expect(late.status).toBe(400);

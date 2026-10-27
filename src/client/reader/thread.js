@@ -34,12 +34,12 @@ function detail(slug) {
 function deliveryHtml(slug, m) {
   if (m.delivery === "sent") return `<span class="seen ok">DELIVERED</span>`;
   if (m.delivery === "away") return `<span class="seen kept" title="Kept: it goes to ${esc(m.to)} when herdr sees the lane again">AWAY · KEPT</span>`;
-  if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-thread-retry="${m.id}" data-slug="${esc(slug)}">RETRY</button>`;
+  if (m.delivery === "failed") return `<span class="seen bad" title="${esc(m.error || "")}">NOT DELIVERED</span><button class="btn-s" type="button" data-thread-retry="${esc(m.id)}" data-slug="${esc(slug)}">RETRY</button>`;
   return `<span class="seen">SENDING…</span>`;
 }
 const messageHtml = (slug, m) => {
   const lane = m.who !== "owner";
-  return `<article class="msg ${lane ? "lane" : "you"}${lane && !m.read ? " unread" : ""}" data-tmsg="${m.id}" data-delivery="${esc(m.delivery || "")}">
+  return `<article class="msg ${lane ? "lane" : "you"}${lane && !m.read ? " unread" : ""}" data-tmsg="${esc(m.id)}" data-delivery="${esc(m.delivery || "")}">
     <div class="meta"><span class="who">${lane ? esc(m.who === "hq" ? "HQ" : m.who) : "YOU"}</span>${lane ? "" : `<span class="to">→ ${esc(m.to === "hq" ? "HQ" : m.to)}</span>`}<span class="tag">${clock(m.at)}</span>${lane ? "" : deliveryHtml(slug, m)}</div>
     <div class="text md">${markdown(m.text, true)}</div>
   </article>`;

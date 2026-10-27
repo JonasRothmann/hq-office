@@ -3,6 +3,8 @@ import { STALE_MS } from "./config.ts";
 import { db } from "./db.ts";
 import type { Lane } from "./types.ts";
 import { event } from "./events.ts";
+import { notifyHq } from "./hq-link.ts";
+import { oneLine } from "../agent-text.ts";
 import { laneTree, levelName, levelNames, underHq } from "../lane-tree.ts";
 
 // An agent at work: herdr says working, or an idle agent still has shells, a monitor or subagents running (bg).
@@ -28,9 +30,17 @@ export function laneStatus(lane: Lane, waits: { owner: Map<string, number>; lead
 
 const LANE_FIELDS = ["title", "machine", "pane", "issue", "pr", "phase", "note"] as const;
 
+// A new lane's name (review finding 12): it is typed into HQ and other lanes, shown on the page and matched against
+// herdr's agent names, so it is a plain word: a letter or digit first (never a flag or a dotfile), then letters,
+// digits, dot, underscore or hyphen, at most 64 in all. A lane registered before the check keeps its name.
+const LANE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 export function upsertLane(body: any) {
   if (!body.name) throw new Error("name is required");
   const parent = body.parent === undefined ? undefined : underHq(body.parent) ? null : String(body.parent).trim();
+  const known = db.query("SELECT parent FROM lanes WHERE name = ?").get(body.name) as { parent: string | null } | null;
+  if (!known && !(typeof body.name === "string" && LANE_NAME.test(body.name)))
+    throw new Error("a lane's name is letters, digits, dot, underscore or hyphen (a letter or digit first), at most 64, such as web-pm or api.auth_2");
   if (parent) checkParent(body.name, parent); // before any write: a refused parent changes nothing
   const now = Date.now();
   db.query("INSERT INTO lanes (name, updated_at) VALUES (?, ?) ON CONFLICT(name) DO NOTHING").run(body.name, now);
@@ -38,10 +48,18 @@ export function upsertLane(body: any) {
     if (body[f] !== undefined) db.query(`UPDATE lanes SET ${f} = ?, updated_at = ? WHERE name = ?`).run(body[f] === "" ? null : body[f], now, body.name);
   }
   if (parent !== undefined) {
-    const before = (db.query("SELECT parent FROM lanes WHERE name = ?").get(body.name) as { parent: string | null }).parent ?? null;
+    const before = known?.parent ?? null;
     if (before !== parent) {
       db.query("UPDATE lanes SET parent = ?, updated_at = ? WHERE name = ?").run(parent, now, body.name);
-      event("hq", `reports to ${parent ?? "HQ"}`, body.name);
+      // Who asked is not known: any local agent may call this, and a lane's parent is its lead (decision D20). So a
+      // move of an existing lane is logged as the HUD saw it, and HQ hears of it, so a lane that made itself another's
+      // lead does not go unseen (review finding 6).
+      const [lane, to, from] = [body.name, parent ?? "HQ", before ?? "HQ"].map(oneLine);
+      if (!known) event("hq", `reports to ${to}`, body.name);
+      else {
+        event("hud", `now reports to ${to} (was ${from})`, body.name);
+        notifyHq(`HUD: lane ${lane} now reports to ${to} (was ${from})${parent ? `, so ${to} is its lead` : ""}. If you did not move it, check who did.`);
+      }
     }
   }
   if (body.note || body.phase) event("hq", [body.phase && `phase ${body.phase}`, body.note].filter(Boolean).join(": "), body.name);

@@ -13,6 +13,15 @@ const ICON = {
 };
 const KIND = { "claude-artifact": "Claude artifact", file: "File", image: "Image", room: "Room" };
 
+// On this page's own origin ("//host/x" and "/\host/x" are other hosts, so a prefix check is not enough).
+const onThisHud = (u) => {
+  try {
+    return new URL(u, location.href).origin === location.origin;
+  } catch {
+    return false;
+  }
+};
+
 export function linkCards(links = []) {
   return links.map((l) => {
     if (l.kind === "room") {
@@ -20,7 +29,7 @@ export function linkCards(links = []) {
       return `<button class="lcard room" type="button" data-read="room:${esc(slug)}"><span class="lthumb">${ICON.room}</span><span class="ltx"><b>${esc(l.title)}</b><small>Room on this HUD</small></span><span class="lopen">Open</span></button>`;
     }
     // A picture shows only when it is on this HUD; anything else is its kind's icon.
-    const local = l.url.startsWith("/");
+    const local = onThisHud(l.url);
     const thumb = l.kind === "image" && local ? `<img src="${esc(l.url)}" alt="" loading="lazy">` : ICON[l.kind] ?? ICON.link;
     const sub = [esc(KIND[l.kind] ?? (l.host || "Link")),l.by ? `linked by ${esc(l.by)}${l.at ? ` ${clock(l.at)}` : ""}` : "", l.shelf ? `also on the ${esc(l.shelf.title)} shelf` : ""].filter(Boolean).join(" · ");
     return `<a class="lcard ${esc(l.kind)}" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="lthumb">${thumb}</span><span class="ltx"><b>${esc(l.title)}</b><small>${sub}</small></span><span class="lopen">Open ↗</span></a>`;

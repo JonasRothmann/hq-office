@@ -279,3 +279,23 @@ test.skipIf(!chromeFound)("phone: the room in the reader, full screen; no zoom, 
   expect(await page.evaluate(`getComputedStyle(document.documentElement).overflowY !== "hidden" && document.querySelector(".desk").getBoundingClientRect().height > 0`)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test.skipIf(!chromeFound)("a shelf image shows as a picture only when this HUD serves it; one on another host is a link card, never fetched", async () => {
+  // A room of its own, with no lane messages, so the counts the tests above check stay as they are.
+  await server.post("/api/rooms", { slug: "ope-11", title: "Pictures", owner: "alpha" });
+  const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+  const up = await (await fetch(`${server.base}/api/uploads?name=chart.png`, { method: "POST", headers: { "content-type": "image/png", "x-hud": "1" }, body: png })).json();
+  await server.post("/api/rooms/ope-11/artifacts", { title: "Uploaded chart", url: new URL(up.url, server.base).href, kind: "image" });
+  await server.post("/api/rooms/ope-11/artifacts", { title: "Tracking pixel", url: "https://images.example.net/pixel.png", kind: "image" });
+  // A full load at the desktop size, not a hash change on the page as it is: its state may not have the new room yet.
+  await size(1440, 900, false);
+  await page.s("Page.navigate", { url: "about:blank" });
+  await load("#room/ope-11");
+  await until(`document.querySelectorAll("#roomView .rshelf .art").length === 2`);
+  const cards = await page.evaluate(`[...document.querySelectorAll("#roomView .rshelf .art")].map((a) => ({ title: a.querySelector(".at").textContent, img: a.querySelector("img")?.getAttribute("src") ?? null, href: a.querySelector("a")?.getAttribute("href") ?? null }))`);
+  expect(cards).toEqual([
+    { title: "Tracking pixel", img: null, href: "https://images.example.net/pixel.png" },
+    { title: "Uploaded chart", img: new URL(up.url, server.base).href, href: null },
+  ]);
+  expect(await page.evaluate(`performance.getEntriesByType("resource").some((e) => e.name.includes("images.example.net"))`)).toBe(false);
+});

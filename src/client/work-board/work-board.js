@@ -28,8 +28,8 @@ function workRow(i) {
   const now = Date.now();
   const what = i.state === "paused" || i.state === "owner" || i.state === "blocked" ? i.why : i.last ? `last: ${i.last.what}` : "nothing has happened yet";
   const age = i.state === "paused" && i.pausedAt ? now - i.pausedAt : i.last ? now - i.last.at : now - i.createdAt;
-  return `<article class="wi ${i.state}">
-      <div class="meta"><span class="tag ws ${i.state}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>
+  return `<article class="wi ${esc(i.state)}">
+      <div class="meta"><span class="tag ws ${esc(i.state)}">${WORK_STATE[i.state]}</span>${workIssue(i)}${i.lane ? `<button class="tag lane" data-select="${esc(i.lane)}">${esc(i.lane)}</button>` : ""}${i.prs.map(workPr).join("")}<span class="age">${workAge(age)}</span></div>
       <div class="what">${esc(what)}</div>
     </article>`;
 }

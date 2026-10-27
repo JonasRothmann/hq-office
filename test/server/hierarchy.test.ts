@@ -2,6 +2,7 @@
 // refused, a removed lane's reports move up, the state carries parent, depth, path and level name, `hud tree`
 // prints the tree, the level names and theme survive a restart, and `hud board` groups work under managers.
 // A spare port, a throwaway data dir, and the real hud CLI.
+import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -113,6 +114,72 @@ describe("the lane tree on a server", () => {
     const s = (await (await fetch(`${BASE}/api/state`)).json()).settings;
     expect(s).toMatchObject({ levels: "L1, L2, L3", theme: "arena" });
     expect((await lane("api-auth")).level).toBe("L1");
+  });
+});
+
+// Any local agent can re-parent a lane, and so become its lead (review finding 6): nothing authenticates agents to each
+// other, so a move is at least never silent. Lane names are checked when a lane is registered (finding 12).
+describe("who may be named, and a lane that changes lead", () => {
+  const sql = <T>(fn: (db: Database) => T) => {
+    const db = new Database(join(DATA, "hud.db"));
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const toHq = () => sql((db) => (db.query("SELECT text FROM hq_outbox ORDER BY id").all() as { text: string }[]).map((r) => r.text));
+  const eventsOf = (name: string) => sql((db) => db.query("SELECT who, text FROM events WHERE lane = ? ORDER BY id").all(name) as { who: string; text: string }[]);
+  const register = (body: object) => fetch(`${BASE}/api/lanes`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) });
+
+  test("re-parenting an existing lane is logged plainly and told to HQ in one line: the lane, its new lead, its old one", async () => {
+    expect(hud("lane", "lead-a").code).toBe(0);
+    expect(hud("lane", "lead-b").code).toBe(0);
+    expect(hud("lane", "worker", "--parent", "lead-a").code).toBe(0);
+    // Registering a new lane under a parent is not a change of lead: HQ is not told.
+    expect(toHq().some((t) => t.includes("worker"))).toBe(false);
+    expect(hud("lane", "worker", "--parent", "lead-b").code).toBe(0);
+    const told = toHq().filter((t) => t.includes("worker"));
+    expect(told).toHaveLength(1);
+    expect(told[0]).not.toContain("\n");
+    expect(told[0]).toContain("lead-b");
+    expect(told[0]).toContain("lead-a");
+    const moved = eventsOf("worker").at(-1)!;
+    expect(moved.who).not.toBe("hq");
+    expect(moved.text).toContain("lead-b");
+    expect(moved.text).toContain("lead-a");
+    // Back under HQ is a change too; the same parent again is not.
+    expect(hud("lane", "worker", "--parent", "hq").code).toBe(0);
+    expect(hud("lane", "worker", "--parent", "hq").code).toBe(0);
+    const again = toHq().filter((t) => t.includes("worker"));
+    expect(again).toHaveLength(2);
+    expect(again[1]).toContain("HQ");
+    expect(again[1]).toContain("lead-b");
+  });
+
+  test("a new lane's name is letters, digits, dot, underscore or hyphen, at most 64, refused with 400 that says so", async () => {
+    for (const bad of ["two words", 'x" onfocus="y', "line\nbreak", "-looks-like-a-flag", ".hidden", "a".repeat(65), "tab\there", "naïve"]) {
+      const r = await register({ name: bad });
+      expect([bad, r.status]).toEqual([bad, 400]);
+      expect((await r.json()).error).toMatch(/letters, digits/);
+      expect(await lane(bad)).toBeUndefined();
+    }
+    const r = hud("lane", "two words");
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/letters, digits/);
+    for (const good of ["web.pm_2-x", "A1", "a".repeat(64)]) expect([good, (await register({ name: good })).status]).toEqual([good, 200]);
+  });
+
+  test("a lane registered before names were checked keeps working, and its name reaches HQ on one line", async () => {
+    const odd = "old lane\nwith a break";
+    sql((db) => db.query("INSERT INTO lanes (name, updated_at) VALUES (?, ?)").run(odd, Date.now()));
+    expect((await register({ name: odd, note: "still here" })).status).toBe(200);
+    expect((await register({ name: odd, parent: "lead-a" })).status).toBe(200);
+    expect((await lane(odd)).parent).toBe("lead-a");
+    expect((await register({ name: odd, parent: "lead-b" })).status).toBe(200);
+    const told = toHq().filter((t) => t.includes("old lane"));
+    expect(told).toHaveLength(2);
+    for (const t of told) expect(t).not.toContain("\n");
   });
 });
 

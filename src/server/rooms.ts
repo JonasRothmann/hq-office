@@ -10,6 +10,7 @@ import { event } from "./events.ts";
 import { addStatePart } from "./state.ts";
 import { parsePr } from "./board.ts";
 import { HQ_AGENT, promptAgent } from "./herdr.ts";
+import { oneLine } from "../agent-text.ts";
 
 export const ROOM_FILES = `${DATA}/room-files`;
 mkdirSync(ROOM_FILES, { recursive: true });
@@ -169,6 +170,14 @@ export function say(slugRaw: unknown, body: any) {
 
 // The owner writes from the page, to the owning lane or to one lane in the room.
 export function ownerPost(slugRaw: unknown, body: any) {
+  const id = ownerWrite(slugRaw, body);
+  deliver(id);
+  return { id };
+}
+
+// The owner's message, written but not yet delivered: a caller that writes more in the same transaction (a reopen,
+// src/server/threads.ts) delivers it after the commit.
+export function ownerWrite(slugRaw: unknown, body: any) {
   const r = mustRoom(slugRaw);
   if (r.archived_at) throw new Error(`room ${r.slug} is archived`);
   const text = String(body.text ?? "").trim();
@@ -177,10 +186,8 @@ export function ownerPost(slugRaw: unknown, body: any) {
   const to = str(body.to) || r.owner;
   if (!inRoom(r, to)) throw new Error(`${to} is not in room ${r.slug}`);
   const res = db.query("INSERT INTO room_messages (slug, at, to_lane, text, reply_to, delivery) VALUES (?, ?, ?, ?, ?, 'sending')").run(r.slug, Date.now(), isHq(to) ? "hq" : to, text, replyTarget(r, body.reply));
-  const id = Number(res.lastInsertRowid);
   touch(r.slug);
-  deliver(id);
-  return { id };
+  return Number(res.lastInsertRowid);
 }
 
 // Try a message that did not reach its lane again (the page's RETRY).
@@ -225,27 +232,29 @@ const firstWords = (s: string, n = 80) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
+// Names and titles come from agents (a lane names itself; any lane can ask a question): each goes in on one line, so
+// none can start a line of its own in the lane's terminal.
 export function promptText(r: Room, m: Msg, late: boolean) {
   const lane = m.to_lane!;
-  const as = lane === r.owner ? "" : ` --as ${lane}`;
+  const as = lane === r.owner ? "" : ` --as ${oneLine(lane)}`;
   const parent = m.reply_to ? (db.query("SELECT author, text FROM room_messages WHERE id = ?").get(m.reply_to) as { author: string | null; text: string } | null) : null;
   const t = threadOf(r.slug);
   // A thread on a question or an update: the lane answers in the thread, which the owner reads with the item.
   if (t) {
     const what = t.kind === "question" ? `question #${t.ref}` : `update #${t.ref}`;
-    return `HUD ${what} ("${r.title.replace(/^Re: /, "")}"): ${OWNER} replied${late ? ` at ${hhmm(m.at)} while you were away` : ""} (message #${m.id}):\n${m.text}\nReply in its thread: hud room say ${r.slug} "<your reply>"${as}. ${OWNER} reads the thread on the HUD, not this terminal.`;
+    return `HUD ${what} ("${oneLine(r.title.replace(/^Re: /, ""))}"): ${OWNER} replied${late ? ` at ${hhmm(m.at)} while you were away` : ""} (message #${m.id}):\n${m.text}\nReply in its thread: hud room say ${r.slug} "<your reply>"${as}. ${OWNER} reads the thread on the HUD, not this terminal.`;
   }
   const head = [
-    `HUD room ${r.slug} ("${r.title}"): ${OWNER} wrote to ${lane === r.owner ? "you, the room's owner" : "you"}`,
+    `HUD room ${r.slug} ("${oneLine(r.title)}"): ${OWNER} wrote to ${lane === r.owner ? "you, the room's owner" : "you"}`,
     late ? `, at ${hhmm(m.at)} while you were away` : "",
-    parent ? `, replying to ${parent.author ? (parent.author === lane ? "your" : `${parent.author}'s`) : "their own"} message #${m.reply_to} ("${firstWords(parent.text)}")` : "",
+    parent ? `, replying to ${parent.author ? (parent.author === lane ? "your" : `${oneLine(parent.author)}'s`) : "their own"} message #${m.reply_to} ("${firstWords(parent.text)}")` : "",
     ` (message #${m.id}):`,
   ].join("");
-  const keep = lane === r.owner ? "Keep the room's brief (hud room brief" : `${r.owner} owns the room and keeps its brief (hud room brief`;
+  const keep = lane === r.owner ? "Keep the room's brief (hud room brief" : `${oneLine(r.owner)} owns the room and keeps its brief (hud room brief`;
   return `${head}\n${m.text}\nReply in the room, not only here: hud room say ${r.slug} "<your reply>"${as} [--reply ${m.id}]. ${keep} ${r.slug} --body ...) and artifacts (hud room artifact ${r.slug} --title T --url U | --file PATH) current; ${OWNER} reads the room, not this terminal.`;
 }
 
-function deliver(id: number) {
+export function deliver(id: number) {
   const m = db.query("SELECT * FROM room_messages WHERE id = ?").get(id) as Msg | null;
   const r = m && room(m.slug);
   if (!m || !r || !m.to_lane) return;
