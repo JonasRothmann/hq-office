@@ -33,6 +33,8 @@ export type InboxItem = {
   short: boolean; // a question the owner can answer from the stack, without reading more
   shape: { lines: number; tables: number; code: number };
   links: InboxLink[];
+  // The owner's thread with the lane on this question or update (a room the HUD keeps, see threads.ts), once there is one.
+  thread: { slug: string; unread: number; undelivered: number; at: number | null } | null;
 };
 
 const FENCE = /^\s*```/;
@@ -120,6 +122,10 @@ function shelvesOf(slugs: string[]) {
 export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): InboxItem[] {
   const shelves = shelvesOf(rooms.map((r) => r.slug));
   const roomTitles = new Map(rooms.map((r) => [r.slug, r.title]));
+  // A thread shows with its question or update while that is listed; after, as a room, so a lane's reply still lands.
+  const threads = new Map(rooms.filter((r) => r.thread).map((r) => [`${r.thread!.kind}:${r.thread!.ref}`, r]));
+  const listed = new Set([...asks.map((a) => `question:${a.id}`), ...updates.map((u) => `update:${u.id}`)]);
+  const threadOf = (key: string) => { const r = threads.get(key); return r ? { slug: r.slug, unread: r.unread, undelivered: r.undelivered, at: r.threadAt } : null; };
   return [
     ...asks.map((a): InboxItem => ({
       key: `ask:${a.id}`,
@@ -137,6 +143,7 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       short: isShort(a),
       shape: shapeOf(a.body),
       links: linksOf([a.link, a.body], shelves, roomTitles),
+      thread: threadOf(`question:${a.id}`),
     })),
     ...updates.map((u): InboxItem => ({
       key: `update:${u.id}`,
@@ -147,15 +154,16 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       title: u.title,
       preview: previewOf(u.body),
       at: u.at,
-      needsYou: !u.read_at,
+      needsYou: !u.read_at || !!threads.get(`update:${u.id}`)?.unread,
       unread: !u.read_at,
       priority: null,
       locked: false,
       short: false,
       shape: shapeOf(u.body),
       links: linksOf([u.title, u.body], shelves, roomTitles),
+      thread: threadOf(`update:${u.id}`),
     })),
-    ...rooms.map((r): InboxItem => ({
+    ...rooms.filter((r) => !r.thread || !listed.has(`${r.thread.kind}:${r.thread.ref}`)).map((r): InboxItem => ({
       key: `room:${r.slug}`,
       kind: "room",
       ref: r.slug,
@@ -171,6 +179,7 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       short: false,
       shape: { lines: 0, tables: 0, code: 0 },
       links: [],
+      thread: null,
     })),
   ];
 }
