@@ -61,6 +61,7 @@ export function mountOffice(canvas, opts = {}) {
       world = createWorld(canvas, fromJSON(res.doc, [japandi]), { theme, time: TIME[theme], insets, systems: [pace] });
       world.three.scene.add(balls.mesh);
       world.on("frame", frame);
+      if (opts.controls !== false) bindControls();
       if (paused) world.pause(true);
       bindWorld(api);
       emit("world:ready");
@@ -186,64 +187,33 @@ export function mountOffice(canvas, opts = {}) {
     return lane && live.has(lane) ? lane : null;
   }
 
-  // Controls: drag to pan, wheel to step the zoom, click to select; the pointer over a worker or desk is its lane's hover.
+  // Controls: the engine's own (drag to pan, wheel to zoom, click to pick, hover). A pick or hover on a worker, or on
+  // its desk or chair, is its lane's. A drag or a wheel is the owner taking the view: it stops following the fit.
   const cleanups = [];
-  let hoverAt = null, hoverQueued = false, lit = false, wheelAt = 0;
-  if (opts.controls !== false) {
-    let drag = null;
-    const down = (e) => { drag = { x: e.clientX, y: e.clientY, moved: false }; };
-    const move = (e) => {
-      if (!drag) return;
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-      drag.moved = true;
-      fitting = false;
-      world?.camera.pan(dx, dy);
-      drag.x = e.clientX; drag.y = e.clientY;
-    };
-    const up = (e) => {
-      if (drag && !drag.moved && e.target === canvas) { const lane = pick(e.clientX, e.clientY); if (lane) emit("world:select", lane); }
-      drag = null;
-    };
-    const cancel = () => { drag = null; };
-    const hover = (e) => {
-      if (drag) return;
-      hoverAt = { x: e.clientX, y: e.clientY };
-      if (!hoverQueued) { hoverQueued = true; requestAnimationFrame(updateHover); }
-    };
-    const leave = () => { hoverAt = null; if (!hoverQueued) { hoverQueued = true; requestAnimationFrame(updateHover); } };
-    const wheel = (e) => {
-      e.preventDefault();
-      const now = performance.now();
-      if (!world || now - wheelAt < 220) return;
-      wheelAt = now;
-      zoom(world.camera.state.zoom + (e.deltaY < 0 ? 1 : -1));
-    };
-    canvas.addEventListener("pointerdown", down);
-    canvas.addEventListener("pointermove", hover);
-    canvas.addEventListener("pointerleave", leave);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", cancel);
-    canvas.addEventListener("wheel", wheel, { passive: false });
+  function bindControls() {
+    const laneOf = (hit) => { const lane = laneIn(hit?.id); return lane && live.has(lane) ? lane : null; };
+    cleanups.push(world.bindInput(canvas));
+    cleanups.push(world.on("pick", (hit) => { const lane = laneOf(hit); if (lane) emit("world:select", lane); }));
+    cleanups.push(world.on("hover", (hit) => {
+      const lane = laneOf(hit);
+      if (lane === hovered) return;
+      hovered = lane;
+      canvas.style.cursor = lane ? "pointer" : "";
+      emit("world:hover", lane);
+    }));
+    let down = null;
+    const press = (e) => { down = { x: e.clientX, y: e.clientY }; };
+    const drag = (e) => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 4) fitting = false; };
+    const release = () => { down = null; };
+    const wheel = () => { fitting = false; };
+    canvas.addEventListener("pointerdown", press, { passive: true });
+    canvas.addEventListener("pointermove", drag, { passive: true });
+    canvas.addEventListener("pointerup", release, { passive: true });
+    canvas.addEventListener("wheel", wheel, { passive: true });
     cleanups.push(() => {
-      canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", hover); canvas.removeEventListener("pointerleave", leave);
-      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", cancel);
-      canvas.removeEventListener("wheel", wheel);
+      canvas.removeEventListener("pointerdown", press); canvas.removeEventListener("pointermove", drag);
+      canvas.removeEventListener("pointerup", release); canvas.removeEventListener("wheel", wheel);
     });
-  }
-  function updateHover() {
-    hoverQueued = false;
-    if (!world || paused) return;
-    const hit = hoverAt ? world.pick(hoverAt.x, hoverAt.y) : null;
-    const lane = laneIn(hit?.id);
-    const ours = lane && live.has(lane) ? lane : null;
-    // the engine lights the desk or chair under the pointer; nothing else lights up
-    if (ours && hit.kind === "object") { world.hover(hoverAt.x, hoverAt.y); lit = true; } else if (lit) { world.hover(-1e6, -1e6); lit = false; }
-    if (ours === hovered) return;
-    hovered = ours;
-    canvas.style.cursor = ours ? "pointer" : "";
-    emit("world:hover", ours);
   }
 
   // What the office shows, for tests and the lab: the classic renderer's read-only shape, and the engine's numbers.

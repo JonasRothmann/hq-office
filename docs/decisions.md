@@ -226,8 +226,9 @@ made while building it:
   wider than the space right of the reader at the far zoom and runs off the right edge a little. The classic
   renderer keeps D17's behaviour.
 - **Kept from the classic renderer.** The subagent balls are `world/balls.js`'s `Balls`, on desk frames attached to
-  `desk:<lane>`; they move to `office-view/` when `world/` goes. Picking maps `lane:`, `desk:` and `chair:` ids back
-  to lanes; an empty desk is no one's. Hover lights only a lane's desk or chair. The selected worker gets a ring on
+  `desk:<lane>`; they move to `office-view/` when `world/` goes. Input is the engine's own (`bindInput`), so its zoom
+  and wheel reach the page as the engine has them; a pick or hover maps `lane:`, `desk:` and `chair:` ids back to
+  lanes, and an empty desk is no one's. A drag or a wheel stops the view following the fit, as before. The selected worker gets a ring on
   the floor, attached to its character, so it follows the worker.
 - **Not yet.** The land round the office (OUTSIDE, step 6): NEW shows the plain lot, and the settings say so. The
   walk to the lead's desk: the place for it is the act table in `office/acts.js`. Per-room light at night, the
