@@ -32,6 +32,27 @@ function priorityOf(v: unknown): number | undefined {
   throw new Error("priority must be urgent, high, normal or low");
 }
 
+// When an answer is due, as ms since 1970, or null. The page puts it in an HTML attribute, so only a number is stored
+// (review finding 1). hud sends ms; a caller may also send digits, HH:MM (today, local time, as hud reads it) or an ISO
+// date or date-time (Date.parse reads it; without a zone, a date-time is local). Anything else is refused, and the
+// route answers 400. Only ISO goes to Date.parse, because Bun's reads "-5" or "x 1" as a date.
+const DUE_HELP = "due must be a time: HH:MM today, a date or date-time such as 2026-11-02 or 2026-11-02T17:00, or ms since 1970";
+const ISO = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+function dueOf(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  let at = NaN;
+  if (typeof v === "number") at = v;
+  else if (typeof v === "string") {
+    const s = v.trim();
+    const hhmm = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (/^\d+$/.test(s)) at = Number(s);
+    else if (hhmm) at = Number(hhmm[1]) < 24 && Number(hhmm[2]) < 60 ? new Date().setHours(Number(hhmm[1]), Number(hhmm[2]), 0, 0) : NaN;
+    else if (ISO.test(s)) at = Date.parse(s);
+  }
+  if (!Number.isFinite(at) || at <= 0) throw new Error(DUE_HELP);
+  return Math.round(at);
+}
+
 // A tier change refused because the asking lane locked the ask as blocking; the route answers 409.
 export class TierLocked extends Error {}
 
@@ -48,7 +69,9 @@ export function askAndRoute(body: any) {
   const wanted = [...new Set<string>((body.secrets ?? []).map(checkName))];
   const tier = tierOf(body.tier) ?? "nonblocking";
   const priority = priorityOf(body.priority) ?? 2;
-  const created = body.created_at ?? Date.now();
+  const due = dueOf(body.due);
+  // Never the caller's: an agent cannot backdate a question, or put a string where the page expects a time.
+  const created = Date.now();
   // Whoever asks with --blocking cannot go on without the answer, so the ask is locked there (decision D3).
   const locked = tier === "blocking";
   const res = db
@@ -61,7 +84,7 @@ export function askAndRoute(body: any) {
       body.options?.length ? JSON.stringify(body.options) : null,
       body.recommended ?? null,
       body.link ?? null,
-      body.due ?? null,
+      due,
       created,
       wanted.length ? JSON.stringify(wanted) : null,
       tier,
