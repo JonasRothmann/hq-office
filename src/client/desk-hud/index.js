@@ -22,10 +22,12 @@ const layer = document.createElement("div");
 layer.id = "deskHud";
 layer.className = "dh-layer";
 layer.hidden = true;
+layer.setAttribute("role", "group");
 layer.setAttribute("aria-label", "Desks");
-// Under the panels in paint order: before .wrap, so even a chip placed wrongly can never cover a question.
+// Right after .wrap at z-index 0: over the world's canvas, under the panels (.wrap is z-index 1), so even a chip placed
+// wrongly can never cover a question; and after the question column in tab order.
 const wrap = document.querySelector(".wrap");
-if (wrap) wrap.before(layer); else document.body.append(layer);
+if (wrap) wrap.after(layer); else document.body.append(layer);
 
 const chips = new Map(); // lane -> { el, sig, size: { full, compact } | null, at, shown, transform }
 let ready = false, hot = null, crowded = false;

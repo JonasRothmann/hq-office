@@ -1,5 +1,5 @@
 /* The desk HUD: glass chips over the desks, under every panel. Two dense rows; one row when compact; the lane's title too when lifted. */
-.dh-layer { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.dh-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .dh-chip {
   position: absolute; left: 0; top: 0; z-index: 1; display: block; min-width: 150px; max-width: 300px; margin: 0; padding: 5px 8px 6px;
   border: 0; font: 400 11px/15px var(--font); color: var(--text-2); text-align: left; white-space: nowrap;
