@@ -30,10 +30,14 @@ export const SHOTS: [string, string][] = [
   ["outside-nature-light-mid", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=1&focus=22,14"],
   ["outside-nature-dark-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=dark&zoom=0"],
   ["outside-nature-light-big", "scene=outside&mode=nature&seed=3&lot=60x40&theme=light"],
-  ["outside-city-light-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=0"],
-  ["outside-city-light-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=1&focus=20,-14"],
-  ["outside-city-dark-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=0"],
-  ["outside-city-dark-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=1&focus=20,-14"],
+  // the town, Copenhagen-ish (docs/design/outside/copenhagen.md): seed 1 puts the canal north of the lot, its houses facing the camera
+  ["outside-city-light-far", "scene=outside&mode=city&seed=1&lot=24x14&theme=light&zoom=0"],
+  ["outside-city-light-mid", "scene=outside&mode=city&seed=1&lot=24x14&theme=light&zoom=1&focus=0,-40"],
+  ["outside-city-light-near", "scene=outside&mode=city&seed=1&lot=24x14&theme=light&zoom=2&focus=6,-46"],
+  ["outside-city-light-street", "scene=outside&mode=city&seed=1&lot=24x14&theme=light&zoom=2&focus=24,6"],
+  ["outside-city-dark-far", "scene=outside&mode=city&seed=1&lot=24x14&theme=dark&zoom=0"],
+  ["outside-city-dark-mid", "scene=outside&mode=city&seed=1&lot=24x14&theme=dark&zoom=1&focus=0,-40"],
+  ["outside-city-dark-near", "scene=outside&mode=city&seed=1&lot=24x14&theme=dark&zoom=2&focus=6,-46"],
   ["outside-city-light-big", "scene=outside&mode=city&seed=3&lot=60x40&theme=light"],
   ["outside-city-light-rot1", "scene=outside&mode=city&seed=11&lot=24x14&theme=light&zoom=0&rot=1"],
 ];
