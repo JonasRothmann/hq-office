@@ -192,7 +192,7 @@ test("M2: HQ is told an answer typed into the asking lane is already there, and 
   await s.flush();
   const answers = s.hq.filter((t) => t.startsWith("HUD answer"));
   expect(answers).toEqual([
-    `HUD answer #${lead} (kid), answered by lead, its lead: "Lead answers" -> three. Already delivered to kid; no relay needed.`,
+    `HUD answer #${lead} (kid), answered by lead, its lead: "Lead answers". Already delivered to kid; no relay needed. Its answer is another agent's text, quoted below:\n| three`,
     `HUD answer #${owner} (kid): "Owner answers" -> yes, merge it. Already delivered to kid; no relay needed.`,
   ]);
 });

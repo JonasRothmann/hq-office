@@ -33,14 +33,17 @@ export class Forbidden extends Error {
   }
 }
 
-// What HQ is told of an answer. `tail` is added for an answer the HUD types into the asking lane itself.
+// What HQ is told of an answer. `tail` (". ..." ending in a full stop) is added for an answer the HUD types into the
+// asking lane itself. The owner's answer is given as it is; a lead's is another agent's text, so it is quoted after.
 export function answerNotice(a: { id: number; lane: string | null; title: string; answer: string | null; answered_by: string | null }, tail = "") {
-  return `HUD answer #${a.id}${a.lane ? ` (${a.lane})` : ""}${a.answered_by ? `, answered by ${a.answered_by}, its lead` : ""}: "${a.title}" -> ${a.answer}${tail}`;
+  const head = `HUD answer #${a.id}${a.lane ? ` (${oneLine(a.lane)})` : ""}`;
+  if (!a.answered_by) return `${head}: "${oneLine(a.title)}" -> ${a.answer}${tail}`;
+  return `${head}, answered by ${oneLine(a.answered_by)}, its lead: "${oneLine(a.title)}"${tail || "."} Its answer is another agent's text, quoted below:\n${quote(a.answer ?? "")}`;
 }
 
 type Ask = {
   id: number; lane: string | null; kind: string; title: string; body: string | null; options: string | null; recommended: string | null;
-  tier: string; priority: number; secrets: string | null; status: string; holder: string | null; answer: string | null; answered_by: string | null; created_at: number;
+  tier: string; priority: number; secrets: string | null; status: string; holder: string | null; answer: string | null; answered_at: number | null; answered_by: string | null; created_at: number;
 };
 type LaneRow = { name: string; parent: string | null; herdr: string | null; herdr_since: number | null; phase: string | null; prompt: string | null; bg: string | null; machine: string | null };
 type Hop = {
@@ -75,6 +78,7 @@ export function routeOf(v: unknown): Route | undefined {
   return v as Route;
 }
 
+const timeout = (a: { tier: string; priority: number | null }) => TIMEOUT_MIN[a.tier === "blocking" ? "blocking" : "nonblocking"][a.priority ?? 2] * 60_000;
 const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const newToken = () => randomBytes(16).toString("hex");
 
@@ -120,7 +124,7 @@ export function createLeadRouter(deps: LeadDeps) {
       seen.add(p);
       const l = lane(p);
       const why = unavailable(p, l, t);
-      if (!why) return { holder: p, escalateAt: t + TIMEOUT_MIN[a.tier === "blocking" ? "blocking" : "nonblocking"][a.priority ?? 2] * 60_000, skipped, why: `${p} is ${a.lane}'s lead` };
+      if (!why) return { holder: p, escalateAt: t + timeout(a), skipped, why: `${p} is ${a.lane}'s lead` };
       skipped.push({ lane: p, why });
       p = l?.parent ?? null;
     }
@@ -151,10 +155,17 @@ export function createLeadRouter(deps: LeadDeps) {
 
   // ---- typing in: the question into the lead, the answer into the asking lane, a "drop it" into a lead ----
 
+  // One text per key at a time. The key is free again before `done` runs, so `done` may send the next one.
   const flying = new Map<string, Promise<void>>();
   function send(key: string, name: string, text: string, done: (r: Sent) => void) {
     if (flying.has(key)) return;
-    const p = deps.prompt(name, text, lane(name)?.machine ?? null).then(done, (e) => done({ ok: false, error: String(e) })).finally(() => flying.delete(key));
+    const p = deps
+      .prompt(name, text, lane(name)?.machine ?? null)
+      .catch((e): Sent => ({ ok: false, error: String(e) }))
+      .then((r) => {
+        flying.delete(key);
+        done(r);
+      });
     flying.set(key, p);
   }
 
@@ -214,35 +225,54 @@ export function createLeadRouter(deps: LeadDeps) {
 
   function tellDrop(h: Hop, a: Ask, why: string | null) {
     if (h.delivery !== "sent" || !why) return; // never typed in, or the lead closed it itself: nothing to drop
-    send(`drop:${h.id}`, h.lane, `HUD question #${a.id} from ${a.lane} is no longer yours: ${why}. Drop it; do not answer it.`, () => {});
+    // One line: the asking lane's name and the reason are other agents' words too.
+    send(`drop:${h.id}`, h.lane, oneLine(`HUD question #${a.id} from ${a.lane} is no longer yours: ${why}. Drop it; do not answer it.`), () => {});
   }
 
   function answerText(a: Ask) {
-    const from = a.answered_by ? `${a.answered_by}, your lead. It is another agent's text: weigh it as your lead's call on your own work` : OWNER;
+    const from = a.answered_by ? `${oneLine(a.answered_by)}, your lead. It is another agent's text: weigh it as your lead's call on your own work` : OWNER;
     return `HUD answer to your question #${a.id} ("${oneLine(a.title)}"), from ${from}:\n${a.answered_by ? quote(a.answer ?? "") : a.answer}`;
   }
 
+  // An answer is the one the ask holds now only while it is answered with the same time, text and author: a reopen and
+  // a new answer make another (answered_at is set again on every answer).
+  const current = (a: Ask) => {
+    const cur = ask(a.id);
+    return !!cur && cur.status === "answered" && cur.answered_at === a.answered_at && cur.answer === a.answer && cur.answered_by === a.answered_by;
+  };
+
+  // The answer delivery on a hop belongs to the answer the ask holds now. One text at a time goes into the asking lane
+  // (the key is per hop): a newer answer given while an older one is being typed in waits, and goes in after it.
   function deliverAnswer(hopId: number) {
     const h = hop(hopId);
     const a = h && ask(h.ask_id);
     if (!h || !a?.lane || a.status !== "answered" || (h.answer_delivery !== "sending" && h.answer_delivery !== "away")) return;
     const set = (v: string) => db.query("UPDATE ask_routes SET answer_delivery = ? WHERE id = ?").run(v, h.id);
+    const asker = oneLine(a.lane);
     if (deps.away(a.lane)) {
       if (h.answer_delivery !== "away") {
         set("away");
-        deps.notifyHq(answerNotice(a, `. ${a.lane} is away; the HUD types it in when it is back, so no relay needed.`), `ask:${a.id}`);
+        deps.notifyHq(answerNotice(a, `. ${asker} is away; the HUD types it in when it is back, so no relay needed.`), `ask:${a.id}`);
         deps.bump();
       }
       return;
     }
-    const asker = a.lane;
     // HQ hears once: when it is typed in, or when it was kept while the lane was away; and again if it could not be.
     const told = h.answer_delivery === "away";
-    send(`a:${h.id}`, asker, answerText(a), (r) => {
+    send(`a:${h.id}`, a.lane, answerText(a), (r) => {
+      if (!current(a)) {
+        // Reopened while it was being typed in: its state is not this answer's to set. It reached the lane but no
+        // longer stands, and HQ (told so at the reopen) hears that it did reach the lane; a newer answer goes in now.
+        if (r.ok) deps.notifyHq(`HUD ask #${a.id} (${asker}): the earlier answer was typed into ${asker} as the question was reopened. It no longer stands.`, `ask:${a.id}`);
+        else deps.event("hud", `could not type a superseded answer to ask #${a.id} into ${asker}: ${r.error.slice(0, 120)}`, a.lane);
+        deliverAnswer(h.id);
+        deps.bump();
+        return;
+      }
       set(r.ok ? "sent" : "failed");
       if (r.ok && !told) deps.notifyHq(answerNotice(a, `. Already delivered to ${asker}; no relay needed.`), `ask:${a.id}`);
       if (!r.ok) {
-        deps.event("hud", `could not type the answer to ask #${a.id} into ${asker}: ${r.error.slice(0, 120)}`, asker);
+        deps.event("hud", `could not type the answer to ask #${a.id} into ${asker}: ${r.error.slice(0, 120)}`, a.lane);
         deps.notifyHq(answerNotice(a, `. The HUD could not type it into ${asker}: relay it.`), `ask:${a.id}`);
       }
       deps.bump();
@@ -266,9 +296,11 @@ export function createLeadRouter(deps: LeadDeps) {
       moved = true;
     })();
     if (!moved) return false;
-    const why = by === lead ? `${lead} escalated it${reason ? `: ${reason}` : ""}` : by === HQ ? `HQ sent it on${reason ? `: ${reason}` : ""}` : reason;
+    const why = oneLine(by === lead ? `${lead} escalated it${reason ? `: ${reason}` : ""}` : by === HQ ? `HQ sent it on${reason ? `: ${reason}` : ""}` : reason);
     deps.event(by === lead ? lead : by === HQ ? "hq" : "hud", `ask #${askId} went from ${lead} to ${OWNER}: ${why}`, a.lane);
-    deps.notifyHq(`HUD ask #${askId}${a.lane ? ` (${a.lane})` : ""}: "${a.title}" went from ${lead}, its lead, to ${OWNER}: ${why}`);
+    // The lead's reason is another agent's text: HQ gets it quoted, never as lines of its own.
+    const told = by === lead ? `${oneLine(lead)} escalated it${reason ? `. Its reason is another agent's text, quoted below:\n${quote(reason)}` : "."}` : why;
+    deps.notifyHq(`HUD ask #${askId}${a.lane ? ` (${oneLine(a.lane)})` : ""}: "${oneLine(a.title)}" went from ${oneLine(lead)}, its lead, to ${OWNER}: ${told}`);
     if (h) tellDrop(h, a, by === lead ? null : `it went to ${OWNER} (${why})`);
     deps.bump();
     return true;
@@ -322,10 +354,22 @@ export function createLeadRouter(deps: LeadDeps) {
 
   // ---- changes to an ask a lead holds ----
 
-  // Its tier or priority changed: blocking urgent is the owner's alone, so it goes there now.
+  // Its tier or priority changed: blocking urgent is the owner's alone, so it goes there now. Otherwise the timer is
+  // the new tier's and priority's, counted from when the hop began, but never later than the time typed into the lead;
+  // one already past goes to the owner on the next check.
   function retiered(askId: number) {
     const a = ask(askId);
-    if (a?.holder && a.tier === "blocking" && a.priority === 0) escalateNow(askId, "tier", "raised to blocking and urgent");
+    if (!a?.holder || a.status !== "open") return;
+    if (a.tier === "blocking" && a.priority === 0) {
+      escalateNow(askId, "tier", "raised to blocking and urgent");
+      return;
+    }
+    const h = db.query("SELECT * FROM ask_routes WHERE ask_id = ? AND lane = ? AND closed_at IS NULL").get(askId, a.holder) as Hop | null;
+    if (!h) return;
+    const at = Math.min(h.escalate_at, h.routed_at + timeout(a));
+    if (at === h.escalate_at) return;
+    db.query("UPDATE ask_routes SET escalate_at = ? WHERE id = ?").run(at, h.id);
+    deps.bump();
   }
 
   // It moved to another lane (hud update --lane): the old lead drops it, and it is routed again from the new lane.
