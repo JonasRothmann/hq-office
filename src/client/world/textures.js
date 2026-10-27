@@ -99,7 +99,9 @@ export function surface(spec) {
         break;
       }
       case "terrazzo": {
-        speckle(g, w, h, [spec.alt, spec.line, "#c8553d", "#7f9c8a", "#d9c095"], 700, 3, r);
+        // a pale stone terrazzo: small chips in the same family, a few warmer ones
+        g.globalAlpha = 0.7; speckle(g, w, h, [spec.alt, spec.line, "#d9c8ae", "#c9c2b4"], 900, 2.2, r);
+        g.globalAlpha = 0.55; speckle(g, w, h, ["#c98a6a", "#9fae8f", "#b9a58a"], 110, 2.4, r); g.globalAlpha = 1;
         break;
       }
       case "grass": {
@@ -123,11 +125,43 @@ export function surface(spec) {
   return t;
 }
 
-// Wallpaper, one metre square: a faint plaster.
+// Wallpaper, one metre square: a faint plaster. With kind "band" it is one metre wide and the full wall high (WALL_TEX_H):
+// a skirting, a band of vertical oak battens to a rail at `rail` metres (the window sills' height), plaster above, so
+// a wall cut down to its kerb still shows the band.
+export const WALL_TEX_H = 2.95;
 export function wallpaper(spec) {
   const id = `wall:${JSON.stringify(spec)}`;
   if (cache.has(id)) return cache.get(id);
   const r = rng(hash(id));
+  if (spec.kind === "band") {
+    const rail = spec.rail ?? 0.8;
+    const c = canvas(128, 256, (g, w, h) => {
+      const Y = (m) => h - (m * h) / WALL_TEX_H; // canvas y of a height in metres
+      g.fillStyle = spec.face; g.fillRect(0, 0, w, h);
+      g.globalAlpha = 0.18; speckle(g, w, Y(rail), [spec.alt, "#fff"], 700, 2, r); g.globalAlpha = 1;
+      // a faint shadow under the ceiling line
+      const top = g.createLinearGradient(0, 0, 0, 12); top.addColorStop(0, "rgba(90,70,50,0.14)"); top.addColorStop(1, "rgba(90,70,50,0)");
+      g.fillStyle = top; g.fillRect(0, 0, w, 12);
+      // battens, about 12 cm apart, with dark gaps
+      g.fillStyle = spec.gap; g.fillRect(0, Y(rail), w, Y(0) - Y(rail));
+      for (let x = 0; x < w; x += 16) {
+        g.fillStyle = r() < 0.5 ? spec.trim : shade(spec.trim, -0.04);
+        g.fillRect(x + 2, Y(rail), 12, Y(0) - Y(rail));
+        g.fillStyle = "rgba(255,255,255,0.2)"; g.fillRect(x + 2, Y(rail), 2, Y(0) - Y(rail));
+      }
+      // the rail and its shadow on the plaster
+      g.fillStyle = "rgba(60,45,30,0.16)"; g.fillRect(0, Y(rail + 0.06) - 3, w, 3);
+      g.fillStyle = spec.rails; g.fillRect(0, Y(rail + 0.06), w, Y(rail) - Y(rail + 0.06));
+      g.fillStyle = "rgba(255,255,255,0.25)"; g.fillRect(0, Y(rail + 0.06), w, 1);
+      // skirting
+      g.fillStyle = spec.rails; g.fillRect(0, Y(0.1), w, Y(0) - Y(0.1));
+    });
+    const t = texture(c, { metres: 1 });
+    t.repeat.set(1, 1 / WALL_TEX_H);
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    cache.set(id, t);
+    return t;
+  }
   const c = canvas(128, 128, (g, w, h) => {
     g.fillStyle = spec.face; g.fillRect(0, 0, w, h);
     g.globalAlpha = 0.18; speckle(g, w, h, [spec.alt, "#fff"], 900, 2, r); g.globalAlpha = 1;
@@ -323,6 +357,71 @@ export function face(skin, hair, mood = "calm") {
   });
   const t = texture(c, { repeat: false });
   t.magFilter = THREE.LinearFilter;
+  cache.set(id, t);
+  return t;
+}
+
+// A worker's skin, 64 px square, the way the reference keeps a person's detail in the texture: the face (32 × 36 at
+// the top left, for the head's front), a breton stripe (32 × 32 at the top right, for a striped top) and a white
+// texel at (62, 62) that every plain part samples. a: { skin, hair, brows, beard, glasses, freckles, lashes, stripe,
+// bald }.
+export const SKIN = { size: 64, white: [62, 62], face: [0, 0, 32, 36], stripes: [32, 0, 32, 32] };
+export function bodySkin(a) {
+  const id = `skin:${JSON.stringify(a)}`;
+  if (cache.has(id)) return cache.get(id);
+  const c = canvas(64, 64, (g) => {
+    g.fillStyle = "#ffffff"; g.fillRect(0, 0, 64, 64);
+    // face
+    g.fillStyle = a.skin; g.fillRect(0, 0, 32, 36);
+    if (!a.bald) { g.fillStyle = a.hair; g.fillRect(0, 0, 32, 4); g.fillRect(0, 4, 3, 6); g.fillRect(29, 4, 3, 6); }
+    g.fillStyle = shade(a.skin, -0.05); g.fillRect(0, 30, 32, 6); // under the jaw
+    g.fillStyle = a.brows; g.fillRect(6, 11, 7, 2); g.fillRect(19, 11, 7, 2);
+    g.fillStyle = "#fbf8f2"; g.fillRect(7, 14, 5, 4); g.fillRect(20, 14, 5, 4);
+    g.fillStyle = "#2a1d15"; g.fillRect(8, 14, 3, 4); g.fillRect(21, 14, 3, 4);
+    g.fillStyle = "#ffffff"; g.fillRect(9, 14, 1, 1); g.fillRect(22, 14, 1, 1);
+    if (a.lashes) { g.fillStyle = "#2a1d15"; g.fillRect(6, 13, 7, 1); g.fillRect(19, 13, 7, 1); }
+    g.fillStyle = shade(a.skin, -0.09); g.fillRect(15, 17, 2, 5); g.fillRect(13, 22, 6, 1);
+    g.fillStyle = "#e88a7a"; g.globalAlpha = 0.28; g.fillRect(4, 20, 6, 4); g.fillRect(22, 20, 6, 4); g.globalAlpha = 1;
+    if (a.freckles) { g.fillStyle = shade(a.skin, -0.16); for (const [fx, fy] of [[6, 20], [8, 21], [5, 22], [23, 20], [25, 21], [26, 19]]) g.fillRect(fx, fy, 1, 1); }
+    if (a.beard) {
+      g.fillStyle = a.hair; g.globalAlpha = 0.92;
+      g.fillRect(2, 21, 4, 9); g.fillRect(26, 21, 4, 9); g.fillRect(4, 26, 24, 10); g.fillRect(10, 24, 12, 2);
+      g.globalAlpha = 1;
+      g.fillStyle = a.skin; g.fillRect(12, 27, 8, 2);
+    }
+    g.fillStyle = "#9a4a40"; g.fillRect(12, 27, 8, 1);
+    g.fillStyle = shade(a.skin, -0.04); g.fillRect(13, 28, 6, 1);
+    if (a.glasses) {
+      g.strokeStyle = a.glasses; g.lineWidth = 1;
+      g.strokeRect(5.5, 12.5, 8, 7); g.strokeRect(18.5, 12.5, 8, 7);
+      g.fillStyle = a.glasses; g.fillRect(13, 15, 6, 1); g.fillRect(0, 15, 6, 1); g.fillRect(26, 15, 6, 1);
+    }
+    // stripes
+    g.fillStyle = "#f2efe6"; g.fillRect(32, 0, 32, 32);
+    g.fillStyle = a.stripe ?? "#2f3e57";
+    for (let y = 1; y < 32; y += 5) g.fillRect(32, y, 32, 2);
+  });
+  const t = texture(c, { repeat: false });
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearFilter;
+  cache.set(id, t);
+  return t;
+}
+
+// Window glass by day, two metres square: pale sky toward the top, soft diagonal streaks of reflection.
+export function glass() {
+  const id = "glass";
+  if (cache.has(id)) return cache.get(id);
+  const c = canvas(64, 64, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, "#bcd5e2"); gr.addColorStop(0.55, "#d6e6ec"); gr.addColorStop(1, "#e6efee");
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.fillStyle = "rgba(255,255,255,0.4)";
+    g.beginPath(); g.moveTo(4, h); g.lineTo(16, h); g.lineTo(44, 0); g.lineTo(32, 0); g.fill();
+    g.fillStyle = "rgba(255,255,255,0.25)";
+    g.beginPath(); g.moveTo(22, h); g.lineTo(26, h); g.lineTo(54, 0); g.lineTo(50, 0); g.fill();
+  });
+  const t = texture(c, { metres: 2 });
   cache.set(id, t);
   return t;
 }

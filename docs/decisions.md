@@ -123,3 +123,16 @@ people walking), and `build.js` draws it with instancing (12 to 24 draw calls). 
 name, so a page always shows the same place; a setting picks nature, city or off. The office's own lot and garden
 stay with the interior; the generator never places anything on it, and it grows the land only when the office
 outgrows it.
+
+## D15. Japandi, not Nordic with grafts
+
+The owner saw both showrooms and asked to merge them into one Japandi design, balanced half and half, instead of the
+Nordic studio with a few Japanese pieces (D13). Japandi here means warm neutrals (oat, sand, warm white plaster, pale
+oak and ash) with dark accents (smoked oak, charcoal, blackened steel) and a few muted earthy ones (rust, sage,
+indigo, ochre); light timber, washi, linen, wool, stone and ceramics; fewer, better objects with room between them,
+low furniture and clean lines. The walls carry Tokyo's band (skirting, battens, rail) under plaster, with slatted oak
+feature walls and shoji screens as dividers; paper pendants and lanterns hang beside one or two dark-metal or ceramic
+pendants; doorways have noren. Nordic's people stay (faces, hair, poses), dressed in the same palette. The lot's
+garden is raked gravel, moss, a stone lantern, a maple, birches and a timber deck and path. D13's grafts stay; the
+saturated Nordic colours and the clutter go. The "city" surroundings (D14) become Copenhagen, restyled in their own
+lane.

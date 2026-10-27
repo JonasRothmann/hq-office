@@ -1,14 +1,17 @@
 // The architecture: ground, courts, floors, walls with the Sims cutaway (recomputed per rotation), door gaps, windows, caps.
 import { THREE, Kit, roomMaterial, roomsMaterial } from "./kit.js";
 import { WALL_H, KERB_H, wallCuts, toWorld } from "./plan.js";
-import { surface, wallpaper, cladding } from "./textures.js";
-import { scatterCourt, scatterLot } from "./furniture.js";
+import { surface, wallpaper, cladding, glass as glassTexture, glow as glowTexture } from "./textures.js";
+import { scatterCourt } from "./furniture.js";
+import { garden } from "./garden.js";
+import { ATLAS, atlasTexture } from "./atlas.js";
 
 const T = 0.15;          // wall thickness
 const HALF = T / 2;
 const DOOR_TOP = 2.1;
-const SILL = 0.95, HEAD = 2.25;
+const SILL = 0.8, HEAD = 2.45;
 const SLAB = 0.12;       // the floor slab stands this far above the ground
+const OAK = "#cfae80", FRAME = "#2a2a2c";
 
 // The base of a wall is darker (a baked contact shadow). The two wall directions already differ in tone because the
 // key light comes from the front left: faces toward +z catch it, faces toward +x do not.
@@ -41,13 +44,15 @@ function capBox(kit, w, y, hex) {
   else kit.box(T + 0.03, 0.035, len, hex, w.x, y, w.z + 0.5);
 }
 
-// The back-wall tiles that get a window (a team room: local x 1..2 and 5..6, either side of the poster), when that wall
-// faces outdoors.
+// The back-wall tiles that get a window (a 7 m wall: local x 1..2 and 4..5 either side of the pier; a shorter one: two
+// single panes), when that wall faces outdoors.
 function windowKeys(p) {
   const keys = new Set();
   for (const r of p.rooms) {
     if (r.kind !== "team" && r.kind !== "hq" && r.kind !== "break") continue;
-    const spots = r.kind === "team" ? [1.5, 5.5] : r.kind === "hq" ? [1.5, 5.5] : [1.5, 3.5];
+    // a room may say which back-wall tiles are windows (r.windows); adjacent ones join into one wide window
+    const width = r.back === "w" || r.back === "e" ? r.d : r.w;
+    const spots = (r.windows ?? (width >= 7 ? [1, 2, 4, 5] : [1, 3])).map((i) => i + 0.5);
     for (const lx of spots) {
       const p0 = toWorld(r, lx, 0);
       const back = r.back ?? "n";
@@ -76,10 +81,32 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     const mesh = kit.mesh(m, { uv: true, cast: false });
     group.add(mesh);
   }
+  let gardenGlow = null;
+  // the garden's tree rows, each with the outer walls it stands behind: a row whose walls are cut is on the camera's
+  // side of the building and would hide the rooms, so it is left out of that view
+  const treeRows = [];
+  const outerWalls = (side) => p.walls.flatMap((w, i) => ((!w.a || !w.b) && (side === "n" ? w.dir === "x" && w.z === p.bounds.minZ : w.dir === "z" && w.x === p.bounds.minX) ? [i] : []));
   {
-    const lot = new Kit();
-    scatterLot(lot, p.bounds, L);
-    group.add(lot.mesh(keep(roomMaterial({ room: outdoor }))));
+    const lot = new Kit(), lamps = new Kit(), pools = new Kit(), trees = { n: new Kit(), w: new Kit() };
+    garden(lot, lamps, p, L, SLAB, pools, trees);
+    const lotMat = keep(roomMaterial({ room: outdoor }));
+    group.add(lot.mesh(lotMat));
+    for (const side of ["n", "w"]) {
+      if (trees[side].empty) continue;
+      const mesh = trees[side].mesh(lotMat);
+      group.add(mesh);
+      treeRows.push({ mesh, walls: outerWalls(side) });
+    }
+    if (L.night && !pools.empty) {
+      const m = new THREE.Mesh(pools.geometry({ ownUv: true }), keep(new THREE.MeshBasicMaterial({ map: glowTexture("rgba(255,205,140,0.45)"), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+      m.renderOrder = 1;
+      group.add(m);
+    }
+    if (!lamps.empty) {
+      gardenGlow = lamps.mesh(keep(new THREE.MeshBasicMaterial({ vertexColors: true, color: L.night ? "#ffe0a8" : "#ffffff" })), { cast: false, receive: false });
+      gardenGlow.name = "garden-lamps";
+      group.add(gardenGlow);
+    }
   }
   const courts = p.rooms.filter((r) => r.kind === "court");
   if (courts.length) {
@@ -123,12 +150,31 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   }
   const capMat = keep(roomMaterial());
   const cladMat = keep(roomMaterial({ map: cladding(L.cladding), room: outdoor }));
-  const glassMat = keep(new THREE.MeshBasicMaterial({ color: L.night ? "#1d2a44" : "#cfe3ee" }));
-  const frameHex = L.steel;
+  const glassMat = keep(new THREE.MeshBasicMaterial({ map: L.night ? null : glassTexture(), color: L.night ? "#22304c" : "#ffffff" }));
   const windows = windowKeys(p);
+  const doors = new Set(p.walls.filter((w) => w.door).map((w) => `${w.dir}:${w.x}:${w.z}`));
+  // indigo noren in the doorways of the rooms people work and rest in: a one-metre door between two rooms
+  const clothMat = keep(roomsMaterial({ map: atlasTexture(L), rooms }));
+  const kindOf = new Map(p.rooms.map((r) => [r.id, r.kind]));
+  const ROOMY = new Set(["team", "hq", "break"]);
+  const keyOf = (w, k = 0) => (w.dir === "x" ? `x:${w.x + k}:${w.z}` : `z:${w.x}:${w.z + k}`);
+  // a strip on the room side(s) of a wall tile: skirting, a window board. y0 its bottom, h tall, `out` deep.
+  const trim = (kit, w, y0, h, out, hex) => {
+    for (const s of [-1, 1]) {
+      if (!(s < 0 ? w.a : w.b)) continue;
+      const off = s * (HALF + out / 2);
+      if (w.dir === "x") kit.box(1 + T, h, out, hex, w.x + 0.5, y0, w.z + off, { room: w.light });
+      else kit.box(out, h, 1 + T, hex, w.x + off, y0, w.z + 0.5, { room: w.light });
+    }
+  };
+  // a box across the wall's thickness at `at` (0..1 along the tile): a jamb, a frame post, a mullion
+  const across = (kit, w, at, y0, h, width, depth, hex) => {
+    if (w.dir === "x") kit.box(width, h, depth, hex, w.x + at, y0, w.z, { room: w.light });
+    else kit.box(depth, h, width, hex, w.x, y0, w.z + at, { room: w.light });
+  };
   {
     const kit = new Kit(), out = new Kit();
-    for (const w of p.walls) if (!w.door) segBox(kit, w, 0, KERB_H, "#ffffff", out);
+    for (const w of p.walls) if (!w.door) { segBox(kit, w, 0, KERB_H, "#ffffff", out); trim(kit, w, 0, 0.075, 0.018, OAK); }
     group.add(kit.mesh(wallMat, { uv: true, shade: wallShade }));
     if (!out.empty) group.add(out.mesh(cladMat, { uv: true, shade: wallShade }));
   }
@@ -136,29 +182,42 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   const build = (rot) => {
     const cuts = wallCuts(p, rot);
     const g = new THREE.Group();
-    const up = new Kit(), caps = new Kit(), glass = new Kit(), out = new Kit();
+    const up = new Kit(), caps = new Kit(), glass = new Kit(), out = new Kit(), cloth = new Kit();
     p.walls.forEach((w, i) => {
       const cut = cuts[i];
       if (cut) { if (!w.door) capBox(caps, w, KERB_H, L.cap); return; }
       const outside = !w.a || !w.b;
       if (w.door) {
         segBox(up, w, DOOR_TOP, WALL_H, "#ffffff", out);
+        // an oak frame round the opening: jambs where the opening ends, a head across
+        if (!doors.has(keyOf(w, -1))) across(up, w, 0.03, 0, DOOR_TOP, 0.06, T + 0.05, OAK);
+        if (!doors.has(keyOf(w, 1))) across(up, w, 0.97, 0, DOOR_TOP, 0.06, T + 0.05, OAK);
+        across(up, w, 0.5, DOOR_TOP - 0.06, 0.07, 1.0, T + 0.05, OAK);
+        const single = !doors.has(keyOf(w, -1)) && !doors.has(keyOf(w, 1));
+        if (single && w.a && w.b && (ROOMY.has(kindOf.get(w.a)) || ROOMY.has(kindOf.get(w.b)))) {
+          across(cloth, w, 0.5, DOOR_TOP - 0.13, 0.025, 0.94, 0.025, "#3a3028");
+          for (const s of [-1, 0, 1]) {
+            const o = { room: w.light, tex: { r: ATLAS.noren, face: "all" } };
+            if (w.dir === "x") cloth.box(0.29, 0.72, 0.012, "#ffffff", w.x + 0.5 + s * 0.3, DOOR_TOP - 0.86, w.z, o);
+            else cloth.box(0.012, 0.72, 0.29, "#ffffff", w.x, DOOR_TOP - 0.86, w.z + 0.5 + s * 0.3, o);
+          }
+        }
       } else if (outside && windows.has(`${w.dir}:${w.x}:${w.z}`)) {
         segBox(up, w, KERB_H, SILL, "#ffffff", out);
         segBox(up, w, HEAD, WALL_H, "#ffffff", out);
-        // the pane, set back into the wall, with a frame
-        const gw = 0.78, gh = HEAD - SILL;
-        if (w.dir === "x") {
-          glass.box(gw, gh, 0.02, "#ffffff", w.x + 0.5, SILL, w.z);
-          for (const dx of [-0.5 + 0.06, 0.5 - 0.06]) up.box(0.12, gh, T, frameHex, w.x + 0.5 + dx, SILL, w.z, { shade: () => 1 });
-          up.box(gw, 0.04, T + 0.04, frameHex, w.x + 0.5, SILL, w.z, { shade: () => 1 });
-          up.box(0.03, gh, T * 0.6, frameHex, w.x + 0.5, SILL, w.z, { shade: () => 1 });
-        } else {
-          glass.box(0.02, gh, gw, "#ffffff", w.x, SILL, w.z + 0.5);
-          for (const dz of [-0.5 + 0.06, 0.5 - 0.06]) up.box(T, gh, 0.12, frameHex, w.x, SILL, w.z + 0.5 + dz, { shade: () => 1 });
-          up.box(T + 0.04, 0.04, gw, frameHex, w.x, SILL, w.z + 0.5, { shade: () => 1 });
-          up.box(T * 0.6, gh, 0.03, frameHex, w.x, SILL, w.z + 0.5, { shade: () => 1 });
-        }
+        // a tall pane in a thin black frame; next to another window tile, the two join into one with a mullion
+        const gh = HEAD - SILL;
+        const prev = windows.has(keyOf(w, -1)), next = windows.has(keyOf(w, 1));
+        if (w.dir === "x") glass.box(1, gh, 0.02, "#ffffff", w.x + 0.5, SILL, w.z);
+        else glass.box(0.02, gh, 1, "#ffffff", w.x, SILL, w.z + 0.5);
+        across(up, w, 0.035, SILL, gh, prev ? 0.035 : 0.07, prev ? T * 0.5 : T, FRAME);
+        across(up, w, 0.965, SILL, gh, next ? 0.035 : 0.07, next ? T * 0.5 : T, FRAME);
+        across(up, w, 0.5, SILL, gh, 0.02, T * 0.4, FRAME);
+        across(up, w, 0.5, SILL + gh * 0.72, 0.025, 1.0, T * 0.4, FRAME);
+        across(up, w, 0.5, HEAD - 0.04, 0.04, 1.0, T * 0.7, FRAME);
+        across(up, w, 0.5, SILL, 0.04, 1.0, T * 0.7, FRAME);
+        // a deep oak board inside, under the pane
+        trim(up, w, SILL - 0.035, 0.035, 0.11, OAK);
       } else {
         segBox(up, w, KERB_H, WALL_H, "#ffffff", out);
       }
@@ -167,7 +226,8 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     if (!up.empty) g.add(up.mesh(wallMat, { uv: true, shade: wallShade }));
     if (!out.empty) g.add(out.mesh(cladMat, { uv: true, shade: wallShade }));
     if (!caps.empty) g.add(caps.mesh(capMat, { cast: false }));
-    if (!glass.empty) g.add(glass.mesh(glassMat, { cast: false }));
+    if (!glass.empty) g.add(glass.mesh(glassMat, { cast: false, uv: true }));
+    if (!cloth.empty) { const m = cloth.mesh(clothMat, { atlas: ATLAS.size, white: ATLAS.white, cast: false }); m.name = "noren"; g.add(m); }
     g.userData.cuts = cuts;
     return g;
   };
@@ -179,7 +239,9 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     if (current) group.remove(current);
     current = perRot.get(r);
     group.add(current);
-    return current.userData.cuts;
+    const cuts = current.userData.cuts;
+    for (const row of treeRows) row.mesh.visible = !(row.walls.length && row.walls.filter((i) => cuts[i]).length * 2 > row.walls.length);
+    return cuts;
   };
 
   // The walls above the kerbs, squashed toward the floor (1 = full height): the world lowers them during a turn.

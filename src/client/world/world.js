@@ -1,18 +1,20 @@
 // The world's entry: mountWorld(canvas, { theme, hq, insets }) builds the team rooms and desks for the lanes and keeps
 // them drawn.
-import { THREE, roomLight, MAX_ROOMS } from "./kit.js";
+import { THREE, Kit, roomLight, roomMaterial, MAX_ROOMS } from "./kit.js";
 import { plan as makePlan, diff, cameraSide, toWorld, deskPlace, KERB_H, WALL_H } from "./plan.js";
 import { lookFor, STATUS } from "./look.js";
 import { View } from "./camera.js";
 import { createScene } from "./scene.js";
 import { buildRooms } from "./rooms.js";
-import { buildDesk, buildTeamRoom, buildSuite, buildBreak, DESK_SPOTS, SUITE_SPOTS } from "./furniture.js";
+import { buildDesk, buildTeamRoom, buildSuite, buildBreak, DESK_SPOTS, SUITE_SPOTS, localSize } from "./furniture.js";
 import { Worker } from "./people.js";
 import { Balls } from "./balls.js";
 import { route } from "./walk.js";
 import { screen as screenTexture, glow } from "./textures.js";
 import { bindWorld, runFrame } from "./api.js";
 import { emit } from "../core/bus.js";
+import { REACH, frontDoor, steppingStones } from "./garden.js";
+import { mountOutside } from "./outside/outside.js";
 
 const RISE_MS = 800;   // a new lane's desk rises from the floor
 const TURN_MS = 650;   // a 90° turn: the walls go down to the kerbs, the cutaway swaps, they come up again
@@ -23,6 +25,14 @@ const LIT = new Set(["moving", "needs_you", "blocked", "hq_turn", "waiting", "do
 const WARM = new THREE.Color(1.0, 0.8, 0.55);
 // Frames a second per PERFORMANCE choice; POWER SAVER draws only when something changes or moves.
 const FPS = { smooth: 30, balanced: 15, saver: 30 };
+// The land round the office (outside/) starts where the garden ends, REACH past the building. Its path leaves from
+// the middle of the lot's front side, so the lot is centred on the front door; stepping stones join the two paths.
+const lotOf = (p) => {
+  const b = p.bounds, door = frontDoor(p);
+  const half = door === null ? null : Math.max(door - (b.minX - REACH), b.maxX + REACH - door);
+  return { minX: half === null ? b.minX - REACH : door - half, minZ: b.minZ - REACH, maxX: half === null ? b.maxX + REACH : door + half, maxZ: b.maxZ + REACH, door: "s" };
+};
+const OUTSIDE = new Set(["nature", "city", "off"]);
 const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
 
 export function mountWorld(canvas, opts = {}) {
@@ -41,6 +51,8 @@ export function mountWorld(canvas, opts = {}) {
   let selected = null;
   let mode = "smooth", paused = false, dirty = true, frames = 0;
   let turn = null, wallScale = 1;
+  let link = null, linked = null; // the stepping stones between the garden's path and the land's, for this layout
+  let outside = null, outsideMode = OUTSIDE.has(opts.outside) ? opts.outside : "nature", outsideSeed = opts.outsideSeed || "hq";
 
   // Each room's light: one Color, shared by the room's own materials (a uniform) and by the walls (a slot in an array).
   // Outdoors has its own: the moon at night.
@@ -112,7 +124,7 @@ export function mountWorld(canvas, opts = {}) {
       s.room = p.hq;
       s.worker = new Worker(hqName, L, lightOf(p.hq.id));
       s.group.add(s.worker.root);
-      s.worker.place({ seat: SUITE_SPOTS.seat, stand: SUITE_SPOTS.stand, faceDesk: Math.PI });
+      s.worker.place({ seat: SUITE_SPOTS.seat, stand: SUITE_SPOTS.stand, faceDesk: SUITE_SPOTS.faceDesk ?? Math.PI });
       built.root.add(s.group);
       built.suite = s;
     }
@@ -120,6 +132,10 @@ export function mountWorld(canvas, opts = {}) {
     if (br) { built.lounge = buildBreak(br, L, lightOf(br.id)); built.lounge.room = br; built.root.add(built.lounge.group); }
     sc.scene.add(built.root);
     sc.setLights(L, p.bounds);
+    if (outsideMode !== "off") {
+      if (!outside) outside = mountOutside(sc.scene, { mode: outsideMode, seed: outsideSeed, lot: lotOf(p), theme: L });
+      else outside.setLot(lotOf(p)); // a no-op unless the office outgrew its land
+    }
     for (const lane of added) if (built.desks.has(lane)) { rising.set(lane, now); built.desks.get(lane).group.scale.y = 0.01; }
     applyCuts();
     built.rooms.setWallScale(wallScale);
@@ -138,7 +154,17 @@ export function mountWorld(canvas, opts = {}) {
       const i = built.wallIndex.get(k);
       return i === undefined ? true : built.cuts[i];
     };
+    // what hangs on a room's walls (prints, boards, shelves) shows only while the middle of that wall stands
+    const sideCut = (room, side) => {
+      const { w, d } = localSize(room);
+      const [lx, lz] = side === "n" ? [w / 2, 0] : side === "w" ? [0, d / 2] : [w, d / 2];
+      const p = toWorld(room, lx, lz);
+      const alongX = (side === "n") === (room.back === "n" || room.back === "s");
+      const i = built.wallIndex.get(alongX ? `x:${Math.floor(p.x)}:${Math.round(p.z)}` : `z:${Math.round(p.x)}:${Math.floor(p.z)}`);
+      return i === undefined ? true : built.cuts[i];
+    };
     for (const o of [...built.teams.values(), built.suite, built.lounge]) {
+      for (const dec of o?.decor ?? []) dec.mesh.visible = !sideCut(o.room, dec.side);
       if (!o?.wallPoster) continue;
       const cut = wallAt(o.room, o.wallPoster.position.x);
       o.wallPoster.visible = !cut;
@@ -279,6 +305,7 @@ export function mountWorld(canvas, opts = {}) {
     if (next === theme) return;
     theme = next;
     L = lookFor(theme);
+    outside?.setTheme(L);
     if (p) build();
   }
 
@@ -292,6 +319,33 @@ export function mountWorld(canvas, opts = {}) {
   function setPerformance(m) {
     mode = m in FPS ? m : "smooth";
     sc.setFps(FPS[mode]);
+    dirty = true;
+  }
+
+  // Stepping stones from the end of the garden's path to the start of the land's, rebuilt when either changes.
+  function linkPaths() {
+    const layout = outside?.layout ?? null, door = p ? frontDoor(p) : null;
+    const key = layout && door !== null && layout.path?.entry ? `${door}:${p.bounds.maxZ}:${layout.path.entry.x}:${layout.path.entry.z}` : null;
+    if (key === linked) return;
+    linked = key;
+    if (link) { sc.scene.remove(link); link.geometry.dispose(); link.material.dispose(); link = null; }
+    if (!key) return;
+    const kit = new Kit();
+    steppingStones(kit, { x: door, z: p.bounds.maxZ + REACH - 0.3 }, layout.path.entry);
+    link = kit.mesh(roomMaterial({ room: outdoor }), { cast: false });
+    link.name = "garden-link";
+    sc.scene.add(link);
+    dirty = true;
+  }
+
+  // The land round the office: "nature", "city" or "off", and the seed it grows from.
+  function setOutside(m, seed) {
+    const nextMode = OUTSIDE.has(m) ? m : outsideMode, nextSeed = seed || outsideSeed;
+    if (nextMode === outsideMode && nextSeed === outsideSeed) return;
+    outsideMode = nextMode; outsideSeed = nextSeed;
+    if (outsideMode === "off") { outside?.dispose(); outside = null; if (p) sc.setLights(L, p.bounds); }
+    else if (!outside && p) outside = mountOutside(sc.scene, { mode: outsideMode, seed: outsideSeed, lot: lotOf(p), theme: L });
+    else { outside?.setMode(outsideMode); outside?.setSeed(outsideSeed); }
     dirty = true;
   }
 
@@ -445,7 +499,8 @@ export function mountWorld(canvas, opts = {}) {
     const moving = view.update(dt);
     const busy = moving || turn || rising.size || walking();
     // POWER SAVER: an office where nothing changed and nothing moves draws no frame
-    if (mode === "saver" && !busy && !dirty) return;
+    // (the land's cars and water are not busy, but a fade between two lands is: it must finish)
+    if (mode === "saver" && !busy && !dirty && !outside?.inspect().fading) return;
     if (built) {
       animate(now);
       const t = now / 1000;
@@ -453,6 +508,9 @@ export function mountWorld(canvas, opts = {}) {
       built.suite?.worker.update(t, dt, view.az - built.suite.group.rotation.y);
     }
     balls.update(now);
+    // the land's cars, people and water (left out of busy: in POWER SAVER they stand still)
+    outside?.update(now, dt);
+    linkPaths();
     runFrame(now, dt);
     sc.renderer.render(sc.scene, view.camera);
     frames++;
@@ -486,6 +544,7 @@ export function mountWorld(canvas, opts = {}) {
       hovered,
       mode,
       paused,
+      outside: outside ? outside.inspect() : null,
     };
   }
 
@@ -519,13 +578,13 @@ export function mountWorld(canvas, opts = {}) {
   }
 
   const api = {
-    setLanes, setHq, setTheme, setSelected, setPerformance, setPaused, rotate, zoom, fit, focusLanes, renderNow,
+    setLanes, setHq, setTheme, setSelected, setPerformance, setOutside, setPaused, rotate, zoom, fit, focusLanes, renderNow,
     setInsets: (i) => { view.setInsets(i); dirty = true; },
     deskAnchor, project, addToWorld, pick, inspect, roomWalls, workerOf,
     get view() { return view; },
     get plan() { return p; },
     get renderer() { return sc.renderer; },
-    dispose() { sc.stop(); ro.disconnect(); cleanups.forEach((f) => f()); teardown(); balls.dispose(); sc.renderer.dispose(); bindWorld(null); },
+    dispose() { sc.stop(); ro.disconnect(); cleanups.forEach((f) => f()); teardown(); outside?.dispose(); outside = null; linkPaths(); balls.dispose(); sc.renderer.dispose(); bindWorld(null); },
   };
   bindWorld(api);
   emit("world:ready");

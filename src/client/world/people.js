@@ -1,27 +1,142 @@
 // A low-poly worker (1.35 m standing) with poses per status, a painted face, a blob shadow and the badge over the head.
+// One skinned mesh per worker (a rigid skin: each part follows one bone), so a person is one draw call. Hair, clothes
+// and face are picked from the lane's name: the same lane always looks the same.
 import { THREE, Kit, roomMaterial } from "./kit.js";
-import { hash, pick, poseOf, markerOf } from "./look.js";
-import { face as faceTexture, badge as badgeTexture, glow } from "./textures.js";
+import { hash, poseOf, markerOf, appearance } from "./look.js";
+import { badge as badgeTexture, glow, bodySkin, SKIN } from "./textures.js";
 import { SEAT_H } from "./furniture.js";
 
 const HIP = 0.62, THIGH = 0.3, SHIN = 0.27, UPPER = 0.25, FORE = 0.22;
 const SEATED_HIP = SEAT_H + 0.02;
 
-function part(build, mat) {
-  const kit = new Kit();
-  build(kit);
-  const m = new THREE.Mesh(kit.geometry(), mat);
-  m.castShadow = false;
-  m.receiveShadow = false;
-  return m;
+// The bones, in skin order, with their parent and their rest offset from it.
+const BONES = [
+  ["hips", null, [0, HIP, 0]],
+  ["legL", "hips", [0.075, -0.02, 0]], ["kneeL", "legL", [0, -THIGH, 0]],
+  ["legR", "hips", [-0.075, -0.02, 0]], ["kneeR", "legR", [0, -THIGH, 0]],
+  ["spine", "hips", [0, 0, 0]], ["head", "spine", [0, 0.42, 0]],
+  ["armL", "spine", [0.19, 0.36, 0]], ["elbowL", "armL", [0, -UPPER, 0]],
+  ["armR", "spine", [-0.19, 0.36, 0]], ["elbowR", "armR", [0, -UPPER, 0]],
+  ["mug", "elbowR", [0, -FORE - 0.11, 0.04]],
+];
+const B = Object.fromEntries(BONES.map(([n], i) => [n, i]));
+const REST = (() => {
+  const at = {};
+  for (const [n, parent, [x, y, z]] of BONES) { const p = parent ? at[parent] : [0, 0, 0]; at[n] = [p[0] + x, p[1] + y, p[2] + z]; }
+  return at;
+})();
+
+const darker = (hex, f = -0.1) => `#${new THREE.Color(hex).offsetHSL(0, 0, f).getHexString()}`;
+
+export { appearance };
+
+// Build the body into a kit, part by part, each bound to its bone, in the rest pose (standing, arms down).
+function buildBody(k, a) {
+  const at = (bone, fn) => { const p = REST[bone]; k.at(p[0], p[1], p[2], 0, () => k.withBone(B[bone], fn)); };
+  const { skin, hair, pants, shoes, topColor: top, inner } = a;
+  const sole = shoes === "#f2f0ea" ? "#d9d6cf" : darker(shoes, -0.12);
+  // hips and legs
+  at("hips", () => { k.rbox(0.28, 0.15, 0.18, pants, 0, -0.08, 0, 0.03); if (a.top !== "tee" && a.top !== "stripes") k.box(0.285, 0.03, 0.185, darker(pants, -0.08), 0, -0.01, 0); });
+  for (const s of ["L", "R"]) {
+    at(`leg${s}`, () => k.rbox(0.125, THIGH + 0.02, 0.135, pants, 0, -THIGH, 0, 0.03));
+    at(`knee${s}`, () => {
+      k.rbox(0.105, SHIN, 0.115, pants, 0, -SHIN, 0, 0.025);
+      k.rbox(0.11, 0.055, 0.2, shoes, 0, -SHIN - 0.045, 0.035, 0.02);
+      k.box(0.112, 0.018, 0.205, sole, 0, -SHIN - 0.05, 0.035);
+    });
+  }
+  // the torso and what it wears
+  at("spine", () => {
+    const tex = a.top === "stripes" ? { r: SKIN.stripes, face: "all" } : undefined;
+    k.rbox(0.31, 0.4, 0.185, a.top === "stripes" ? "#ffffff" : top, 0, 0.0, 0, 0.05, { tex });
+    k.rbox(0.2, 0.05, 0.15, a.top === "stripes" ? "#f2efe6" : top, 0, 0.385, 0, 0.02);
+    k.cyl(0.045, 0.06, skin, 0, 0.4, 0, { seg: 6 });
+    switch (a.top) {
+      case "sweater":
+        k.box(0.32, 0.045, 0.19, darker(top), 0, 0.0, 0);
+        k.cyl(0.058, 0.025, darker(top), 0, 0.41, 0, { seg: 8 });
+        break;
+      case "shirt":
+        k.box(0.016, 0.34, 0.01, darker(top, -0.06), 0, 0.03, 0.094);
+        for (const s of [-1, 1]) k.box(0.07, 0.04, 0.02, darker(top, 0.04), s * 0.035, 0.39, 0.075, { rz: s * 0.5 });
+        break;
+      case "hoodie":
+        k.rbox(0.24, 0.13, 0.08, darker(top, -0.05), 0, 0.3, -0.11, 0.03);
+        k.box(0.2, 0.08, 0.02, darker(top, -0.05), 0, 0.06, 0.09);
+        for (const s of [-1, 1]) k.box(0.01, 0.08, 0.01, "#f2efe6", s * 0.03, 0.29, 0.098);
+        break;
+      case "cardigan":
+        k.box(0.09, 0.36, 0.01, inner, 0, 0.03, 0.094);
+        for (let i = 0; i < 3; i++) k.box(0.012, 0.012, 0.008, darker(top, -0.15), 0.05, 0.1 + i * 0.09, 0.096);
+        break;
+      case "blazer":
+        k.box(0.1, 0.3, 0.01, inner, 0, 0.1, 0.094);
+        for (const s of [-1, 1]) k.box(0.04, 0.2, 0.012, darker(top, -0.06), s * 0.055, 0.18, 0.096, { rz: s * 0.25 });
+        break;
+      case "tee": case "stripes":
+        break;
+    }
+    if (a.headphones) {
+      k.add(new THREE.TorusGeometry(0.085, 0.014, 4, 12, Math.PI), "#26292e", 0, 0.39, 0.0, { rx: -Math.PI / 2 + 0.2 });
+      for (const s of [-1, 1]) k.cyl(0.035, 0.03, "#26292e", s * 0.085, 0.36, 0.02, { seg: 8, rz: Math.PI / 2 });
+    }
+  });
+  // arms: sleeves in the top's colour (short for a tee), hands in skin
+  const sleeve = a.top === "stripes" ? "#ffffff" : top;
+  const stex = a.top === "stripes" ? { r: SKIN.stripes, face: "all" } : undefined;
+  for (const s of ["L", "R"]) {
+    at(`arm${s}`, () => {
+      if (a.top === "tee") { k.rbox(0.1, UPPER * 0.5, 0.105, top, 0, -UPPER * 0.5, 0, 0.025); k.rbox(0.085, UPPER * 0.55, 0.09, skin, 0, -UPPER, 0, 0.025); }
+      else k.rbox(0.095, UPPER + 0.01, 0.105, sleeve, 0, -UPPER, 0, 0.025, { tex: stex });
+    });
+    at(`elbow${s}`, () => {
+      if (a.top === "tee") k.rbox(0.08, FORE, 0.085, skin, 0, -FORE, 0, 0.02);
+      else if (a.top === "shirt") { k.rbox(0.085, FORE * 0.45, 0.09, top, 0, -FORE * 0.45, 0, 0.02); k.rbox(0.075, FORE * 0.6, 0.08, skin, 0, -FORE, 0, 0.02); }
+      else {
+        k.rbox(0.085, FORE, 0.09, sleeve, 0, -FORE, 0, 0.02, { tex: stex });
+        if (a.top === "sweater" || a.top === "hoodie") k.box(0.088, 0.03, 0.092, darker(top), 0, -FORE, 0);
+      }
+      k.rbox(0.075, 0.085, 0.08, skin, 0, -FORE - 0.075, 0, 0.025);
+    });
+  }
+  // the head: a box with the painted face on its front, ears, and the hair
+  at("head", () => {
+    k.box(0.2, 0.23, 0.2, skin, 0, 0.04, 0);
+    // the face: a thin plate on the front, painted (its colour is all in the texture)
+    k.box(0.2, 0.23, 0.003, "#ffffff", 0, 0.04, 0.1, { tex: { r: SKIN.face, face: "+z" } });
+    for (const s of [-1, 1]) k.rbox(0.03, 0.06, 0.045, skin, s * 0.105, 0.12, 0.0, 0.012);
+    hairOf(k, a);
+  });
+  // a mug, shown only while the worker holds one (its bone is scaled to nothing otherwise)
+  at("mug", () => {
+    k.cyl(0.04, 0.09, "#f4f1ea", 0, -0.045, 0, { seg: 8, rx: 0 });
+    k.box(0.02, 0.05, 0.02, "#f4f1ea", 0.045, -0.025, 0);
+  });
 }
 
-const joint = (x, y, z) => {
-  const g = new THREE.Group();
-  g.position.set(x, y, z);
-  g.rotation.order = "YXZ";
-  return g;
-};
+function hairOf(k, a) {
+  const c = a.hair, top = 0.27;
+  const cap = (h = 0.075, w = 0.215) => k.rbox(w, h, w, c, 0, top - h + 0.035, -0.003, 0.035);
+  const back = (y0 = 0.1, d = 0.05) => k.rbox(0.214, top + 0.02 - y0, d, c, 0, y0, -0.083, 0.02);
+  const sides = (y0) => { for (const s of [-1, 1]) k.rbox(0.03, top - y0, 0.17, c, s * 0.1, y0, -0.015, 0.012); };
+  if (a.beanie) {
+    k.rbox(0.225, 0.1, 0.225, a.beanie, 0, top - 0.04, -0.003, 0.05);
+    k.rbox(0.23, 0.045, 0.23, darker(a.beanie, -0.08), 0, top - 0.06, -0.003, 0.02);
+    back(0.12);
+    return;
+  }
+  switch (a.hairStyle) {
+    case 0: cap(); back(0.12); sides(0.17); break;                                                     // crop
+    case 1: cap(); k.rbox(0.23, 0.36, 0.06, c, 0, -0.06, -0.085, 0.025); for (const s of [-1, 1]) k.rbox(0.035, 0.26, 0.18, c, s * 0.105, 0.02, -0.01, 0.015); break; // long
+    case 2: cap(); back(0.1); sides(0.15); k.sphere(0.07, c, 0, 0.33, -0.07, { detail: 1 }); break;   // bun
+    case 3: cap(); back(0.04); for (const s of [-1, 1]) k.rbox(0.035, 0.2, 0.18, c, s * 0.105, 0.06, -0.01, 0.015); k.rbox(0.2, 0.06, 0.03, c, 0, 0.21, 0.095, 0.012); break; // bob, fringe
+    case 4: k.rbox(0.27, 0.16, 0.26, c, 0, 0.17, -0.02, 0.07); for (let i = 0; i < 6; i++) { const t = i * 1.05; k.sphere(0.06, c, Math.cos(t) * 0.12, 0.25 + (i % 2) * 0.04, -0.03 + Math.sin(t) * 0.1, { detail: 0 }); } break; // curls
+    case 5: cap(); back(0.1); sides(0.16); k.rbox(0.07, 0.24, 0.06, c, 0, 0.0, -0.13, 0.025, { rx: 0.25 }); break; // ponytail
+    case 6: cap(0.045, 0.207); back(0.14, 0.025); break;                                               // buzz
+    case 7: cap(); back(0.12); sides(0.18); k.rbox(0.16, 0.06, 0.1, c, 0.02, 0.27, 0.05, 0.025, { rz: -0.15 }); break; // quiff
+    default: back(0.1, 0.03); sides(0.12); break;                                                       // bald on top
+  }
+}
 
 // Joint angles per pose: [rx, ry, rz] per joint; s is +1 for the joint on the +x side. t is seconds.
 const POSES = {
@@ -73,62 +188,32 @@ export class Worker {
     this.seed = h;
     this.pose = "away";
     this.status = null;
-    const skin = pick(L.people.skin, h, 1), hair = pick(L.people.hair, h, 5), shirt = pick(L.shirts, h, 9), pants = pick(L.people.pants, h, 13);
-    const style = h % 4;
-    const mat = roomMaterial({ room: light });
-    const faceMat = roomMaterial({ map: faceTexture(skin, hair), room: light, vertexColors: false });
-    this.mats = [mat, faceMat];
+    const a = appearance(name, L);
+    this.look = a;
+    const map = bodySkin({ skin: a.skin, hair: a.hair, brows: darker(a.hair, -0.05), beard: a.beard, glasses: a.glasses, freckles: a.freckles, lashes: a.lashes, stripe: a.stripe, bald: a.hairStyle === 8 && !a.beanie });
+    const mat = roomMaterial({ map, room: light });
+    this.mats = [mat];
 
     const root = new THREE.Group();
     root.name = `worker:${name}`;
-    const hips = joint(0, HIP, 0);
-    root.add(hips);
-    hips.add(part((k) => k.rbox(0.28, 0.14, 0.17, pants, 0, -0.07, 0, 0.03), mat));
+    const kit = new Kit();
+    buildBody(kit, a);
+    const body = new THREE.SkinnedMesh(kit.geometry({ atlas: SKIN.size, white: SKIN.white, skin: true }), mat);
+    body.name = `body:${name}`;
+    body.castShadow = false;
+    body.receiveShadow = false;
+    body.frustumCulled = false;
+    const bones = BONES.map(([n]) => { const b = new THREE.Bone(); b.name = n; b.rotation.order = "YXZ"; return b; });
+    BONES.forEach(([, parent, [x, y, z]], i) => { bones[i].position.set(x, y, z); (parent ? bones[B[parent]] : body).add(bones[i]); });
+    root.add(body);
+    root.updateMatrixWorld(true);
+    body.bind(new THREE.Skeleton(bones));
+    this.body = body;
     const J = {};
-    for (const [side, s] of [["L", 1], ["R", -1]]) {
-      const leg = joint(s * 0.075, -0.02, 0);
-      leg.add(part((k) => k.rbox(0.12, THIGH, 0.13, pants, 0, -THIGH, 0, 0.03), mat));
-      const knee = joint(0, -THIGH, 0);
-      knee.add(part((k) => { k.rbox(0.1, SHIN, 0.11, pants, 0, -SHIN, 0, 0.025); k.rbox(0.1, 0.06, 0.19, "#2b2b2e", 0, -SHIN - 0.05, 0.035, 0.02); }, mat));
-      leg.add(knee);
-      hips.add(leg);
-      J[`leg${side}`] = leg; J[`knee${side}`] = knee;
-    }
-    const spine = joint(0, 0.0, 0);
-    hips.add(spine);
-    spine.add(part((k) => { k.rbox(0.31, 0.4, 0.18, shirt, 0, 0, 0, 0.05); k.rbox(0.2, 0.05, 0.15, shirt, 0, 0.39, 0, 0.02); }, mat));
-    const head = joint(0, 0.42, 0);
-    spine.add(head);
-    head.add(part((k) => k.cyl(0.045, 0.06, skin, 0, 0, 0, { seg: 6 }), mat));
-    const headGeo = new THREE.BoxGeometry(0.19, 0.22, 0.2);
-    headGeo.translate(0, 0.16, 0);
-    const col = new Float32Array(headGeo.attributes.position.count * 3);
-    const sc = new THREE.Color(skin);
-    for (let i = 0; i < col.length; i += 3) col.set([sc.r, sc.g, sc.b], i);
-    headGeo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    head.add(new THREE.Mesh(headGeo, [mat, mat, mat, mat, faceMat, mat]));
-    head.add(part((k) => {
-      k.rbox(0.21, 0.07, 0.22, hair, 0, 0.25, -0.005, 0.03);
-      if (style === 0) k.rbox(0.21, 0.16, 0.06, hair, 0, 0.12, -0.085, 0.02);           // short
-      if (style === 1) { k.rbox(0.21, 0.26, 0.07, hair, 0, 0.0, -0.085, 0.02); k.rbox(0.03, 0.18, 0.18, hair, 0.095, 0.1, -0.01, 0.01); k.rbox(0.03, 0.18, 0.18, hair, -0.095, 0.1, -0.01, 0.01); } // long
-      if (style === 2) { k.rbox(0.21, 0.12, 0.06, hair, 0, 0.16, -0.085, 0.02); k.sphere(0.065, hair, 0, 0.33, -0.06, { detail: 1 }); } // bun
-      if (style === 3) { k.rbox(0.22, 0.05, 0.08, hair, 0, 0.27, 0.07, 0.02); k.rbox(0.21, 0.15, 0.06, hair, 0, 0.13, -0.085, 0.02); } // fringe
-    }, mat));
-    for (const [side, s] of [["L", 1], ["R", -1]]) {
-      const arm = joint(s * 0.19, 0.36, 0);
-      arm.add(part((k) => k.rbox(0.09, UPPER, 0.1, shirt, 0, -UPPER, 0, 0.025), mat));
-      const elbow = joint(0, -UPPER, 0);
-      elbow.add(part((k) => { k.rbox(0.08, FORE, 0.085, shirt, 0, -FORE, 0, 0.02); k.rbox(0.075, 0.08, 0.08, skin, 0, -FORE - 0.07, 0, 0.02); }, mat));
-      arm.add(elbow);
-      spine.add(arm);
-      J[`arm${side}`] = arm; J[`elbow${side}`] = elbow;
-    }
-    J.spine = spine; J.head = head;
-    // a mug for the done pose, in the right hand
-    this.mug = part((k) => { k.cyl(0.04, 0.09, "#f4f1ea", 0, 0, 0, { seg: 8 }); k.box(0.02, 0.05, 0.02, "#f4f1ea", 0.045, 0.02, 0); }, mat);
-    this.mug.position.set(0, -FORE - 0.12, 0.03);
-    this.mug.rotation.x = Math.PI / 2;
-    J.elbowR.add(this.mug);
+    for (const n of JOINTS) J[n] = bones[B[n]];
+    const hips = bones[B.hips];
+    this.mug = bones[B.mug];
+    this.mug.rotation.x = Math.PI / 2; // upright in a hand raised toward the mouth
 
     // the blob shadow, the ring that marks the selected worker, and the badge
     const blob = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.75), new THREE.MeshBasicMaterial({ map: glow("rgba(0,0,0,0.42)"), transparent: true, depthWrite: false }));
@@ -250,7 +335,7 @@ export class Worker {
       const cur = this.root.rotation.y;
       this.root.rotation.y = cur + Math.atan2(Math.sin(to - cur), Math.cos(to - cur)) * Math.min(1, k * 0.6);
     } else if (seated) this.root.rotation.y = this.spots.faceDesk;
-    this.mug.visible = this.pose === "mug" || this.pose === "sip";
+    this.mug.scale.setScalar(this.pose === "mug" || this.pose === "sip" ? 1 : 0.001);
     if (this.badge.visible) this.badge.position.y = (seated ? 1.62 : 1.86) + Math.sin(tt * 2.4) * 0.035;
   }
 

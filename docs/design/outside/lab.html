@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outside lab</title>
+<!--
+  The outside lab: a placeholder box for the office, its lot, and the land around it (src/client/world/outside/),
+  with the world's own camera, lights, turns and zooms. Served by scripts/world-lab.ts:
+
+    /docs/design/outside/lab.html?mode=nature|city&seed=N&lot=WxD&theme=light|dark&rot=0..3&zoom=0|1|2&ui=0|1
+
+  lot is the building's footprint in metres; margin (default 6) is the garden round it that belongs to the office.
+  Q and E turn, 1 2 3 zoom, 0 fits, N and C switch the mode, S picks a new seed, D swaps day and night.
+-->
+<script type="importmap">{ "imports": { "three": "/src/client/vendor/three/three.module.min.js" } }</script>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #b4c0a2; --glass-bg: rgba(255,255,255,0.62); --glass-edge: inset 0 1px 0 rgba(255,255,255,0.75), 0 0 0 1px rgba(15,20,30,0.08); --text: #16181d; --text-2: #5b5f6a; }
+  :root[data-theme="dark"] { --bg: #24324a; --glass-bg: rgba(24,25,30,0.60); --glass-edge: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(0,0,0,0.5); --text: #ececf1; --text-2: #a0a3ad; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; color: var(--text); }
+  #world { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  .glass { position: fixed; background: var(--glass-bg); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); box-shadow: var(--glass-edge), 0 10px 30px rgba(15,20,30,0.14); border-radius: 14px; }
+  #column { left: 12px; top: 12px; bottom: 12px; width: 420px; padding: 14px 16px; box-sizing: border-box; }
+  #column h1 { font-size: 14px; margin: 0 0 6px; }
+  #column p { margin: 0 0 6px; color: var(--text-2); }
+  #info { right: 12px; bottom: 12px; padding: 6px 12px; font: 12px ui-monospace, Menlo, monospace; color: var(--text-2); }
+  body.noui .glass { display: none; }
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+<aside id="column" class="glass"><h1>Outside lab</h1><p id="what"></p><p>Q / E turn · 1 2 3 zoom · 0 fit · N / C mode · S seed · D day and night</p></aside>
+<div id="info" class="glass"></div>
+<script type="module">
+import * as THREE from "/src/client/vendor/three/three.module.min.js";
+import { createScene } from "/src/client/world/scene.js";
+import { View, ZOOMS } from "/src/client/world/camera.js";
+import { lookFor } from "/src/client/world/look.js";
+import { mountOutside } from "/src/client/world/outside/outside.js";
+
+const q = new URLSearchParams(location.search);
+let theme = q.get("theme") === "dark" ? "dark" : "light";
+let mode = q.get("mode") === "city" ? "city" : "nature";
+let seed = q.has("seed") ? Number(q.get("seed")) : 7;
+const [W, D] = (q.get("lot") ?? "24x14").split("x").map(Number);
+const margin = Number(q.get("margin") ?? 6);
+const ui = q.get("ui") !== "0";
+document.documentElement.dataset.theme = theme;
+if (!ui) document.body.classList.add("noui");
+
+const foot = { minX: -W / 2, minZ: -D / 2, maxX: W / 2, maxZ: D / 2 };
+const lot = { minX: foot.minX - margin, minZ: foot.minZ - margin, maxX: foot.maxX + margin, maxZ: foot.maxZ + margin, door: q.get("door") ?? "s" };
+
+const canvas = document.getElementById("world");
+const sc = createScene(canvas, { fps: 30 });
+const view = new View();
+view.setInsets(ui ? { left: 444, top: 56 } : {});
+
+// The office stand-in: the world's own ground plane (60 m past the building, at -0.12, as rooms.js lays it), the lot
+// in a slightly different green, and a white box with a darker top.
+const office = new THREE.Group();
+sc.scene.add(office);
+let L = lookFor(theme);
+function stand() {
+  office.clear();
+  // the office lights everything outdoors with the moon at night (kit.js roomMaterial): emissive = colour × moon
+  const outdoor = (hex) => new THREE.MeshLambertMaterial({ color: hex, emissive: new THREE.Color(hex).multiply(new THREE.Color(L.moon ?? "#000000")) });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 120, D + 120).rotateX(-Math.PI / 2), outdoor(L.ground.base));
+  ground.position.y = -0.12;
+  ground.receiveShadow = true;
+  const plot = new THREE.Mesh(new THREE.PlaneGeometry(lot.maxX - lot.minX, lot.maxZ - lot.minZ).rotateX(-Math.PI / 2), outdoor(L.ground.alt));
+  plot.position.set((lot.minX + lot.maxX) / 2, -0.118, (lot.minZ + lot.maxZ) / 2);
+  plot.receiveShadow = true;
+  const box = new THREE.Mesh(new THREE.BoxGeometry(W, 2.95, D), [L.wall.face, L.wall.face, L.cap, L.wall.face, L.wall.face, L.wall.face].map((c) => new THREE.MeshLambertMaterial({ color: c })));
+  box.position.y = 2.95 / 2;
+  box.castShadow = box.receiveShadow = true;
+  office.add(ground, plot, box);
+  sc.setLights(L, foot);
+}
+stand();
+
+const outside = mountOutside(sc.scene, { mode, seed, lot, theme: L });
+window.outside = outside;
+
+function resize() { sc.resize(innerWidth, innerHeight); view.resize(innerWidth, innerHeight); }
+addEventListener("resize", resize);
+resize();
+const rot = ((Number(q.get("rot") ?? 0) | 0) % 4 + 4) % 4;
+for (let i = 0; i < rot; i++) view.rotate(1);
+view.fit(foot, true);
+// zoom 0 far, 1 mid, 2 near; focus=x,z looks at a ground point (default: the middle of the building)
+const [fx, fz] = (q.get("focus") ?? "0,0").split(",").map(Number);
+if (q.has("zoom")) { view.zoom(Number(q.get("zoom"))); view.ppm = view.ppmTo; view.focus(fx, fz, true); }
+
+// What the outside alone costs at this view: drawn once with the stand-in hidden.
+function cost() {
+  office.visible = false;
+  const shadows = sc.renderer.shadowMap.enabled;
+  sc.renderer.shadowMap.enabled = false;
+  sc.renderer.render(sc.scene, view.camera);
+  const r = sc.renderer.info.render;
+  const out = { calls: r.calls, triangles: r.triangles };
+  office.visible = true;
+  sc.renderer.shadowMap.enabled = shadows;
+  return out;
+}
+const info = document.getElementById("info");
+function describe() {
+  const c = cost();
+  window.__outsideCost = c;
+  document.getElementById("what").textContent = `${mode}, seed ${seed}, building ${W} × ${D} m, lot margin ${margin} m, ${theme === "dark" ? "night" : "day"}`;
+  info.textContent = `outside: ${c.calls} draw calls, ${(c.triangles / 1000).toFixed(1)}k triangles · ppm ${view.ppm.toFixed(1)}`;
+}
+
+let frames = 0, last = performance.now();
+sc.start((now, dt) => {
+  view.update(dt);
+  outside.update(now, dt);
+  sc.renderer.render(sc.scene, view.camera);
+  if (++frames === 6) describe();
+  if (frames === 8) window.__worldReady = true;
+});
+window.world = { get renderer() { return sc.renderer; }, view, describe };
+
+addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (k === "q") view.rotate(-1);
+  if (k === "e") view.rotate(1);
+  if (["1", "2", "3"].includes(k)) view.zoom(Number(k) - 1);
+  if (k === "0") view.fit(foot);
+  if (k === "n" || k === "c") { mode = k === "n" ? "nature" : "city"; outside.setMode(mode); setTimeout(describe, 900); }
+  if (k === "s") { seed = (seed * 7 + 13) % 1000; outside.setSeed(seed); setTimeout(describe, 900); }
+  if (k === "d") {
+    theme = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    L = lookFor(theme);
+    stand();
+    outside.setTheme(L);
+    setTimeout(describe, 100);
+  }
+});
+</script>
+</body>
+</html>
