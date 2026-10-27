@@ -169,6 +169,14 @@ names, and the route serves the package's browser modules and nothing else. Both
 planted violation (an app file deep-importing `render/stage.js`; a package file importing `src/client/core/state.js`)
 and failed with the file, the import and the fix.
 
+After the second review, both tests read imports with Bun's parser (`Bun.Transpiler.scan`), not regexes, so
+spacing and quoting cannot hide one (`import{x}from"..."`, `export*from"..."`). Every JS and TS flavour is read
+(`.mjs`, `.cjs`, `.mts`, `.tsx`), and HTML files by their scripts. Any `require`, `import.meta.require` or
+`createRequire` fails, and so does an `import()` whose argument is not a literal, except in the files that load a
+file the user names (`check.ts`, `catalog.ts`, the lab; on the app side, the router that loads its route files).
+Each test keeps a list of probes, the ways past it the reviews found; each probe must fail and the clean tree must
+pass.
+
 ### 2.7 Versioning and stability
 
 - `packages/world/package.json` starts at `0.1.0`. While `0.x`, a minor bump may break the API; a patch never does.
@@ -204,7 +212,8 @@ and failed with the file, the import and the fix.
 | Leaves a room without a door | "room 'study' cannot be reached from outside; add an opening on one of its walls, for example ..." |
 | Deep-imports `render/materials.js` from the app | `test/client/world-package.test.ts` |
 | Imports app code from the package | `packages/world/test/boundary.test.ts` |
-| Patches `ShaderChunk` | `boundary.test.ts` (no global three.js mutation) |
+| Patches `ShaderChunk`, aliases `ShaderLib`, sets `Cache` or `Object3D.DEFAULT_UP` | `boundary.test.ts`: shared three.js state is named only at a listed read of a string |
+| Sets `document.title` or writes `localStorage` from the engine | `boundary.test.ts`: runtime code touches no page state but `document.createElement` |
 | Writes "lane" or "ask" into the engine | `boundary.test.ts` (no host concepts in the package) |
 
 ### 2.10 Second critique, after building the proof
@@ -491,10 +500,14 @@ them, and draws only when the driver says so. The meshes hold no state of their 
 
 The frame policy is in the driver, so Bun tests count it:
 
-- **Render** when the camera moves (a pan, a zoom, a turn, an eased focus), a body moves, the cut walls change, or
-  something asked (an edit, a theme or time change, a hover, `invalidate()`).
-- **Redraw the shadow map** only when a body moved, the cut walls changed, or an edit, theme or time change asked.
-  A pan, a zoom or a hover never redraws it.
+- **Render** when the camera moves (a pan, a zoom, a turn, an eased focus), a body moves, a clip cross-fades, the cut
+  walls change, or something asked (an edit, a theme or time change, a hover, `invalidate()`, `attach()`).
+- **Draw the end of every motion.** The step that brings the camera to rest is drawn, so the last picture is the
+  snapped pose on whole device pixels. The anim system is busy while a cross-fade runs, including the step that ends
+  it, so the last picture of a walk is the idle clip and the last of a sit is the slot's clip. `settle.test.ts`
+  checks a turn in each wall mode, a zoom, `fitBox`, `focusOn`, a walk and a sit.
+- **Redraw the shadow map** only when a body moved or cross-faded, the cut walls changed, or an edit, theme or time
+  change or `attach()` asked. A pan, a zoom or a hover never redraws it.
 - **Nothing else draws.** A clip looping in place (typing, breathing) is not motion: it draws at `idleFps`
   (default 0, never) and never redraws shadows. No frame cap applies during interaction.
 
@@ -516,16 +529,36 @@ takes the next whole doc and diffs it. The engine has the second: `world.apply(n
   whose end state is invalid, or reject a valid end state halfway. `apply` validates the next doc whole; a
   `WorldError` changes nothing.
 - **Only the diff is rebuilt.** `diffWorld(a, b)` names the objects and characters added, removed and changed, and
-  whether the lot or the packs changed. `createWorld` rebuilds those groups only, and the architecture only when
-  the lot changed. App children attached to a rebuilt object stay attached.
+  whether the lot or the packs changed. An object's height comes from the floor under it, so when the lot changed,
+  `apply` also names every object whose built place (position, anchors, slots) moved; the pure diff cannot see that.
+  `createWorld` rebuilds those groups only, and the architecture only when the lot changed. App children attached
+  to a rebuilt object stay attached.
 
 The sim keeps running through an edit. New characters spawn at their `at`; removed ones are dropped (their act's
 promise rejects). A character keeps its place and its act. If its held seat or target changed or went away, or its
 route now crosses a blocked tile, it plans the act again from where it stands, and gets a `cancel` event when that
 fails. A character on a tile that an object now covers walks off it. A character outside a lot that shrank is
-moved inside; that is the only teleport. A doc's `characters[].at` applies only to a new character. An act in the
-next doc that the current one did not have starts; acts both docs share are not replayed. So a host sends a worker
-to a desk by adding the act to the doc it generates.
+moved inside; that is the only teleport. A character whose act is dropped while it stands in an object (its chair
+became a plant) walks off it: `cancel` steps it clear. An act in the next doc that the current one did not have
+starts; acts both docs share are not replayed. So a host sends a worker to a desk by adding the act to the doc it
+generates.
+
+**A doc's `characters[].at` is the spawn tile only.** Two choices were possible for a character that already
+exists: check its acts from where the sim has it now, or not by position at all. The engine does the second.
+`analyse(world, { live })` skips the `at` checks for live characters and checks their acts with `checkAct`, which
+needs no position: a known act and clip, an object that exists, a slot it has. The reasons:
+
+- The sim is the truth at run time. A check from the doc's `at` is a check from a stale place: it refused an edit
+  that put a plant where a worker started an hour ago, so a generator would have to keep every spawn tile free.
+- A check from the sim's live state would make an edit depend on a moment. A seat held for a second by a host act,
+  or a worker halfway through a door, would refuse the whole doc, and the same doc would pass a frame later.
+- Only the new acts run, and the sim plans each from where the character is when it starts. What it cannot start
+  is reported per act: a `cancel` event `{ who, problem, act, refused: true }`. The host learns which act failed
+  and why; the rest of the edit still applies.
+
+New characters are still checked from their `at`, since that is where they appear. `check.ts` and `createWorld`
+check every character that way. A save loaded with `sim.ecs.load` is checked against the lot by the same code that
+runs after an edit: a seat whose object or slot is gone is let go, and its holder stands up and steps clear.
 
 ## 4. The public API
 
@@ -862,14 +895,19 @@ pixel, and otherwise rounds. The first run, before that check, drew at DPR 1 and
 and 21.8 % of the screen changed per pan at DPR 1.5 and 2. A real HiDPI screen, where the reported box is right,
 is not in this proof.
 
-**Idle, after phase 1.5** (the real clock, `--only idle`): still for 3 s, 180 frames, 0 renders, 0 shadow redraws.
-A walk to chair-2, 75 renders and 75 shadow redraws (the machine was loaded, so 47 s and 76 frames). Seated again
-for 3 s, 0 renders, 0 shadow redraws. Headless (`test/view.test.ts`, 60 steps a second): still for 3 s, 0 renders;
-an 8 s walk, about 330 renders, each with a shadow redraw; a pan, 1 render and no shadow redraw; a turn, 23 to 25
-renders and 2 shadow redraws (one per cut change); an edit or a theme change, 1 render and 1 shadow redraw.
+**Idle, after the second review** (the real clock, `--only idle`; the machine was loaded): still for 3 s, 180
+frames, 0 renders, 0 shadow redraws. A walk to chair-2, 90 renders and 90 shadow redraws (10.8 s, 90 frames).
+Seated again for 3 s: 4 renders and 4 shadow redraws, then none. Those 4 are the cross-fade into the sit clip,
+which the act's promise does not wait for; before the fix they were never drawn. An `attach()`: 1 render and 1
+shadow redraw. Headless (60 steps a second): still for 3 s, 0 renders; a walk and sit of 8 s, 344 renders, each with
+a shadow redraw; a pan, 1 render and no shadow redraw; a turn, 23 renders (the last one is the snapped pose) and 2
+shadow redraws in cutaway mode (one per cut change), none with walls up or down; a zoom, 16 renders; a `fitBox`, 26
+renders; an edit or a theme change, 1 render and 1 shadow redraw.
 
 **Tests**: `bun test packages/world docs/engine/compare test/client/modules.test.ts test/client/world-package.test.ts`
-gives 225 pass, 0 fail (phase 1: 157). The package has 162 tests (phase 1: 94).
+gives 288 pass, 0 fail (phase 1: 157; phase 1.5: 225). The package has 212 tests (phase 1: 94; phase 1.5: 162).
+The second review's probes are package tests now: `settle.test.ts` (8; 7 failed before the fix), `edits.test.ts`
+and `doc-at.test.ts`, and the boundary probe lists (31 in the package, 12 on the app side).
 
 **What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), a real HiDPI screen,
 instancing, per-room light, and the HQ office itself.
@@ -877,14 +915,18 @@ instancing, per-room light, and the HQ office itself.
 ## 12. Migration order
 
 The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
-above it has merged. Phase 1.5 is step 1; step 2 has not started.
+above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1); step 2 has not started.
 
 1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
    map redraws only on change (3.9). The canvas is sized to its device pixels (3.9). The boundary test closes the
    holes the review found (globals, `ShaderChunk` writes, `import()` of anything outside the package, deep imports
    from the app). Packs are checked for colour tokens and clips, and palettes are per theme and per pack. Held seats
    live in the ECS. Tests use their own fixture. The tools work from any folder, and `check.ts --map` draws the lot.
-   A throwing system is switched off, not fatal. Eased `focusOn` and `fitBox`.
+   A throwing system is switched off, not fatal. Eased `focusOn` and `fitBox`. After the second review (0.2.1): the
+   end of every motion is drawn, a floor edit rebuilds what stands on it, a doc's `at` is a spawn tile only, a
+   refused doc act is a `cancel` event, a cancel never leaves a character inside an object, a loaded save is
+   checked against the lot, and the boundary tests read imports with Bun's parser. Still open from the reviews:
+   avoidance between characters, `instance` and `lod` (declared, unused), and `lot.js` importing nav and act.
 2. **The lane tree to a `WorldDoc`, as a pure function.** `src/client/office/plan.js` takes the lane tree and returns
    a doc: team rooms as wall paths, one desk and chair per lane with stable ids, workers as characters, doors that
    connect every room. It runs headless in Bun. Tests cover 1 lane, a full team, several teams of uneven sizes, and N

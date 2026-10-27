@@ -2,6 +2,36 @@
 
 All notable changes to `@hq/world`'s public API (the names in `api.txt` and the world format).
 
+## [0.2.1] - 2026-10-27
+
+### Added
+
+- `describePairs(pairs)`: one line per two parts that share a plane, however many planes. Coplanar pairs name a part
+  whose name repeats with its place in build order (`'shelf' #2`).
+- `analyse(world, { live, moved })`, for edits at run time. `live` names characters that already exist; `moved`
+  names the objects an edit added or changed.
+- `sim.act(id, act, { doc: true })`: an act from the doc. A refusal is also a `cancel` event
+  `{ who, problem, act, refused: true }`. `createWorld` and the driver start doc acts this way.
+- `createEcs({ onLoad })`, told after `load()`.
+
+### Fixed
+
+- The step that ends a motion is drawn: the camera's snapped pose after a turn, zoom, `fitBox` or `focusOn`, and a
+  clip's cross-fade to its end. The anim system is busy while a cross-fade runs, and a cross-fade redraws shadows.
+  A still view still draws nothing.
+- An edit that lays or lifts a floor rebuilds the objects whose height moved with it (`apply`'s diff names them).
+- An edit no longer checks an existing character's doc `at`, and checks its acts without a position. A generator
+  may put an object on a character's spawn tile once the character has left it.
+- A doc act the sim refuses at run time emits `cancel` instead of only a console line.
+- A cancelled act never leaves a character inside an object: `cancel` walks it off a blocked tile. The walk off is
+  not an act and emits no `act` event.
+- `sim.ecs.load` checks the save against the lot: a held seat whose object or slot is gone is let go, and its holder
+  stands up and steps clear (a `cancel` event).
+- `attach()` redraws shadows, so an attached object casts one at once.
+- An overlap error names both objects. In an edit, it names the one the edit moved, and its fix places that one.
+- `check.ts`, `catalog.ts` and `shot.ts` take `.js` and `.mjs` files and refuse others with a message that names
+  the extensions.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added
