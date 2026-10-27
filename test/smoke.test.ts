@@ -1,6 +1,6 @@
 // Starts server.ts on a spare port with a throwaway data dir and checks the core routes.
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnServer } from "../scripts/room-hash.ts";
@@ -53,7 +53,9 @@ test("uploads land in the data dir and are served back", async () => {
   });
   expect(res.status).toBe(200);
   const { path, url } = await res.json();
-  expect(path.startsWith(join(DATA, "uploads"))).toBe(true);
+  // The reply names a URL on this server, never a path on its disk; the file is in the data dir.
+  expect(path).toBeUndefined();
+  expect(existsSync(join(DATA, url))).toBe(true);
   const back = await fetch(`${BASE}${url}`);
   expect(back.status).toBe(200);
   expect(new Uint8Array(await back.arrayBuffer())).toEqual(bytes);

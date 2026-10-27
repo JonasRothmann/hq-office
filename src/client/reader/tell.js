@@ -4,7 +4,7 @@ import { on } from "../core/bus.js";
 import { $, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
-import { clipText, linkify } from "../core/text.js";
+import { clipText } from "../core/text.js";
 import { post } from "../core/net.js";
 import { attachButton, chipsHTML, clearImages, hasImages, notReady, withImages } from "../images/images.js";
 import { liveSecrets, lostSecrets, renderSecrets } from "../secrets/secrets.js";
@@ -18,10 +18,11 @@ function noteMark(n) {
   if (!n.acked_at && held(`note:${n.id}`)) return HELD;
   return `<span style="color:${n.acked_at ? "var(--green)" : "var(--amber)"}">${n.acked_at ? "· HQ has it" : "· not picked up yet"}</span>`;
 }
-// One list, newest first: your notes and HQ's answers interleaved by time.
+// One list, newest first: your notes and HQ's answers interleaved by time. A question's title opens it in the reader,
+// with its thread and REOPEN.
 function logRows() {
   const notes = S.notes.slice(0, 5).map((n) => ({ at: n.at, html: `<div><b>${clock(n.at)} YOU</b>${clipText(n.text, `n${n.id}`)} ${noteMark(n)}</div>` }));
-  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}${linkify(a.title)} → <strong>${clipText(a.answer, `a${a.id}`)}</strong> ${held(`ask:${a.id}`) && !a.acked_at ? HELD : `<span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span>`}</div>` }));
+  const answered = S.answered.slice(0, 8).map((a) => ({ at: a.answered_at, html: `<div><b>${clock(a.answered_at)} ${a.status === "withdrawn" ? "WITHDRAWN" : "ANSWERED"}</b>${esc(a.lane ? a.lane + ": " : "")}<button class="link" type="button" data-read="question:${a.id}">${esc(a.title)}</button> →<strong>${clipText(a.answer, `a${a.id}`)}</strong> ${held(`ask:${a.id}`) && !a.acked_at ? HELD : `<span style="color:${a.acked_at ? "var(--green)" : "var(--amber)"}">${a.status === "withdrawn" ? "" : a.acked_at ? "· HQ acted" : "· HQ to act"}</span>`}</div>` }));
   return [...notes, ...answered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0)).map((r) => r.html).join("") || `<div class="none">Nothing yet today.</div>`;
 }
 

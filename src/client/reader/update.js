@@ -1,7 +1,9 @@
 // An update from HQ in the reader: the whole body as markdown, its links as cards, the owner's replies under it, and
-// a box to reply to HQ. Opening one marks it read. A reply is an ordinary note that starts with
+// a box to reply. Opening one marks it read. The To chip picks HQ (the default) or the update's lane. To HQ, a reply is
+// an ordinary note that starts with
 //   re: #u12 ("first words of the update")
-// so the server needs nothing new and HQ reads what the reply answers.
+// so HQ reads what the reply answers. To the lane, it goes into the update's thread (reader/thread.js), delivered the
+// rooms' way.
 import { on } from "../core/bus.js";
 import { toast } from "../core/dom.js";
 import { S } from "../core/state.js";
@@ -13,7 +15,8 @@ import { replies } from "../inbox/drafts.js";
 import { clearImages, composer, hasImages, notReady, withImages } from "../images/images.js";
 import { itemOf, laneColor } from "./ask.js";
 import { linkCards } from "./links.js";
-import { defineView } from "./shell.js";
+import { current, defineView } from "./shell.js";
+import { sendReply, threadHtml, toHtml, toOf } from "./thread.js";
 
 export const REF = /^re: #([un])(\d+)(?: \("([^"\n]*)"\))?[ \t]*/;
 const short = (s, n) => { const t = String(s ?? "").replace(/```[\s\S]*?```/g, "[code]").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
@@ -27,15 +30,15 @@ el.className = "rview updview";
 el.dataset.view = "update";
 el.setAttribute("aria-label", "Update from HQ");
 el.innerHTML = `<header class="rv-head"><div class="meta"></div><h3 class="rv-title"></h3></header>
-  <div class="rv-body"><div class="doc md"></div><div class="lcards"></div><div class="replies"></div></div>
-  <footer class="rv-foot"><div class="rcomp"></div></footer>`;
+  <div class="rv-body"><div class="doc md"></div><div class="lcards"></div><div class="replies"></div><section class="rthread ithread" aria-label="Thread"></section></div>
+  <footer class="rv-foot"><div class="tobar"></div><div class="rcomp"></div></footer>`;
 const part = (c) => el.querySelector(`.${c}`);
 let shownId = null, compFor = null;
 const sending = new Set(); // updates whose reply is on its way
 
 function render() {
   const u = updateOf(shownId);
-  if (!u) { setHTML(part("rcomp"), `<div class="gone">This update is no longer listed.</div>`); compFor = null; return; }
+  if (!u) { setHTML(part("rcomp"), `<div class="gone">This update is no longer listed.</div>`); part("tobar").innerHTML = ""; compFor = null; return; }
   el.dataset.upd = u.id;
   if (!u.read_at && !readSent.has(u.id)) {
     readSent.add(u.id);
@@ -50,9 +53,11 @@ function render() {
   // The owner's replies to it, oldest first, and whether HQ has each one.
   const mine = (S.notes ?? []).map((n) => ({ n, r: n.text.match(REF) })).filter(({ r }) => r && r[1] === "u" && Number(r[2]) === u.id).sort((a, b) => a.n.at - b.n.at);
   setHTML(part("replies"), mine.length ? `<div class="k">YOUR REPLIES</div>${mine.map(({ n, r }) => `<article class="msg you" data-msg="n${n.id}"><div class="meta"><span class="who">YOU</span><span class="tag">${clock(n.at)}</span><span class="seen${n.acked_at ? " ok" : ""}">${n.acked_at ? "HQ HAS IT" : "NOT PICKED UP YET"}</span></div><div class="text md">${markdown(n.text.slice(r[0].length), true)}</div></article>`).join("")}` : "");
+  setHTML(part("ithread"), threadHtml("update", u.id));
+  setHTML(part("tobar"), u.lane ? toHtml("update", u.id, u.lane) : "");
   if (compFor !== u.id) {
     compFor = u.id;
-    part("rcomp").innerHTML = composer(key(u.id), `<textarea rows="1" placeholder="Reply to HQ about this. ⌘↩ sends.">${esc(replies.get(u.id) || "")}</textarea>`, `<button class="send go" type="button" data-rsend>REPLY</button>`);
+    part("rcomp").innerHTML = composer(key(u.id), `<textarea rows="1" placeholder="Reply about this. ⌘↩ sends.">${esc(replies.get(u.id) || "")}</textarea>`, `<button class="send go" type="button" data-rsend>REPLY</button>`);
   }
   sendState();
 }
@@ -70,12 +75,14 @@ async function send(btn) {
   if (wait) { toast(wait); return; }
   sending.add(u.id);
   btn.disabled = true;
+  const to = toOf("update", u.id, u.lane);
   try {
-    await post("/api/notes", { text: `re: #u${u.id} ("${short(u.title || u.body, 50).replace(/"/g, "'")}") ${text}` });
+    if (to === "hq") await post("/api/notes", { text: `re: #u${u.id} ("${short(u.title || u.body, 50).replace(/"/g, "'")}") ${text}` });
+    else await sendReply("update", u.id, text, to);
     replies.delete(u.id);
     clearImages(k);
     if (shownId === u.id) { const ta = part("rcomp").querySelector("textarea"); if (ta) ta.value = ""; }
-    toast("SENT TO HQ.");
+    if (to === "hq") toast("SENT TO HQ.");
   } catch (err) { toast(err.message); }
   sending.delete(u.id);
   sendState();
@@ -87,7 +94,7 @@ defineView("update", {
     if (!same) { shownId = id; compFor = null; part("rv-body").scrollTop = 0; }
     render();
   },
-  render(keys) { if (!keys || ["updates", "notes", "inbox", "lanes"].some((k) => keys.has(k))) render(); },
+  render(keys) { if (!keys || ["updates", "notes", "inbox", "lanes", "rooms"].some((k) => keys.has(k))) render(); },
   focus() { el.querySelector(".rcomp textarea")?.focus(); },
   left() { fresh.clear(); },
 });
@@ -98,4 +105,6 @@ el.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); const b = part("rcomp").querySelector("[data-rsend]"); if (b && !b.disabled) send(b); }
 });
 on("attach", (k) => { if (k === key(shownId)) sendState(); });
+on("thread", () => { if (current?.kind === "update" && current.ref === shownId) render(); });
+on("thread-to", (k) => { if (k === `update:${shownId}`) render(); });
 export const sendReplyInReader = () => { const b = part("rcomp").querySelector("[data-rsend]"); if (b && !b.disabled) send(b); };

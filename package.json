@@ -9,7 +9,7 @@
   "scripts": {
     "start": "bun server.ts",
     "test": "bun test",
-    "test:hud": "bun test --timeout 90000 test/server test/client/hud-only test/client/inbox test/client/reader test/client/modules test/client/world-plan test/client/page test/client/glass test/client/rooms test/client/attach test/client/hierarchy test/client/hq-link test/client/ledger test/client/phone test/client/settings test/client/secrets-page",
+    "test:hud": "bun test --timeout 90000 test/server test/client/hud-only test/client/inbox test/client/reader test/client/modules test/client/world-plan test/client/page test/client/glass test/client/rooms test/client/attach test/client/threads test/client/hierarchy test/client/hq-link test/client/ledger test/client/phone test/client/settings test/client/secrets-page",
     "test:world": "bun test --timeout 90000 test/client/world.test test/client/blocked test/client/performance test/client/ask-scope test/client/desk-hud test/client/office-view"
   },
   "engines": {

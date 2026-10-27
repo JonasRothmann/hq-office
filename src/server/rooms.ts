@@ -30,7 +30,14 @@ export function slugOf(v: unknown) {
   if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(slug)) throw new Error("a room's slug is 1 to 48 lowercase letters, digits and dashes, such as ope-12-auth");
   return slug;
 }
-const room = (slug: string) => db.query("SELECT * FROM rooms WHERE slug = ?").get(slug) as Room | null;
+// A thread: the room the HUD opens for replies on one question or update (src/server/threads.ts). HQ cannot take
+// the slug for a room of its own.
+export const THREAD = /^thread-([qu])(\d+)$/;
+export function threadOf(slug: string) {
+  const m = slug.match(THREAD);
+  return m ? { kind: m[1] === "q" ? ("question" as const) : ("update" as const), ref: Number(m[2]) } : null;
+}
+export const room = (slug: string) => db.query("SELECT * FROM rooms WHERE slug = ?").get(slug) as Room | null;
 function mustRoom(v: unknown) {
   const r = room(slugOf(v));
   if (!r) throw new Error(`no room ${str(v)}: hud room create ${str(v)} --title T --owner LANE`);
@@ -54,6 +61,7 @@ function touch(slug: string) {
 // archived room. A lane that stops owning the room stays in it as a member.
 export function createRoom(body: any) {
   const slug = slugOf(body.slug);
+  if (slug.startsWith("thread-")) throw new Error("a room's slug cannot start with thread-: the HUD keeps those for replies on questions and updates");
   const before = room(slug);
   const title = str(body.title) || before?.title;
   if (!title) throw new Error("a title is required (--title T)");
@@ -221,6 +229,12 @@ export function promptText(r: Room, m: Msg, late: boolean) {
   const lane = m.to_lane!;
   const as = lane === r.owner ? "" : ` --as ${lane}`;
   const parent = m.reply_to ? (db.query("SELECT author, text FROM room_messages WHERE id = ?").get(m.reply_to) as { author: string | null; text: string } | null) : null;
+  const t = threadOf(r.slug);
+  // A thread on a question or an update: the lane answers in the thread, which the owner reads with the item.
+  if (t) {
+    const what = t.kind === "question" ? `question #${t.ref}` : `update #${t.ref}`;
+    return `HUD ${what} ("${r.title.replace(/^Re: /, "")}"): ${OWNER} replied${late ? ` at ${hhmm(m.at)} while you were away` : ""} (message #${m.id}):\n${m.text}\nReply in its thread: hud room say ${r.slug} "<your reply>"${as}. ${OWNER} reads the thread on the HUD, not this terminal.`;
+  }
   const head = [
     `HUD room ${r.slug} ("${r.title}"): ${OWNER} wrote to ${lane === r.owner ? "you, the room's owner" : "you"}`,
     late ? `, at ${hhmm(m.at)} while you were away` : "",
@@ -286,6 +300,8 @@ function summary(r: Room) {
     slug: r.slug,
     title: r.title,
     owner: r.owner,
+    // A thread names its question or update: the page shows it with that item, not as a room of its own.
+    thread: threadOf(r.slug),
     members: members(r.slug),
     ...links(r.slug),
     createdAt: r.created_at,

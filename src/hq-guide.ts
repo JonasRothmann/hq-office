@@ -9,6 +9,7 @@ The owner reads the HQ Office page (the HUD), usually on a second screen, and do
 - An answer to a question that went to a lead is typed into the asking lane by the HUD. When HQ's message says "already delivered to L; no relay needed", do not relay it.
 - Work in flight is tracked on the board: \`hud track ISSUE --lane L --pr N\`. Start every sweep with \`hud board\`, and \`hud inbox\` for what the owner sent (\`hud ack\` once acted on).
 - A piece of work with an owning lane can get a conference room, where the owner talks to that lane directly: \`hud room create SLUG --title T --owner LANE [--issue X]\`; the owning lane keeps its brief and artifacts current (\`hud room brief\`, \`hud room artifact\`) and answers there with \`hud room say\`.
+- The owner may reply in a question's or an update's thread without answering it; the reply is typed into the lane, which answers there with \`hud room say thread-qID "<reply>"\` (\`thread-uID\` for an update).
 - Lanes form a tree under HQ: a lane that starts lanes registers each with \`hud lane CHILD --parent ITSELF\` (HQ's own lanes need no parent); \`hud tree\` shows who reports to whom.
 - This terminal is for your own work.`;
 

@@ -69,8 +69,9 @@ test.skipIf(!chromeFound)("comments and ticks show on the card, the latest five 
   expect(await page.evaluate(`[...${card()}.querySelectorAll(".lc")].map((c) => c.textContent.slice(c.querySelector(".lat").textContent.length))`)).toEqual(["note 3", "note 4", "note 5", "note 6", "note 7"]);
   expect(await page.evaluate(`[...${card()}.querySelectorAll(".lchk li")].map((li) => [li.classList.contains("done"), li.textContent.trim()])`)).toEqual([[true, "✓Write the notes"], [false, "Land #4321"]]);
   expect(await page.evaluate(`${card()}.querySelectorAll(".lchk li")[1].querySelector("a").href`)).toBe("https://github.com/example/repo/pull/4321");
-  // The ledger sits between the question and its answer: at the foot of the body, over the options.
-  expect(await page.evaluate(`[${card()}.querySelector(".rv-body > .ledger:last-child") !== null, ${card()}.querySelector(".rv-foot > .opts") !== null]`)).toEqual([true, true]);
+  // The ledger sits between the question and its answer: at the foot of the body (only the thread with the lane comes
+  // after it), over the options.
+  expect(await page.evaluate(`[${card()}.querySelector(".rv-body > .ledger + .ithread:last-child") !== null, ${card()}.querySelector(".rv-foot > .opts") !== null]`)).toEqual([true, true]);
   await page.evaluate(`${card()}.querySelector("[data-ledger-more]").click()`);
   await until(`${card()}.querySelectorAll(".lc").length === 7`);
   // An answer picked after all this still works, and the ledger survives the panel redrawing the card.

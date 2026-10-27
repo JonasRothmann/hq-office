@@ -111,7 +111,8 @@ function workHtml(r) {
 
 function renderHead(r) {
   setHTML(part("who"), `${laneChip(r.owner, "OWNER")}${r.members.length ? `<span class="plus">+${r.members.length} ${r.members.length === 1 ? "LANE" : "LANES"}</span>` : ""}${r.archivedAt ? `<span class="tag muted">ARCHIVED</span>` : ""}`);
-  setHTML(part("works"), workHtml(r));
+  // A thread names the question or update it is on; that item opens in the reader, answered or not.
+  setHTML(part("works"), r.thread ? `<button class="tag key" type="button" data-read="${esc(r.thread.kind)}:${r.thread.ref}">${r.thread.kind === "question" ? "QUESTION" : "UPDATE"} #${r.thread.ref}</button>` : workHtml(r));
   setHTML(part("rv-title"), esc(r.title));
   // The owner at the head of the table, then the owning lane and its members (a click selects one).
   setHTML(part("rvseats"), `<span class="k">AT THE TABLE</span><span class="rlane you" title="You, at the head of the table"><i></i><b>${esc(CONFIG.owner.trim() || "You")}</b><span class="role">HEAD</span></span>${[r.owner, ...r.members].map((n) => laneChip(n)).join("")}`);

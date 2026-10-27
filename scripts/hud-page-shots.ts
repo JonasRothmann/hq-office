@@ -18,13 +18,14 @@ const NAMES = ["atlas", "birch", "cedar", "dune", "ember", "fjord", "grove", "ha
 // What each lane is doing: w = working in herdr, i = idle, plus the lane's phase.
 const PLAN: [string, string][] = [["w", "running"], ["i", "running"], ["w", "running"], ["i", "waiting"], ["i", "done"], ["w", "running"], ["i", "parked"], ["w", "running"], ["i", "done"], ["i", "running"], ["w", "running"], ["i", "waiting"]];
 const MODELS = ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"];
-type View = "question" | "room" | "stack";
+type View = "question" | "room" | "stack" | "attach";
 // [file name, lane counts it is taken with, theme, view, phone]
 const SHOTS: [string, number[], string, View, boolean][] = [
   ["hud-light-{n}-question", [4, 12], "light", "question", false],
   ["hud-dark-{n}-question", [4, 12], "dark", "question", false],
   ["hud-light-{n}-room", [4, 12], "light", "room", false],
   ["hud-dark-{n}-room", [4, 12], "dark", "room", false],
+  ["hud-light-{n}-attach", [4], "light", "attach", false],
   ["hud-phone-stack", [12], "light", "stack", true],
   ["hud-phone-reader", [12], "light", "question", true],
 ];
@@ -147,7 +148,10 @@ async function shoot(n: number, only?: string) {
     await post("/api/asks", { lane: names[1], kind: "decision", title: "Ship the migration tonight?", options: ["Yes", "No"], recommended: "Yes" });
     await post("/api/asks", { lane: names[3], kind: "decision", title: "Rename the staging bucket?", options: ["Yes", "No"] });
     await post("/api/asks", { lane: names[0], kind: "decision", title: "Run the nightly reports together or in turn?", options: ["Together", "In turn"], body: MEDIUM_BODY });
-    await post("/api/asks", { lane: names[2], kind: "decision", tier: "blocking", priority: "high", title: "Which plan for the billing migration?", options: ["Plan A: dual write", "Plan B: backfill", "Wait a week"], recommended: "Plan A: dual write", body: LONG_BODY });
+    const long = await post("/api/asks", { lane: names[2], kind: "decision", tier: "blocking", priority: "high", title: "Which plan for the billing migration?", options: ["Plan A: dual write", "Plan B: backfill", "Wait a week"], recommended: "Plan A: dual write", body: LONG_BODY });
+    // a thread on the long question: the owner replies to its lane, the lane answers
+    await post(`/api/threads/question/${long.id}`, { text: "Does Plan A need the flag per customer from the first deploy, or can it start with a pilot group?", to: names[2] });
+    await post(`/api/rooms/thread-q${long.id}/say`, { text: "From the first deploy: the flag is what lets one bad row be switched off alone. A pilot group would work too, but it adds a week.", as: names[2] });
     await post("/api/updates", { lane: names[1], title: "PR is up for the export", body: "Review when you can; the tests pass on staging." });
     await post("/api/updates", { lane: names[3], title: "Staging copy refreshed", body: "The copy is from this morning, 06:00." });
     await post("/api/rooms", { slug: "billing", title: "Billing export", owner: names[1], members: [names[2], names[3]] });
@@ -179,7 +183,7 @@ async function shoot(n: number, only?: string) {
       await until(`document.fonts.status === "loaded"`, 5000).catch(() => {});
       await until(`(() => { const o = __world.inspect().outside; return o && !o.fading; })()`);
       await until(`window.__world.inspect().frames > 8`);
-      if (view === "question") {
+      if (view === "question" || view === "attach") {
         const where = JSON.parse(await evaluate(`(() => { const b = document.querySelector("#hud .ask.blocking"); if (!b) return "null"; b.scrollIntoView({ block: "center" }); const r = b.getBoundingClientRect(); return JSON.stringify({ x: r.x + Math.min(r.width / 2, 120), y: r.y + 14 }); })()`));
         if (!where) throw new Error(`no #hud .ask.blocking card; page errors: ${errors.join(" | ")}`);
         await Bun.sleep(300);
@@ -194,6 +198,20 @@ async function shoot(n: number, only?: string) {
         await until(`!document.querySelector("#reader").hidden`, 10_000);
         // park the pointer away from any card so no hover state shows
         if (!phone) await s("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1430, y: 890 });
+      }
+      if (view === "attach") {
+        const click = (sel: string) => evaluate(`document.querySelector(${JSON.stringify(sel)}).click()`);
+        const plus = "#reader .rview:not([hidden]) .aplus";
+        await until(`!!document.querySelector(${JSON.stringify(plus)})?.offsetParent`, 10_000);
+        await click(plus);
+        await until(`!!document.querySelector(".amenu:popover-open")`, 5000);
+        await click(".amenu:popover-open [data-attach-link]");
+        await evaluate(`(() => { const i = document.querySelector(".amenu:popover-open [data-link-url]"); i.value = "https://claude.ai/artifact/export-bench"; i.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+        await click(".amenu:popover-open [data-link-add]");
+        await until(`!document.querySelector(".amenu:popover-open")`, 5000);
+        await until(`!!document.querySelector("#reader .chip.acard")`, 5000);
+        await click(plus);
+        await until(`!!document.querySelector(".amenu:popover-open")`, 5000);
       }
       if (view === "room") await until(`!document.querySelector("#reader").hidden`, 10_000);
       // the world settles
