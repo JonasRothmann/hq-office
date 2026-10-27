@@ -27,19 +27,39 @@ string) feeds a mulberry32 generator and a small value-noise fbm, so the same in
   under each tree into the vertex colours. Trees are a jittered grid that thickens away from the clearing, in six
   kinds (conifer, birch, maple, red maple, shrub). Rocks lie by the water and on hilltops, flowers in the meadow
   noise, reeds on the banks, and tufts in drifts.
-- **City.** Road centre lines ring the lot's block, so the lot is exactly one block's interior. Blocks of 17–31 m are
-  added outward. Every road has two 3 m lanes, 3 m pavements with kerbs, centre dashes, stop lines and a zebra on
-  every arm of every junction, in line with the pavements. Blocks are built round their edge: a row facing each
-  street and a yard in the middle. Some blocks are parks. A building is a house (hipped or gabled), a shop (awning,
-  sign, shop window), flats (balconies) or an office (ribbon windows, roof tanks), in timber, plaster or concrete.
-  Lamps and street trees stand on the kerb side.
+- **City (Copenhagen-ish, `city.js`; the cues and their sources are in `copenhagen.md`).** Road centre lines ring
+  the lot's block, so the lot is exactly one block's interior. Blocks of 18–30 m are added outward. Every street is a
+  6 m carriageway, a 1.8 m bike track a kerb above it on each side, and a 2.6 m pavement a kerb above that. On every
+  arm of every junction the track carries on as a blue band and the zebra lies in line with the pavement; car stop
+  lines stand behind both. Some streets are setts, the rest asphalt with centre dashes. A built block is a perimeter
+  block: a continuous row of painted houses (3 to 6 storeys where the sight rule lets them rise, neighbours never the
+  same colour, about a third red brick) along every street, round a courtyard of trees. Roofs are slate or tile
+  gables along the street, mansards, now and then flat; some carry dormers, chimneys, a wall dormer with its own
+  gable, or a stepped gable at a corner. A third of the ground floors are shops, many under awnings. One block by
+  the lot is often a square (setts, a fountain or a statue, trees in rows, benches, café tables), a few further out
+  are parks, and one building out where it may rise has a copper mansard and a tower with a copper spire.
+- **The canal.** The first block out on one side (chosen by the seed) is the canal block, one long block with no
+  cross streets: a narrow quay, 11 m of water, a wide quay with café tables under parasols, a row of narrow canal
+  houses with their gables (often stepped) to the water, and a strip of yard. The quays are an embankment 0.47 m
+  above the pavement; the water stays above the office's ground plane. Footbridges carry the two streets either side
+  of the lot over the water. Up to 8 boats (a two-masted wooden ship, small sailboats, open motor boats) are moored
+  along the quays and bob. Bollards line the quay edges, with a lamp post every third.
+- **Lamps** hang from wires across the street, house to house, or from a slim mast at the kerb where one side has
+  no house. The canal's street, with no houses on either side, is lit from the posts on the quays.
 - **Movers.** Each car drives a loop round a rectangle of blocks in the right-hand lane, turning at the junctions
-  (a clockwise loop is on the inside). Each person walks the middle of the pavement round one or two blocks and
-  crosses on the zebras. At run time (`movers.js`), cars slow for corners, follow at a distance, give way at a
-  junction (the lower number goes first when two wait on each other; nothing waits longer than 5 s) and stop for
-  anyone on a zebra.
+  (a clockwise loop is on the inside). One or two yellow buses run a wider loop. No loop crosses the canal. Cyclists
+  (more of them than cars, some on box-front cargo bikes) ride the bike tracks round rectangles of blocks: a
+  clockwise loop rides the inside and turns right on the track; an anticlockwise loop rides the outside and turns left
+  in two steps across the blue bands. Each person walks the middle of the pavement round one or two blocks and
+  crosses on the zebras, or along the far quay, or over the two footbridges. Bikes lean in rows against the houses. At
+  run time (`movers.js`), vehicles slow for corners, follow at a distance by their length, give way at a junction
+  (the lower number goes first when two wait on each other; nothing waits longer than 5 s) and stop for anyone on a
+  zebra or a blue band in front of them. Walkers and riders follow the ground's height: road, track, pavement, quay
+  and the arch of a bridge.
 
-`build.js` turns a layout into meshes. The terrain or the streets is one vertex-coloured mesh. Every repeated
+`build.js` turns a layout into meshes (the town through `city-build.js`). The terrain or the streets is one
+vertex-coloured mesh; the town's streets, quays, bridges and street things share it, and its "ground" material draws
+setts and granite slabs from world position, fading the joints out where they would be smaller than a pixel. Every repeated
 thing is an InstancedMesh. Water is a ribbon with a drifting sheen. Night uses `palette.js`'s moonlit set: unlit
 glowing windows (about 60 % lit), lamp heads and pools of light, and car lights. `outside.js` mounts it, owns the
 scene background while mounted (the fade colour must be the colour behind it), and cross-fades (380 ms down, rebuild,
