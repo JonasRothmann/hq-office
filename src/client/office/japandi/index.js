@@ -30,6 +30,7 @@ import tatami from "./tatami.js";
 import shoji from "./shoji.js";
 import teaCorner from "./tea-corner.js";
 import workbench from "./workbench.js";
+import clock from "./clock.js";
 
 export default definePack({
   id: "japandi",
@@ -62,5 +63,6 @@ export default definePack({
     shoji,
     teaCorner,
     workbench,
+    clock,
   ],
 });

@@ -23,11 +23,18 @@ const DAY = {
   "washi-glow": "#fbf3e2", "bulb-glow": "#fff4dc", "screen-glow": "#c9dde0", "screen-code": "#2a3a3a",
   // the print on the HQ workbench, the ink on the scroll
   print: "#e8e2d4",
+  // a corkboard, a painted radiator, brass fittings, records and a bike
+  cork: "#b98f62", "cork-dark": "#9a744d", radiator: "#ebe6dc", "radiator-shade": "#d6d0c4", brass: "#b8955a",
+  vinyl: "#1d1c1e", tyre: "#222224", bike: "#7d8a76",
+  // a dog's coat: a warm tan, its darker ears and its cream muzzle
+  coat: "#c58a54", "coat-dark": "#8e5e36", "coat-light": "#ead9bc",
+  // the lit strokes of the sign in HQ
+  "sign-glow": "#ffe7c2",
 };
 
 const NIGHT = {
   ...DAY,
-  "washi-glow": "#ffe2b0", "bulb-glow": "#ffd9a0", "screen-glow": "#a9cbd2",
+  "washi-glow": "#ffe2b0", "bulb-glow": "#ffd9a0", "screen-glow": "#a9cbd2", "sign-glow": "#ffc47a",
 };
 
 export const PALETTE = { light: DAY, dark: NIGHT };
