@@ -35,9 +35,10 @@ string) feeds a mulberry32 generator and a small value-noise fbm, so the same in
   block: a continuous row of painted houses (3 to 6 storeys where the sight rule lets them rise, neighbours never the
   same colour, about a third red brick) along every street, round a courtyard of trees. Roofs are slate or tile
   gables along the street, mansards, now and then flat; some carry dormers, chimneys, a wall dormer with its own
-  gable, or a stepped gable at a corner. A third of the ground floors are shops, many under awnings. One block by
-  the lot is often a square (setts, a fountain or a statue, trees in rows, benches, café tables), a few further out
-  are parks, and one building out where it may rise has a copper mansard and a tower with a copper spire.
+  gable, or at a corner a stepped gable or a turret under a copper cap. A third of the ground floors are shops, many
+  under awnings. One block by the lot is often a square (setts, a fountain or a statue, trees in rows, benches, café
+  tables), a few further out are parks, and one building out where it may rise has a copper mansard and a tower with
+  a copper spire.
 - **The canal.** The first block out on one side (chosen by the seed) is the canal block, one long block with no
   cross streets: a narrow quay, 11 m of water, a wide quay with café tables under parasols, a row of narrow canal
   houses with their gables (often stepped) to the water, and a strip of yard. The quays are an embankment 0.47 m
@@ -75,10 +76,12 @@ gets 10 m of headroom, so offices added one at a time regenerate the land every 
 | --- | --- | --- |
 | Nature, 24 × 14 m building | 12 | 99k |
 | Nature, 60 × 40 m campus | 12 | 108k |
-| City, day / night | 22 / 24 | 63k to 74k |
+| City, 24 × 14 m building, day / night | 28 / 30 | 127k to 135k |
+| City, 60 × 40 m campus, day | 27 | 147k |
 
-Generation takes 25–90 ms for nature (river and path distances are bucketed) and under 5 ms for the city. A frame's
-`update` (40 cars, 60 people) takes about 0.1 ms. Nothing casts a real-time shadow. An InstancedMesh is culled as a whole, so these counts hold at every zoom.
+Generation takes 25–90 ms for nature (river and path distances are bucketed) and under 10 ms for the city. Nothing
+casts a real-time shadow. An InstancedMesh is culled as a whole, so these counts hold at every zoom. Parked bikes are the
+town's biggest triangle cost, so racks stand only in short rows near the lot.
 
 ## Wiring it into the world (for the lead, at merge time)
 

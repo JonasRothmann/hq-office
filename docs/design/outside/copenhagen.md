@@ -53,9 +53,9 @@ At Sims scale (a person is 1.35 m, a storey 2.95 m), round the office's lot:
 | 2, 3 | Every street front is a continuous row of houses 3 to 6 storeys tall (the sight rule keeps the ones across from the lot at 3), with a courtyard of trees inside the block. A few blocks are squares. |
 | 4, 5 | A straight canal runs past one side of the lot, one street away. Across it, a row of narrow houses with their gables to the water, cafés with awnings on the quay, and moored boats (a two-masted wooden ship, small sailboats, open motor boats) bobbing. A footbridge crosses it. |
 | 6 | Many roofs turn a gable to the street; the canal houses and a few corner houses have stepped gables. Roofs are dark slate or red tile. |
-| 7 | A civic building with a copper-green roof and a slim copper spire, out where it cannot hide the office. |
+| 7 | A civic building with a copper-green mansard and a tower with a slim copper spire, out where it cannot hide the office; here and there a corner house with a turret under a pointed copper cap. |
 | 8 | Every street: pavement 2.6 m, bike track 1.8 m (on a level between road and pavement, a kerb each side), a 6 m carriageway; a blue band carries each track across each junction; car stop lines stand back. |
 | 9 | More cyclists than cars (up to 60 cyclists, at most 30 cars and buses), some on cargo bikes; bikes parked in rows along the pavements; a yellow bus on a route. |
-| 10 | Lamps hang on wires across the street, house to house (a slim mast where there is no house); setts on the side streets and squares, granite slabs on the pavements. At night the windows and café fronts are warm, the hanging lamps throw pools on the road, and the canal carries their light. |
+| 10 | Lamps hang on wires across the street, house to house (a slim mast at the kerb where one side has no house; the canal's street is lit from lamp posts on the quays); setts on some streets, the squares and the quays, granite slabs on the pavements. At night the windows and café fronts are warm, the hanging lamps throw pools on the road, and the canal carries the light of the quay. |
 
 The calm saturation rule stays: the surroundings frame the office and never compete with it.
