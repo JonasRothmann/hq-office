@@ -842,11 +842,37 @@ the chair's front tile is the desk. She turns to face north, sits down (hips 0.6
 **Night** (`night.jpg`, 21:30, dark theme): blue moonlight, the lamps' shades glow and light the floor round them,
 and Ada types at the desk. `day.jpg` is the same view at 14:00. Draw calls: 27 for the whole lot, 2k triangles.
 
-**Tests**: `bun test packages/world test/client/modules.test.ts test/client/world-package.test.ts` gives 157 pass,
-0 fail. The package's 94 tests cover validation, rooms, nav, the camera, the lint, packs, the boundary and the API.
+**Sizing, after phase 1.5** (`bun packages/world/tools/proof.ts --only sizing`): an 800×500 page, the canvas either
+full size or a 640.4×400.6 CSS box at (10.3, 7.7). Two screenshots (what the screen shows, after the browser
+composites the canvas) across a pan of (7.37, 3.11) CSS px, the second shifted back by the whole-pixel shift:
 
-**What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), DPR 2, instancing, per-room
-light, and the HQ office itself.
+| Canvas | DPR | Backing store | Shift (device px) | Changed pixels | Mean difference (/255) |
+| --- | --- | --- | --- | --- | --- |
+| full | 1 | 800×500 | 7, 3 | 0 of 366,876 | 0.007 |
+| full | 1.5 | 1200×750 | 11, 5 | 24 of 834,856 (0.003 %) | 0.017 |
+| full | 2 | 1600×1000 | 15, 6 | 287 of 1,492,564 (0.019 %) | 0.007 |
+| fractional | 1 | 641×400 | 7, 3 | 1 of 229,262 | 0.004 |
+| fractional | 1.5 | 961×601 | 11, 5 | 1 of 524,116 | 0.085 |
+| fractional | 2 | 1281×801 | 15, 6 | 0 of 938,404 | 0.072 |
+| fractional, old sizing (`clientWidth × dpr`, floored) | 1.5 | 960×601 | 11, 5 | 200 (0.038 %) | 0.112 |
+
+At DPR 1 the browser's `devicePixelContentBoxSize` matched and was used. Under Chrome's DPR emulation it reports
+the unscaled box (800×500 at DPR 1.5), so the engine trusts it only when it is the CSS box times the DPR, within a
+pixel, and otherwise rounds. The first run, before that check, drew at DPR 1 and let the browser scale up: 11.7 %
+and 21.8 % of the screen changed per pan at DPR 1.5 and 2. A real HiDPI screen, where the reported box is right,
+is not in this proof.
+
+**Idle, after phase 1.5** (the real clock, `--only idle`): still for 3 s, 180 frames, 0 renders, 0 shadow redraws.
+A walk to chair-2, 75 renders and 75 shadow redraws (the machine was loaded, so 47 s and 76 frames). Seated again
+for 3 s, 0 renders, 0 shadow redraws. Headless (`test/view.test.ts`, 60 steps a second): still for 3 s, 0 renders;
+an 8 s walk, about 330 renders, each with a shadow redraw; a pan, 1 render and no shadow redraw; a turn, 23 to 25
+renders and 2 shadow redraws (one per cut change); an edit or a theme change, 1 render and 1 shadow redraw.
+
+**Tests**: `bun test packages/world docs/engine/compare test/client/modules.test.ts test/client/world-package.test.ts`
+gives 225 pass, 0 fail (phase 1: 157). The package has 162 tests (phase 1: 94).
+
+**What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), a real HiDPI screen,
+instancing, per-room light, and the HQ office itself.
 
 ## 12. Migration order
 
