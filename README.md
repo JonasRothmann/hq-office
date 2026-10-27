@@ -1,6 +1,6 @@
 # HQ Office
 
-HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, with a light Nordic-Japanese look: every lane (one agent working one task) is a worker at a desk in its team's room, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
+HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, in a calm Japandi style (pale oak, plaster, paper lanterns, tatami): every lane (one agent working one task) is a worker at a desk in its team's room, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
 
 ## Requirements
 
@@ -129,7 +129,7 @@ Every lane has its own desk, and a team shares a room: a top-level lane and ever
 
 Workers show their status by pose: seated and typing when working, standing beside the desk with a raised hand and a red badge when waiting on you, arms folded with an amber badge when HQ is up, leaning back with a blue badge when waiting on CI, walking to the break area with a mug when done, asleep at the desk when stale. A lane with an empty chair is parked or gone. Running subagents are small balls hopping round the desk, coloured by model family (Opus violet, Sonnet teal, Haiku amber).
 
-Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit rooms glow.
+Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit rooms glow under their pendants and lanterns. Around the office's own garden lies a landscape grown from a seed: a valley with a river (nature) or a town with streets and traffic (city); OUTSIDE in SETTINGS picks which, or turns it off.
 
 ## The desk HUD
 
@@ -189,7 +189,7 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 ## Settings
 
-SETTINGS in the top bar has two choices. PERFORMANCE sets how often the office draws: SMOOTH (30 frames a second), BALANCED (15) or POWER SAVER (only when something changes or moves). LEVEL NAMES names the levels of the lane tree. The THEME button in the status pill picks system, light or dark, and the SOUND button turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
+SETTINGS in the top bar has three choices. PERFORMANCE sets how often the office draws: SMOOTH (30 frames a second), BALANCED (15) or POWER SAVER (only when something changes or moves; the cars and the river outside then stand still). OUTSIDE picks what surrounds the office: NATURE, CITY or OFF. The land grows from your name (`HUD_OWNER`), so it stays the same across reloads; REROLL grows another, and RESET TO DEFAULTS goes back to the one from your name. LEVEL NAMES names the levels of the lane tree. The THEME button in the status pill picks system, light or dark, and the SOUND button turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
 ## Images
 
