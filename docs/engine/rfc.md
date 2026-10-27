@@ -951,8 +951,8 @@ per-room light, and the HQ office itself.
 ## 12. Migration order
 
 The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
-above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Steps 2, 3 and 5 are done;
-step 4 has not started.
+above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Steps 2, 3, 5 and 6 are
+done; step 4 has not started.
 
 1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
    map redraws only on change (3.9). The canvas is sized to its device pixels (3.9). The boundary test closes the
@@ -1058,6 +1058,38 @@ step 4 has not started.
    cut wall hides the way a hovered one does: its instance shrinks to nothing, and hover never shows it.
 6. **The outside generator, last.** The city around the office becomes an app-side generator that adds ground
    objects around the lot, or a separate pack when a second world wants it.
+
+   **Done.** How the engine shows land had three candidates. (a) Ground objects in the doc, as this step first said:
+   the town is about 18,000 pieces and 350 movers, so every doc would carry them, `validateWorld`, nav and the
+   coplanar lint would walk them, and an office that grows a room would diff the whole town. (b) A section of the
+   world format with its own schema: the same size problem, and a format change for content the sim never touches.
+   (c) **Scenery, chosen**: data the engine draws round the lot and never walks, picks or lints with it, passed as
+   `createWorld(canvas, world, { scenery })`, a world's `scenery` field or `view.setScenery(s)`. It is pieces (objects
+   of a new kind `"scenery"`: no footprint, parts up to 40 m, placed freely, each a type, `at`, `ry`, scale, tint and
+   params), height fields, ribbons, movers on closed loops, a fade box and a `shade` box for the sun's shadows. The
+   engine knows nothing of rivers or canals: the app's pure generator decides what goes where, and the `land` pack
+   (`src/client/office/outside/land/`, app content like the Japandi pack) says what each piece looks like. Pieces of
+   one type and params are one instanced mesh per material, and so are the movers of a type; ribbons of a finish are
+   one mesh. `checkScenery` names each mistake with its path and a fix.
+   - The generator moved, unchanged, to `src/client/office/outside/` (`gen.js`, `city.js`); the old renderer imports
+     it from there and `test/client/outside.test.ts` still passes. `scenery.js` turns its layout into scenery in the
+     lot's frame (the generator's ground was y = -0.12, the lot's is 0), centred on the front door as before.
+     `garden.js` lays the old garden with land pieces. The lab: `&outside=nature|city|off&seed=S` on any lab office,
+     and `office-12-nature.world.js`, `office-12-city.world.js`. While the land shows, the doc's palette gives the
+     lot's ground the lawn's colour (`LAWN`), so lot, garden and meadow read as one lawn.
+   - Frame policy: movers are ambient motion, like a clip looping in place. They draw at `idleFps` and never redraw
+     the shadow map (they cast none). The scenery's clock runs only while `idleFps` is above 0, so in a power saver
+     (`idleFps` 0) the town holds still instead of jumping ahead when something else draws; `view.setIdleFps(fps)`
+     changes it live (the old page: smooth 30, balanced 15, saver 0). Movers follow their loops at a steady speed:
+     cars no longer wait at junctions or zebras, and walkers' legs no longer swing.
+   - The lamp leak: lamps are spot lights without shadows, so they lit the ground outside through the outer walls.
+     Everything outdoors (the lot's ground, the land, all scenery) now leaves spot lights out of its lighting. Street
+     lamps light the town with the new `light` finish instead: a soft additive pool, black (nothing) by day and warm by
+     night through its token.
+   - Cost, `proof.ts --only perf` at 12 lanes (limits 220 calls and 450k triangles with a shadow redraw): the town
+     181 calls and 362k triangles (without a shadow redraw 112 and 302k), the valley 159 and 318k (90 and 258k);
+     the office alone is 109 and 112k. A town has about 7,400 windows, so a pane and its frame draw only their
+     fronts. Tested in `test/client/office-outside.test.ts` and the package's `test/scenery.test.ts`.
 
 The page switches for good only when step 4's world is the default, and that change deletes
 `src/client/world/{camera,scene,rooms,kit,walk}.js` and `plan.js`'s `wallCuts` and `cameraSide`. Golden numbers in
