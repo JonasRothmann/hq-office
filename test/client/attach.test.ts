@@ -1,6 +1,6 @@
 // Images on the send boxes (each in the reader: Tell HQ, a question, an update), in Chrome against a temporary
 // server: every send box is one composer (the tray, the text
-// field, then the photo button and SEND) and stays compact on a desktop; a picked image is re-encoded before upload (a
+// field, then the + menu and SEND) and stays compact on a desktop; a picked image is re-encoded before upload (a
 // big PNG comes out at most 2048 px, as JPEG where the browser has no WebP encoder, an image the server does not take
 // but the browser can read is converted); thumbnails show in the tray, are removed by their corner badge, open in a
 // preview, and show a failed upload with a red ring and a retry; a file that is refused says why in one line; the
@@ -8,7 +8,6 @@
 // keeps its images through a re-render and a reload; on a touch screen the targets are big enough. Needs Chrome;
 // skipped without it.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { findChrome, newSession, seed, startChrome, startServer } from "../../scripts/room-hash.ts";
 
@@ -67,10 +66,10 @@ afterAll(async () => {
 });
 
 describe.skipIf(!chromeFound)("attach", () => {
-  // Each composer, in order: its children, the photo button's input, and its height.
-  const COMPOSERS = `[...document.querySelectorAll(".reply")].filter((r) => r.offsetParent).map((r) => { const i = r.querySelector(".acts > label.attach:first-child input[type=file]");
-    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest("label").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
-  test("every send box is one composer: the tray, the field, then the photo button and SEND; compact on a desktop", async () => {
+  // Each composer, in order: its children, the + menu's image input, and its height.
+  const COMPOSERS = `[...document.querySelectorAll(".reply")].filter((r) => r.offsetParent).map((r) => { const i = r.querySelector(".acts > .attach:first-child input[data-attach-image]");
+    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest(".attach").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
+  test("every send box is one composer: the tray, the field, then the + menu and SEND; compact on a desktop", async () => {
     const boxes = [];
     for (const [key, item] of [[String(askId), `question:${askId}`], ["upd:1", "update:1"], ["note", "tell"]]) {
       await page.evaluate(`open_(${JSON.stringify(item)})`);
@@ -153,9 +152,12 @@ describe.skipIf(!chromeFound)("attach", () => {
 
   test("picked images show in the composer's tray, each with a remove badge on its corner, and the text box stays clean", async () => {
     await page.evaluate(`document.getElementById("noteText").value = "Look at these"`);
+    // Uploads are held until the spinners are checked: a small image can otherwise finish first.
+    await page.evaluate(`(() => { const real = window.__realFetch = window.fetch; let go; window.__release = new Promise((r) => (go = r)); window.__go = go; window.fetch = (u, o) => (String(u).startsWith("/api/uploads") ? window.__release.then(() => real(u, o)) : real(u, o)); })()`);
     await page.evaluate(`(async () => __pick('[data-attach="note"]', [await __img(3000, 2000, { name: "one.png" }), await __img(400, 300, { name: "two.png" }), await __img(300, 300, { name: "three.png" })]))()`);
     // While uploading, each thumbnail is dimmed under a spinner.
     expect(await page.evaluate(`[...document.querySelectorAll('[data-chips="note"] .chip')].every((c) => c.matches(".prep, .up") && !!c.querySelector(".cover .spin"))`)).toBe(true);
+    await page.evaluate(`window.__go(); window.fetch = window.__realFetch`);
     await until(`document.querySelectorAll('[data-chips="note"] .chip.done').length === 3`);
     expect(await page.evaluate(`document.getElementById("noteText").value`)).toBe("Look at these");
     expect(await page.evaluate(`document.querySelectorAll('#compose .reply > [data-chips="note"] .tray > .chip > button.cimg[data-chip-open] > img').length`)).toBe(3);
@@ -198,13 +200,14 @@ describe.skipIf(!chromeFound)("attach", () => {
     expect(await chips("note")).toEqual(["done", "done"]);
   });
 
-  test("on send the tokens are appended, the files are on disk, and the box and chips clear", async () => {
+  test("on send the tokens are appended as URLs on this server, never paths, and the box and chips clear", async () => {
     await page.evaluate(`document.getElementById("compose").requestSubmit()`);
     await until(`document.getElementById("lastNote").textContent.includes("Look at these")`);
     const text: string = (await state()).notes[0].text;
-    const paths = [...text.matchAll(/\[image: ([^\]]+)\]/g)].map((m) => m[1]);
+    const urls = [...text.matchAll(/\[image: ([^\]]+)\]/g)].map((m) => m[1]);
     expect(text).toMatch(/^Look at these \[image: \S+one\.(jpg|webp)\] \[image: \S+two\.png\]$/);
-    expect(paths.every((p) => existsSync(p))).toBe(true);
+    expect(urls.every((u) => u.startsWith(`${server.base}/uploads/`))).toBe(true);
+    for (const u of urls) expect((await fetch(u)).status).toBe(200);
     expect(await page.evaluate(`document.getElementById("noteText").value`)).toBe("");
     expect(await chips("note")).toEqual([]);
   });
@@ -277,18 +280,18 @@ describe.skipIf(!chromeFound)("attach", () => {
     expect(await page.evaluate(`document.querySelector('[data-chips="note"]').innerHTML`)).toBe("");
   });
 
-  test("on a touch screen: a 44x44 photo button, 64px thumbnails, 32px badges and 16px fields", async () => {
+  test("on a touch screen: a 44x44 + button, 64px thumbnails, 32px badges and 16px fields", async () => {
     await page.s("Emulation.setDeviceMetricsOverride", { width: 390, height: 664, deviceScaleFactor: 3, mobile: true });
     await page.s("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
     await page.evaluate(`location.reload()`);
     await until(`matchMedia("(pointer: coarse)").matches && !!document.querySelector("#hud .ask")`);
     await page.evaluate(OPEN);
-    // the photo button on a question's box and on Tell HQ's, each in the reader's sheet
-    const SIZES = `[...document.querySelectorAll("label.attach")].filter((l) => l.offsetParent).map((l) => { const r = l.getBoundingClientRect(); return [r.width, r.height, parseFloat(getComputedStyle(l.querySelector("input")).fontSize), parseFloat(getComputedStyle(l.closest(".reply").querySelector("textarea")).fontSize)]; })`;
+    // the + button on a question's box and on Tell HQ's, each in the reader's sheet
+    const SIZES = `[...document.querySelectorAll("#reader .aplus")].filter((l) => l.offsetParent).map((l) => { const r = l.getBoundingClientRect(); return [r.width, r.height, parseFloat(getComputedStyle(l.closest(".attach").querySelector("input")).fontSize), parseFloat(getComputedStyle(l.closest(".reply").querySelector("textarea")).fontSize)]; })`;
     const sizes = [];
     for (const item of [`question:${await page.evaluate(`document.querySelector("#hud .ask").dataset.ask`)}`, "tell"]) {
       await page.evaluate(`open_(${JSON.stringify(item)})`);
-      await until(`[...document.querySelectorAll("#reader label.attach")].some((l) => l.offsetParent)`);
+      await until(`[...document.querySelectorAll("#reader .aplus")].some((l) => l.offsetParent)`);
       sizes.push(...(await page.evaluate(SIZES)));
     }
     expect(sizes.length).toBe(2);
