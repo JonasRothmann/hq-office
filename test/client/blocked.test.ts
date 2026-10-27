@@ -73,8 +73,8 @@ test.skipIf(!chromeFound)("a blocked lane: BLOCKED in the top bar, a raised hand
   expect(card).toContain("BLOCKED ON A PROMPT");
   expect(card).toContain("ANSWER IT IN HERDR ON LOCAL, PANE w3:p2");
   expect(card).toContain("Remove the build folder · Do you want to proceed?\n1. Yes\n2. No, and tell Claude what to do differently (esc)");
-  // WORK: the blocked item first, the excerpt as its why.
-  await page.evaluate(`document.querySelector('[data-qtab="work"]').click()`);
+  // The work board (its pill): the blocked item first, the excerpt as its why.
+  await page.evaluate(`document.getElementById("pWork").click()`);
   await until(`!!document.querySelector("#work .wi")`);
   const first = await page.evaluate(`(() => { const a = document.querySelector("#work .wi"); return { cls: a.className, key: a.querySelector(".key").textContent, what: a.querySelector(".what").textContent }; })()`);
   expect(first).toEqual({ cls: "wi blocked", key: "ABC-7", what: "Remove the build folder · Do you want to proceed? / 1. Yes / 2. No, and tell Claude what to do differently (esc)" });

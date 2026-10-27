@@ -2,7 +2,7 @@
 // in team rooms of four, more rooms as the company grows from a studio to wings (spec F3), a team sharing a room and
 // opening a second past four, the WebGL canvas drawing it, the walls nearest the camera cut down to the kerb and
 // recomputed after a quarter turn (F4), a click on a worker opening its card and Esc closing it (F9), the office
-// resting while a conference room covers it, and no console errors. Needs Chrome.
+// resting while the reader covers it on a phone, and no console errors. Needs Chrome.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -135,9 +135,21 @@ test.skipIf(!chromeFound)("clicking a worker opens its card; Esc closes it", asy
   expect(errors).toEqual([]);
 }, 120_000);
 
-test.skipIf(!chromeFound)("the office rests while a conference room covers it", async () => {
+test.skipIf(!chromeFound)("beside a room in the reader the office keeps moving; on a phone the reader covers it and it rests", async () => {
   await server.post("/api/rooms", { slug: "ope-1", title: "A room", owner: name(0), members: [name(1)] });
+  // desktop (1440 wide): the room sits beside the office, and the office keeps moving
   // a fresh page at the room's address (through a blank page, so it loads again rather than only changing its hash)
+  await page.s("Page.navigate", { url: "about:blank" });
+  await page.s("Page.navigate", { url: `${server.base}/#room/ope-1` });
+  await until(`!document.getElementById("roomView")?.hidden && !!window.__world?.inspect`);
+  const moving = await page.evaluate(`__world.inspect().frames`);
+  await Bun.sleep(1500);
+  expect(await page.evaluate(`__world.inspect().frames`)).toBeGreaterThan(moving);
+  expect(await page.evaluate(`__world.inspect().paused`)).toBeFalsy();
+  await page.evaluate(`document.querySelector("[data-room-back]").click()`);
+  await until(`document.getElementById("reader").hidden`);
+  // phone (390 wide): the reader is a full-screen sheet over the page, and the office rests until it closes
+  await page.s("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await page.s("Page.navigate", { url: "about:blank" });
   await page.s("Page.navigate", { url: `${server.base}/#room/ope-1` });
   await until(`!document.getElementById("roomView")?.hidden && window.__world?.inspect?.().paused`);
@@ -146,5 +158,6 @@ test.skipIf(!chromeFound)("the office rests while a conference room covers it", 
   expect(await page.evaluate(`__world.inspect().frames`)).toBe(frames);
   await page.evaluate(`document.querySelector("[data-room-back]").click()`);
   await until(`!__world.inspect().paused && __world.inspect().frames > ${frames}`);
+  await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   expect(errors).toEqual([]);
 }, 120_000);
