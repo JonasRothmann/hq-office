@@ -99,3 +99,19 @@ test.skipIf(!chromeFound)("a message to a room clears only its own box, though t
 test.skipIf(!chromeFound)("no page errors", () => {
   expect(errors).toEqual([]);
 });
+
+// Review follow-up: a link card shows a picture only from this HUD's own origin; a protocol-relative URL is another host.
+test("a link card's image is fetched only from this HUD, never from //other.host or /\\other.host", async () => {
+  const g = globalThis as any;
+  const had = g.location;
+  g.location = new URL("http://127.0.0.1:4999/");
+  try {
+    const { linkCards } = await import("../../src/client/reader/links.js");
+    const html = (url: string) => linkCards([{ kind: "image", url, title: "x" }]);
+    expect(html("/uploads/a.png")).toContain("<img");
+    for (const url of ["//images.example.net/p.png", "/\\images.example.net/p.png", "https://images.example.net/p.png"]) expect(html(url)).not.toContain("<img");
+    expect(html("http://127.0.0.1:4999/uploads/a.png")).toContain("<img");
+  } finally {
+    g.location = had;
+  }
+});
