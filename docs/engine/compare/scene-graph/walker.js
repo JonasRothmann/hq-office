@@ -1,11 +1,22 @@
 // The rival design for the ECS comparison (docs/engine/rfc.md 2.12): characters as one plain state object each and
-// one step interpreter, the way phase 1's createWorld ran them, pulled out of the renderer so it runs headless.
-import { planAct } from "../../../../packages/world/src/nav/act.js";
-import { RIG, CLIPS } from "../../../../packages/world/src/anim/clips.js";
-import { WorldError } from "../../../../packages/world/src/model/problems.js";
-import { WALK_SPEED, TURN_RATE, facingAngle, wrap, ease, floorAt, turnToward, setClip } from "../../../../packages/world/src/sim/motion.js";
+// one step interpreter, the way phase 1's createWorld ran them, pulled out of the renderer so it runs headless. It
+// uses only the engine's public entry (the file "@hq/world/model" maps to: Bun outside the package has no import
+// map), so it carries its own copy of the motion helpers and its own reservations.
+import { planAct, RIG, CLIPS, WorldError, samplePose, blendPose, FLOOR_Y, tileKey } from "../../../../packages/world/src/model/index.js";
+
+// The motion helpers, as the engine's sim has them (src/sim/motion.js); compare.test.ts checks both end alike.
+const WALK_SPEED = 1.3, TURN_RATE = 9, FADE = 0.2;
+const QUARTER = { s: 0, e: 1, n: 2, w: 3 };
+const facingAngle = (side) => QUARTER[side] * (Math.PI / 2);
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const ease = (t) => t * t * (3 - 2 * t);
+const floorAt = (lot, x, z) => (lot.floor.has(tileKey(Math.floor(x), Math.floor(z))) ? FLOOR_Y : 0);
+const turnToward = (a, target, max) => { const d = wrap(target - a); return Math.abs(d) <= max ? target : a + Math.sign(d) * max; };
+const poseOf = (anim) => { const p = samplePose(CLIPS[anim.clip] ?? CLIPS.idle, anim.t); return anim.from && anim.fadeT < FADE ? blendPose(anim.from, p, ease(anim.fadeT / FADE)) : p; };
+const setClip = (anim, clip) => { if (anim.clip === clip) return; anim.from = poseOf(anim); anim.fadeT = 0; anim.clip = clip; anim.t = 0; };
 
 export function createWalkers(lot, nav, emit = () => {}) {
+  const held = new Map(); // "object:slot" → who
   const chars = new Map();
   for (const c of lot.characters) {
     chars.set(c.id, { id: c.id, x: c.tile[0] + 0.5, z: c.tile[1] + 0.5, ry: facingAngle(c.facing), hips: RIG.hip,
@@ -17,10 +28,10 @@ export function createWalkers(lot, nav, emit = () => {}) {
   function act(id, a) {
     const c = chars.get(id);
     if (!c) return Promise.reject(new WorldError([{ code: "act.who", severity: "error", path: "act", message: `no character '${id}'`, fix: `use one of: ${[...chars.keys()].join(", ")}` }]));
-    if (c.holding) { nav.release(c.holding.object, c.holding.slot, id); c.holding = null; }
-    const plan = planAct(lot, nav, { id, tile: tileOf(c) }, a);
+    if (c.holding) { held.delete(`${c.holding.object}:${c.holding.slot}`); c.holding = null; }
+    const plan = planAct(lot, nav, { id, tile: tileOf(c) }, a, { holder: (o, s) => held.get(`${o}:${s}`) ?? null });
     if (plan.problem) return Promise.reject(new WorldError([plan.problem], "act"));
-    if (plan.hold) { nav.reserve(plan.hold.object, plan.hold.slot, id); c.holding = plan.hold; }
+    if (plan.hold) { held.set(`${plan.hold.object}:${plan.hold.slot}`, id); c.holding = plan.hold; }
     const steps = [...plan.steps];
     if (c.hips < RIG.hip - 0.01) steps.unshift({ kind: "stand" });
     c.steps = steps; c.si = 0; c.stepState = null;
@@ -65,6 +76,10 @@ export function createWalkers(lot, nav, emit = () => {}) {
       } else if (s.kind === "wait") {
         setClip(c.anim, "idle");
         if (st.t < s.s) { busy = true; break; }
+      } else if (s.kind === "then") {
+        const plan = planAct(lot, nav, { id: c.id, tile: tileOf(c) }, s.act, { holder: (o, sl) => { const h = held.get(`${o}:${sl}`); return h === c.id ? null : h ?? null; } });
+        c.steps = plan.problem ? [] : plan.steps; c.si = 0; c.stepState = null;
+        continue;
       } else if (s.kind === "loop") {
         setClip(c.anim, s.clip);
         const done = waiting.get(c.id);

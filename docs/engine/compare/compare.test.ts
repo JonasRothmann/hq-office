@@ -2,7 +2,7 @@
 // state object and one step interpreter per character) do the same walk-and-sit and end in the same place.
 import { describe, expect, test } from "bun:test";
 import { buildLot, createNav, createSim } from "../../../packages/world/src/model/index.js";
-import tiny from "../../../packages/world/examples/tiny-house.world.js";
+import tiny from "./house.js";
 import { createWalkers } from "./scene-graph/walker.js";
 
 const STEP = 1 / 60;

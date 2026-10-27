@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildLot, lotPrims, cutaway, lintCoplanar, WALL_MODES } from "@hq/world/model";
 import { Kit } from "../src/catalog/kit.js";
-import tiny from "../examples/tiny-house.world.js";
+import tiny from "./fixtures/house.world.js";
 
 const T = 0.15;
 

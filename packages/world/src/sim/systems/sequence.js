@@ -1,14 +1,15 @@
 // The sequence system: a character with a queue and no step in progress starts the queue's next step, by adding it
 // as a component of its kind (walk, turn, enter, ...). Step systems remove their component when the step is done.
+// A step no system runs cancels that character's act (the act's promise rejects with the fix); others go on.
 export default {
   name: "sequence",
-  run(ecs) {
+  run(ecs, dt, { cancel }) {
     const kinds = ecs.stepKinds();
     for (const [id, queue] of ecs.query("queue")) {
       if (kinds.some((k) => ecs.has(id, k))) continue;
       const next = queue.steps.shift();
       if (!next) { ecs.remove(id, "queue"); continue; }
-      if (!kinds.includes(next.kind)) throw new Error(`no system runs step '${next.kind}'; register one with step: "${next.kind}"`);
+      if (!kinds.includes(next.kind)) { cancel(id, { code: "step.unknown", severity: "error", path: `queue (${id})`, message: `no system runs step '${next.kind}'`, fix: `register one with step: "${next.kind}"` }); continue; }
       ecs.add(id, next.kind, { ...next, t: 0 });
     }
   },

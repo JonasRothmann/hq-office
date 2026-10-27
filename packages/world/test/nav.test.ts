@@ -1,8 +1,8 @@
 // Nav: paths go through doors and never through walls, windows or blocking objects; every room of the tiny house is
-// reachable from every other; a slot is held by one character at a time; a sit act walks, turns, sits down and loops.
+// reachable from every other; a slot someone holds cannot be planned for; a sit act walks, turns, sits down and loops.
 import { describe, expect, test } from "bun:test";
 import { buildLot, createNav, planAct, tileKey } from "@hq/world/model";
-import tiny from "../examples/tiny-house.world.js";
+import tiny from "./fixtures/house.world.js";
 
 const { lot } = buildLot(tiny);
 
@@ -31,13 +31,12 @@ describe("nav", () => {
     for (const a of spaces) for (const b of spaces) expect({ a, b, ok: !!nav.path(a, [b]) }).toEqual({ a, b, ok: true });
   });
 
-  test("a slot is held by one character at a time", () => {
+  test("a slot someone else holds cannot be planned for; nav itself holds nothing", () => {
     const nav = createNav(lot);
-    expect(nav.reserve("chair-1", "seat", "ada")).toBe(true);
-    expect(nav.reserve("chair-1", "seat", "bo")).toBe(false);
-    expect(planAct(lot, nav, { id: "bo", tile: [9, 7] }, { do: "sit", target: "chair-1" }).problem?.code).toBe("act.taken");
-    nav.release("chair-1", "seat", "ada");
-    expect(nav.reserve("chair-1", "seat", "bo")).toBe(true);
+    expect(Object.keys(nav).sort()).toEqual(["canStep", "path", "walkable"]);
+    const holder = (o: string, s: string) => (o === "chair-1" && s === "seat" ? "ada" : null);
+    expect(planAct(lot, nav, { id: "bo", tile: [9, 7] }, { do: "sit", target: "chair-1" }, { holder }).problem?.code).toBe("act.taken");
+    expect(planAct(lot, nav, { id: "ada", tile: [9, 7] }, { do: "sit", target: "chair-1" }, { holder }).problem).toBeUndefined();
   });
 
   test("sitting on chair-1: walk to a free side tile, turn to face the desk, sit down, loop", () => {

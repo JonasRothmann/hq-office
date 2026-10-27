@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { defineWorld, validateWorld, buildLot, toJSON, fromJSON, rect, WorldError } from "@hq/world/model";
 import starter from "@hq/world/packs/starter";
-import tiny from "../examples/tiny-house.world.js";
+import tiny from "./fixtures/house.world.js";
 
 // A one-room house with a door, a desk and a chair; `edit` changes the spec before it is defined.
 function house(edit: (s: any) => void = () => {}) {
@@ -40,7 +40,29 @@ describe("validation", () => {
     expect(p.code).toBe("object.overlap");
     expect(p.message).toContain("(3,2)");
     expect(p.message).toContain("'desk'");
-    expect(p.fix).toMatch(/\(\d+,\d+\)/);
+    expect(p.fix).toMatch(/at: \[\d+,\d+\]/);
+  });
+
+  test("the place an overlap fix suggests fits the whole footprint, and taking it is valid", () => {
+    // a 2×1 desk dropped onto the chair: every suggestion must clear both of its tiles
+    const bad = (at: number[]) => house((s) => { s.acts = []; s.objects.push({ id: "d2", type: "starter/desk", at, facing: "s" }); });
+    const p = only(bad([2, 3]));
+    const spots = [...p.fix.matchAll(/at: \[(\d+),(\d+)\]/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    expect(spots.length).toBeGreaterThan(0);
+    for (const at of spots) expect({ at, problems: validateWorld(bad(at)).filter((x) => x.severity === "error") }).toEqual({ at, problems: [] });
+  });
+
+  test("world files may use every act the engine plans, visit included, and a misspelt one names the fix", () => {
+    expect(validateWorld(house((s) => { s.objects.push({ id: "chair2", type: "starter/chair", at: [5, 3], facing: "s" }); s.acts = [{ who: "bo", do: "visit", target: "desk", wait: 2, then: { do: "sit", target: "chair2" } }]; }))).toEqual([]);
+    const p = only(house((s) => { s.acts[0].do = "vist"; }));
+    expect(p.code).toBe("act.do");
+    expect(p.fix).toContain("visit");
+    expect(only(house((s) => { s.acts[0].clip = "sitt"; })).fix).toBe("did you mean sit?");
+  });
+
+  test("two acts in a world file cannot take one seat", () => {
+    const p = only(house((s) => { s.characters.push({ id: "cy", at: [8, 6] }); s.acts.push({ who: "cy", do: "sit", target: "chair" }); }));
+    expect([p.code, p.path]).toEqual(["act.taken", "acts[1]"]);
   });
 
   test("a door where there is no wall names nearby wall edges", () => {

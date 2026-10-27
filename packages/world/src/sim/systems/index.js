@@ -7,7 +7,8 @@ import turn from "./turn.js";
 import enter from "./enter.js";
 import loop from "./loop.js";
 import wait from "./wait.js";
+import then from "./then.js";
 import anim from "./anim.js";
 
-export const STEP_SYSTEMS = [sequence, stand, walk, turn, enter, loop, wait];
+export const STEP_SYSTEMS = [sequence, stand, walk, turn, enter, loop, wait, then];
 export const LAST_SYSTEMS = [anim];

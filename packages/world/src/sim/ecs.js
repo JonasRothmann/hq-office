@@ -1,6 +1,7 @@
 // A small entity-component-system: entities are string ids, components are plain JSON data stored per kind, and
-// systems run in a fixed order on every step. The world's moving parts live here (placed objects, characters, what
-// they are doing); the lot's grid, walls and rooms stay plain data beside it. Pure: no three.js.
+// systems run in a fixed order on every step. The world's moving parts live here (characters, what they are doing,
+// which slots they hold); the lot's grid, walls, rooms and placed objects stay plain data beside it. A system that
+// throws is logged once with its name and switched off; the others keep running. Pure: no three.js.
 
 /**
  * @typedef {object} System
@@ -12,12 +13,16 @@
 
 /** @typedef {ReturnType<typeof createEcs>} Ecs */
 
-/** @stability experimental */
-export function createEcs() {
+/**
+ * @param {{ onError?: (system: string, error: Error) => void }} [opts]   told once when a system throws (default: console.error)
+ * @stability experimental
+ */
+export function createEcs({ onError } = {}) {
   /** @type {Map<string, Map<string, any>>} */
   const kinds = new Map();
   /** @type {System[]} */
   const systems = [];
+  const off = new Set();
   const store = (kind) => { let m = kinds.get(kind); if (!m) kinds.set(kind, (m = new Map())); return m; };
 
   const ecs = {
@@ -42,7 +47,19 @@ export function createEcs() {
     },
     systems: () => systems.map((s) => s.name),
     stepKinds: () => systems.filter((s) => s.step).map((s) => s.step),
-    step(dt, ctx) { let busy = false; for (const s of systems) busy = s.run(ecs, dt, ctx) === true || busy; return busy; },
+    /** The systems switched off because they threw. */
+    disabled: () => [...off],
+    step(dt, ctx) {
+      let busy = false;
+      for (const s of systems) {
+        if (off.has(s.name)) continue;
+        try { busy = s.run(ecs, dt, ctx) === true || busy; } catch (e) {
+          off.add(s.name);
+          if (onError) onError(s.name, e); else console.error(`@hq/world: system '${s.name}' threw and is switched off: ${e?.message ?? e}`);
+        }
+      }
+      return busy;
+    },
     /** { kind: { id: data } }, every kind and id sorted; what a save or a test snapshot holds. */
     toJSON() {
       const out = {};

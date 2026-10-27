@@ -4,12 +4,13 @@
 export { WALL_H, KERB_H, WALL_T, FLOOR_Y, SIDES, rect, sideEdge, tileKey } from "./grid.js";
 export { problem, WorldError, formatProblems } from "./problems.js";
 export { defineWorld, toJSON, fromJSON, FORMAT } from "./world.js";
+export { diffWorld } from "./diff.js";
 export { detectRooms } from "./rooms.js";
-export { analyse, validateWorld, buildLot } from "./lot.js";
+export { analyse, validateWorld, buildLot } from "../lot/lot.js";
 export { defineObject, definePack, createCatalog, checkPack, buildPrims } from "../catalog/define.js";
 export { PALETTES } from "../catalog/palette.js";
 export { createNav } from "../nav/nav.js";
-export { planAct } from "../nav/act.js";
+export { planAct, ACTS } from "../nav/act.js";
 export { createEcs } from "../sim/ecs.js";
 export { createSim } from "../sim/index.js";
 export { cutaway, WALL_MODES } from "../arch/cutaway.js";

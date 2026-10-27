@@ -1,5 +1,5 @@
-// Navigation on the tile grid: which tiles are free, A* through doors (never through walls or windows), and slot
-// reservations so two characters never sit in one chair. Pure.
+// Navigation on the tile grid: which tiles are free, and A* through doors (never through walls or windows). Pure and
+// stateless: who holds which slot is the sim's `holding` component, not nav's.
 import { tileKey, edgeBetween } from "../model/grid.js";
 
 const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -9,9 +9,6 @@ const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, 
  * @property {(x: number, z: number) => boolean} walkable
  * @property {(ax: number, az: number, bx: number, bz: number) => boolean} canStep   one step, 4 or 8 neighbours
  * @property {(from: [number, number], goals: [number, number][]) => [number, number][]|null} path  tiles, start first
- * @property {(objectId: string, slot: string, who: string) => boolean} reserve
- * @property {(objectId: string, slot: string, who: string) => void} release
- * @property {(objectId: string, slot: string) => string|null} holder
  */
 
 /** @stability stable  @returns {Nav} */
@@ -67,18 +64,7 @@ export function createNav(lot) {
     return null;
   }
 
-  const held = new Map();
-  return {
-    walkable, canStep, path,
-    reserve(objectId, slot, who) {
-      const k = `${objectId}:${slot}`;
-      if (held.has(k) && held.get(k) !== who) return false;
-      held.set(k, who);
-      return true;
-    },
-    release(objectId, slot, who) { const k = `${objectId}:${slot}`; if (held.get(k) === who) held.delete(k); },
-    holder: (objectId, slot) => held.get(`${objectId}:${slot}`) ?? null,
-  };
+  return { walkable, canStep, path };
 }
 
 // Straight runs merged: only the tiles where the direction changes, plus both ends.

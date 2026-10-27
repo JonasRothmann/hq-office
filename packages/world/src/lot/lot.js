@@ -1,9 +1,10 @@
 // The lot: a world doc checked against its catalog and worked out (tiles, wall edges with their openings, rooms,
-// placed objects with their tiles and slots in world space). analyse() returns the lot and every problem; buildLot
-// throws when there is an error; validateWorld returns the problems. Pure.
-import { tileKey, sideEdge, parseEdge, edgeTiles, edgeBetween, pathEdges, QUARTER, SIDES, turn, turnSide, FLOOR_Y } from "./grid.js";
-import { detectRooms } from "./rooms.js";
-import { problem, WorldError, errorsOf } from "./problems.js";
+// placed objects with their tiles and slots in world space), then checked for reachability and its acts planned.
+// analyse() returns the lot and every problem; buildLot throws when there is an error; validateWorld returns the
+// problems. Pure. It sits above model, catalog and nav, which is why it is a layer of its own (model never imports nav).
+import { tileKey, sideEdge, parseEdge, edgeTiles, edgeBetween, pathEdges, QUARTER, SIDES, turn, turnSide, FLOOR_Y } from "../model/grid.js";
+import { detectRooms } from "../model/rooms.js";
+import { problem, WorldError, errorsOf } from "../model/problems.js";
 import { createCatalog, suggest } from "../catalog/define.js";
 import { createNav } from "../nav/nav.js";
 import { planAct } from "../nav/act.js";
@@ -132,13 +133,11 @@ export function analyse(world) {
       if (bx < x + W && bz < z + D && walls.has(edgeBetween(ax, az, bx, bz))) P.push(problem("object.wall", at, `${o.type} at ${tileText(o.at)} straddles the wall between ${tileText([ax, az])} and ${tileText([bx, bz])}`, "move it so its whole footprint is on one side of the wall"));
     }
     if (def.blocks) {
-      for (const t of tiles) {
-        const k = tileKey(...t);
-        if (occupied.has(k)) {
-          const free = freeNear(t, occupied, inLot, walls).map(tileText).join(", ");
-          P.push(problem("object.overlap", at, `${o.type} '${o.id}' covers tile ${tileText(t)}, already used by '${occupied.get(k)}'`, free ? `move it to a free tile such as ${free}` : "move it to a free tile"));
-        } else occupied.set(k, o.id);
-      }
+      const hit = tiles.find((t) => occupied.has(tileKey(...t)));
+      if (hit) {
+        const free = freeNear([x, z], [W, D], occupied, inLot, walls).map((t) => `at: [${t}]`).join(" or ");
+        P.push(problem("object.overlap", at, `${o.type} '${o.id}' covers tile ${tileText(hit)}, already used by '${occupied.get(tileKey(...hit))}'`, free ? `move it where its ${W}×${D} footprint is free: ${free}` : "move it to free tiles"));
+      } else for (const t of tiles) occupied.set(tileKey(...t), o.id);
       for (const t of tiles) blocked.add(tileKey(...t));
     }
     const y = tiles.some(([tx, tz]) => floor.has(tileKey(tx, tz))) ? FLOOR_Y : 0;
@@ -164,7 +163,7 @@ export function analyse(world) {
     cids.add(c.id);
     const [x, z] = c.at ?? [];
     if (!isInt(x) || !isInt(z) || !inLot(x, z)) { P.push(problem("character.at", `${at}.at`, `at ${JSON.stringify(c.at)} is not a tile in the lot`, `use [x, z] with 0 <= x < ${w} and 0 <= z < ${d}`)); return; }
-    if (blocked.has(tileKey(x, z))) P.push(problem("character.blocked", `${at}.at`, `${c.id} starts on tile ${tileText([x, z])}, inside '${occupied.get(tileKey(x, z))}'`, `start on a free tile such as ${freeNear([x, z], occupied, inLot, walls).map(tileText).join(", ")}`));
+    if (blocked.has(tileKey(x, z))) P.push(problem("character.blocked", `${at}.at`, `${c.id} starts on tile ${tileText([x, z])}, inside '${occupied.get(tileKey(x, z))}'`, `start on a free tile such as ${freeNear([x, z], [1, 1], occupied, inLot, walls).map(tileText).join(", ")}`));
     if (!SIDES.includes(c.facing)) P.push(problem("character.facing", `${at}.facing`, `facing '${c.facing}' is not n, e, s or w`, "use n, e, s or w"));
     characters.push({ id: c.id, tile: [x, z], facing: c.facing, look: c.look ?? {} });
   });
@@ -181,12 +180,15 @@ export function analyse(world) {
     const door = doorFor(r, lot);
     P.push(problem("room.unreachable", `rooms (${r.id})`, `room '${r.id}' at ${tileText(r.tiles[0])} cannot be reached`, door ? `add an opening on one of its walls, for example { type: "<door>", at: [${door.at}], side: "${door.side}" }, or clear what blocks its door` : "give it a door"));
   }
+  // acts in order, as the sim would start them: a slot one act takes is taken for the acts after it
+  const held = new Map();
   doc.acts.forEach((a, i) => {
     const who = characters.find((c) => c.id === a.who);
     if (!who) { P.push(problem("act.who", `acts[${i}].who`, `no character '${a.who}'`, `use one of: ${characters.map((c) => c.id).join(", ") || "(no characters)"}`)); return; }
-    if (!["sit", "use", "walk"].includes(a.do)) { P.push(problem("act.do", `acts[${i}].do`, `'${a.do}' is not an act`, "use sit, use or walk")); return; }
-    const r = planAct(lot, nav, who, a, `acts[${i}]`);
-    if (r.problem) P.push(r.problem);
+    const r = planAct(lot, nav, who, a, { at: `acts[${i}]`, holder: (o, s) => held.get(`${o}:${s}`) ?? null });
+    if (r.problem) { P.push(r.problem); return; }
+    for (const [k, v] of held) if (v === a.who) held.delete(k);
+    if (r.hold) held.set(`${r.hold.object}:${r.hold.slot}`, a.who);
   });
   return { lot, problems: P, catalog };
 }
@@ -234,12 +236,20 @@ function doorFor(r, lot) {
   return null;
 }
 
-function freeNear([x, z], occupied, inLot, walls) {
+// Up to two places near `at` where a w × d footprint fits: every tile in the lot and free, and no wall inside it.
+function freeNear([x, z], [w, d], occupied, inLot, walls) {
+  const fits = (ax, az) => {
+    for (let tx = ax; tx < ax + w; tx++) for (let tz = az; tz < az + d; tz++) {
+      if (!inLot(tx, tz) || occupied.has(tileKey(tx, tz))) return false;
+      if (tx + 1 < ax + w && walls.has(edgeBetween(tx, tz, tx + 1, tz))) return false;
+      if (tz + 1 < az + d && walls.has(edgeBetween(tx, tz, tx, tz + 1))) return false;
+    }
+    return true;
+  };
   const out = [];
-  for (let r = 1; r <= 3 && out.length < 2; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+  for (let r = 1; r <= 4 && out.length < 2; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || out.length >= 2) continue;
-    const t = [x + dx, z + dz];
-    if (inLot(...t) && !occupied.has(tileKey(...t))) out.push(t);
+    if (fits(x + dx, z + dz)) out.push([x + dx, z + dz]);
   }
   return out;
 }

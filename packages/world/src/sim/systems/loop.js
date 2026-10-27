@@ -1,5 +1,6 @@
 // The loop step: play the act's clip (sit, type, idle) until the next act; the first frame of it ends the act, so it
-// emits "act" once. It never removes itself: a new act clears it.
+// emits "act" once (a loop queued with done: true, after a cancel, emits nothing). It never removes itself: a new act
+// clears it.
 import { setClip } from "../motion.js";
 
 export default {

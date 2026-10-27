@@ -2,7 +2,7 @@
 // outdoors, labels name rooms, and the tiny house has exactly its two rooms.
 import { describe, expect, test } from "bun:test";
 import { detectRooms, rect, buildLot } from "@hq/world/model";
-import tiny from "../examples/tiny-house.world.js";
+import tiny from "./fixtures/house.world.js";
 
 const doc = (walls: any[], rooms: any[] = []) => ({ lot: { w: 10, d: 8 }, walls, rooms });
 

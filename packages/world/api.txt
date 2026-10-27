@@ -1,4 +1,5 @@
 # The public API: one line per exported name, "<entry> <name>". Change it only with a CHANGELOG entry.
+@hq/world ACTS
 @hq/world CLIPS
 @hq/world FLOOR_Y
 @hq/world FORMAT
@@ -31,6 +32,7 @@
 @hq/world defineWorld
 @hq/world describePair
 @hq/world detectRooms
+@hq/world diffWorld
 @hq/world fitCamera
 @hq/world formatProblems
 @hq/world fromJSON
@@ -53,6 +55,7 @@
 @hq/world unproject
 @hq/world validateWorld
 @hq/world zoomCamera
+@hq/world/model ACTS
 @hq/world/model CLIPS
 @hq/world/model FLOOR_Y
 @hq/world/model FORMAT
@@ -84,6 +87,7 @@
 @hq/world/model defineWorld
 @hq/world/model describePair
 @hq/world/model detectRooms
+@hq/world/model diffWorld
 @hq/world/model fitCamera
 @hq/world/model formatProblems
 @hq/world/model fromJSON

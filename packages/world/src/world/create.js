@@ -2,7 +2,7 @@
 // the nav grid, the architecture for the wall mode and rotation, the objects and the characters, and runs the loop:
 // a frame on every animation frame while anything moves, none while the view is still, and no cap during interaction.
 import * as THREE from "three";
-import { buildLot } from "../model/lot.js";
+import { buildLot } from "../lot/lot.js";
 import { WorldError } from "../model/problems.js";
 import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
