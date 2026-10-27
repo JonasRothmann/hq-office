@@ -1,7 +1,10 @@
-// The lab's generated office: n lanes in two uneven teams and a few on their own, with mixed statuses (or all one).
+// The lab's generated office: n lanes in two uneven teams and a few on their own, with mixed statuses (or all one),
+// and the land round it (outside/scenery.js) when asked.
 import { fromJSON } from "@hq/world/model";
 import japandi from "../japandi/index.js";
+import land from "../outside/land/index.js";
 import { officeDoc } from "../plan.js";
+import { outsideScenery, MODES, LAWN } from "../outside/scenery.js";
 
 const STATUSES = ["moving", "needs_you", "moving", "waiting", "done", "moving", "hq_turn", "blocked", "moving", "parked", "stale", "moving"];
 
@@ -14,10 +17,15 @@ function lanes(n, status) {
   return out;
 }
 
-// The world for n lanes; in the lab, ?lanes=N (1 to 24) and ?status=S override n and the statuses.
-export function labOffice(n) {
+// The world for n lanes; in the lab, ?lanes=N (1 to 24) and ?status=S override n and the statuses, and
+// ?outside=nature|city|off and ?seed=S the land round it (opts.outside and opts.seed by default: off and "hq").
+export function labOffice(n, opts = {}) {
   const q = new URLSearchParams(globalThis.location?.search ?? "");
   const count = Math.max(1, Math.min(24, Number(q.get("lanes")) || n));
-  const { doc } = officeDoc([{ name: "hq", status: "moving" }, ...lanes(count, q.get("status") ?? undefined)]);
-  return fromJSON(doc, [japandi]);
+  const { doc, layout } = officeDoc([{ name: "hq", status: "moving" }, ...lanes(count, q.get("status") ?? undefined)]);
+  const mode = MODES.includes(q.get("outside")) ? q.get("outside") : opts.outside ?? "off";
+  const scenery = outsideScenery(layout, { mode, seed: q.get("seed") || opts.seed || "hq" });
+  if (!scenery) return fromJSON(doc, [japandi]);
+  const palette = { light: { ...doc.palette?.light, ...LAWN.light }, dark: { ...doc.palette?.dark, ...LAWN.dark } };
+  return { ...fromJSON({ ...doc, packs: [...doc.packs, "land"], palette }, [japandi, land]), scenery };
 }

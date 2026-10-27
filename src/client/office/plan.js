@@ -7,7 +7,7 @@ import { SEATS_AT, TEAM_ROOM, SUITE_AT, BREAK_AT, FOOT, OVER, frameSize, place, 
 import { actFor, rowOf } from "./acts.js";
 
 export const PACKS = ["japandi"];
-const MARGIN = 2; // tiles of ground round the building
+export const MARGIN = 2; // tiles of ground round the building
 const WALL = { finish: "japandi/plaster", outside: "japandi/cladding" };
 const FLOOR = { team: "japandi/oak", hq: "japandi/oak", corridor: "japandi/stone", break: "japandi/terrazzo" };
 const LOUNGE = new Set(["corridor", "break"]);

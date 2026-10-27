@@ -58,6 +58,7 @@ import grassClump from "./grass-clump.js";
 import gardenBench from "./garden-bench.js";
 import deck from "./deck.js";
 import bikeRack from "./bike-rack.js";
+import lightPool from "./light-pool.js";
 
 export default definePack({
   id: "land",
@@ -118,5 +119,6 @@ export default definePack({
     gardenBench,
     deck,
     bikeRack,
+    lightPool,
   ],
 });

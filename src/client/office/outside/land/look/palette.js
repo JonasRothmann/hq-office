@@ -28,8 +28,8 @@ const DAY = {
   "flat-roof": "#9b988f", frame: "#f1eee7", door: "#5c4636",
   "awning-0": "#5f8a87", "awning-1": "#c9a24a", "awning-2": "#a8553f", "awning-3": "#3f5170", "awning-4": "#7b8b5a",
   "lamp-head": "#d6d3cb", wire: "#3a3b40", stone: "#b9b3a8", bench: "#7a5a40", iron: "#3c3d42",
-  // panes: glass by day; by night most are lit, a few in two warmths, some dark
-  "pane-a": "#8193a0", "pane-b": "#8a9ba7", "pane-dark": "#75878f", "lamp-glow": "#e9e6dc",
+  // panes: glass by day; by night most are lit, a few in two warmths, some dark. A lamp's pool adds its colour: none by day
+  "pane-a": "#8193a0", "pane-b": "#8a9ba7", "pane-dark": "#75878f", "lamp-glow": "#e9e6dc", "lamp-pool": "#000000",
   "head-light": "#e8e4d8", "tail-light": "#9a4a40",
   // what moves: paints, shirts, trousers, skins, hair
   "car-0": "#f1efe9", "car-1": "#bfc3c6", "car-2": "#4a4e55", "car-3": "#2f3c56", "car-4": "#9a4a40", "car-5": "#8a9a86",
@@ -73,7 +73,7 @@ const NIGHT = {
   "flat-roof": "#5f6470", frame: "#7f8794", door: "#3e3638",
   "awning-0": "#3f5e66", "awning-1": "#7e6d44", "awning-2": "#6e4440", "awning-3": "#2f3c56", "awning-4": "#4e5e48",
   "lamp-head": "#fff1c9", wire: "#22242a", stone: "#5e6470", bench: "#4a3e3a", iron: "#2a2c32",
-  "pane-a": "#ffd59a", "pane-b": "#ffe7bf", "pane-dark": "#28324a", "lamp-glow": "#fff0c8",
+  "pane-a": "#ffd59a", "pane-b": "#ffe7bf", "pane-dark": "#28324a", "lamp-glow": "#fff0c8", "lamp-pool": "#8a6f45",
   "head-light": "#fff6dc", "tail-light": "#ff6a5a",
   "car-0": "#aab0bb", "car-1": "#8a909a", "car-2": "#3a3f48", "car-3": "#283246", "car-4": "#5e3c40", "car-5": "#5e6a66",
   "car-6": "#8c8478", "car-7": "#202228", "car-8": "#4c627a", bus: "#a08c4a", "car-glass": "#2a3446", tyre: "#1c1c20",
