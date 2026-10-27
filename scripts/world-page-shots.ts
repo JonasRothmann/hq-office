@@ -51,7 +51,7 @@ async function shoot(n: number, only?: string) {
     await post("/api/asks", { lane: names[2], kind: "decision", tier: "blocking", priority: "high", title: "Which database for the export?", options: ["Postgres", "SQLite"] });
     await post("/api/sync", {});
     const { s, evaluate } = await newSession(chrome.cdp, errors);
-    const until = async (expr: string, ms = 300_000) => {
+    const until = async (expr: string, ms = 600_000) => {
       for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(150)) if (await evaluate(expr).catch(() => false)) return;
       throw new Error(`timed out waiting for ${expr}; page errors: ${errors.join(" | ")}; now: ${await evaluate("JSON.stringify({ desks: window.__world?.desks, asks: document.querySelectorAll(\".ask\").length, fonts: document.fonts.status, url: location.href })").catch((e) => e.message)}`);
     };
@@ -74,7 +74,7 @@ async function shoot(n: number, only?: string) {
       await until(`document.fonts.status === "loaded"`, 5000).catch(() => {});
       await until(`(() => { const o = __world.inspect().outside; return o && o.mode === ${JSON.stringify(outside)} && !o.fading; })()`);
       // a few seconds for the camera to settle and the frames to come
-      await until(`window.__world.inspect().frames > 20`);
+      await until(`window.__world.inspect().frames > 8`);
       await Bun.sleep(1500);
       if (near) {
         // the first lane's team room in the middle of the office area, close up
