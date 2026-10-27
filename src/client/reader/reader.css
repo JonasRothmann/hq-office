@@ -148,3 +148,6 @@
 .answered .k { font: 600 10.5px/1.2 var(--font); letter-spacing: 0.06em; color: var(--text-2); }
 .answered .md { font: 400 13px/1.5 var(--font); color: var(--text); overflow-wrap: anywhere; }
 .tag.done { background: var(--st-green-fill); color: var(--st-green-text); }
+/* THREAD in a question's head: it takes you to the thread under the body; amber while the lane wrote something new */
+.tag.thread-jump { border: 0; }
+.tag.thread-jump.new { background: var(--st-amber-fill); color: var(--st-amber-text); }

@@ -93,7 +93,7 @@ function cardChip(a) {
   const inner = `<span class="cthumb">${busy ? `<i class="spin"></i>` : a.kind === "file" ? FILE : a.kind === "shelf" ? SHELF : LINK}</span><span class="ctx"><b>${name}</b><small>${esc(sub.filter(Boolean).join(" · "))}</small></span>`;
   const face = a.state === "err" && a.blob ? `<button type="button" class="ccard" data-chip-retry="${a.id}" aria-label="Retry ${name}">${inner}</button>`
     : a.state === "done" && a.url ? `<a class="ccard" href="${esc(a.url)}" target="_blank" rel="noopener">${inner}</a>` : `<span class="ccard">${inner}</span>`;
-  return `<div class="chip card ${a.state} k-${esc(a.sub || a.kind)}" data-chip="${a.id}" title="${esc(a.error || a.title || a.name)}">${face}<button type="button" class="cx" data-chip-rm="${a.id}" aria-label="Remove ${name}"><span>${CROSS}</span></button></div>`;
+  return `<div class="chip acard ${a.state} k-${esc(a.sub || a.kind)}" data-chip="${a.id}" title="${esc(a.error || a.title || a.name)}">${face}<button type="button" class="cx" data-chip-rm="${a.id}" aria-label="Remove ${name}"><span>${CROSS}</span></button></div>`;
 }
 
 // The tray: a thumbnail for each image and a card for anything else, each with a round remove badge on its corner. Tap

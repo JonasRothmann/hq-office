@@ -106,10 +106,12 @@ describe.skipIf(!chromeFound)("attach and threads", () => {
     await page.evaluate(`document.querySelector(${JSON.stringify(box(".aplus"))}).click()`);
     await page.evaluate(`document.querySelector(".amenu:popover-open [data-attach-link]").click()`);
     await page.evaluate(`document.querySelector(".amenu:popover-open [data-link-url]").value = "https://claude.ai/artifact/abc123"; document.querySelector(".amenu:popover-open [data-link-add]").click()`);
-    await until(`!!document.querySelector('[data-chips="${k}"] .chip.card.k-claude-artifact.done')`);
-    expect(await page.evaluate(`document.querySelector('[data-chips="${k}"] .chip.card small').textContent`)).toBe("Claude artifact");
+    await until(`!!document.querySelector('[data-chips="${k}"] .chip.acard.k-claude-artifact.done')`);
+    expect(await page.evaluate(`document.querySelector('[data-chips="${k}"] .chip.acard small').textContent`)).toBe("Claude artifact");
+    // The card shows: no other area's class hides it.
+    expect(await page.evaluate(`(() => { const r = document.querySelector('[data-chips="${k}"] .chip.acard').getBoundingClientRect(); return r.width > 100 && r.height > 40; })()`)).toBe(true);
     await page.evaluate(`__pick('${box(`[data-attach="${k}"]:not([data-attach-image])`)}', [new File(["# Plan\\n"], "plan notes.md", { type: "text/markdown" })])`);
-    await until(`!!document.querySelector('[data-chips="${k}"] .chip.card.k-file.done')`);
+    await until(`!!document.querySelector('[data-chips="${k}"] .chip.acard.k-file.done')`);
     await page.evaluate(`__type(${JSON.stringify(box(".rcomp textarea"))}, "See these")`);
     await page.evaluate(`document.querySelector(${JSON.stringify(box("[data-reply-only]"))}).click()`);
     await until(`!!document.querySelector('#reader .ithread [data-tmsg] .seen.ok')`);
@@ -131,9 +133,9 @@ describe.skipIf(!chromeFound)("attach and threads", () => {
     await page.evaluate(`document.querySelector('.amenu:popover-open [data-shelf-room="nightly"]').click()`);
     await until(`!!document.querySelector(".amenu:popover-open [data-shelf-item]")`);
     await page.evaluate(`document.querySelector(".amenu:popover-open [data-shelf-item]").click()`);
-    await until(`!!document.querySelector('[data-chips="${k}"] .chip.card.k-link.done')`);
+    await until(`!!document.querySelector('[data-chips="${k}"] .chip.acard.k-link.done')`);
     expect(await page.evaluate(`!!__menu()`)).toBe(false);
-    expect(await page.evaluate(`document.querySelector('[data-chips="${k}"] .chip.card').textContent`)).toContain("Nightly export shelf");
+    expect(await page.evaluate(`document.querySelector('[data-chips="${k}"] .chip.acard').textContent`)).toContain("Nightly export shelf");
     await page.evaluate(`document.querySelector(${JSON.stringify(box("[data-reply-only]"))}).click()`);
     await until(`document.querySelectorAll('#reader .ithread [data-tmsg]').length === 2`);
     expect((await room(`thread-q${ids.golf}`)).messages[1].text).toBe("[Export benchmark](https://example.com/bench)");
@@ -153,13 +155,13 @@ describe.skipIf(!chromeFound)("attach and threads", () => {
     await page.evaluate(`document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: __files("pasted.txt", "from a paste"), bubbles: true, cancelable: true }))`);
     // Both wait on that question's box, uploaded, and show when it opens.
     await page.evaluate(`open_("question:${ids.alpha}")`);
-    await until(`document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.card.done').length === 2`);
-    expect(await page.evaluate(`[...document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.card b')].map((b) => b.textContent)`)).toEqual(["dropped.txt", "pasted.txt"]);
+    await until(`document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.acard.done').length === 2`);
+    expect(await page.evaluate(`[...document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.acard b')].map((b) => b.textContent)`)).toEqual(["dropped.txt", "pasted.txt"]);
     // With the reader the target, a drop anywhere goes to what it shows; a drop on another box goes to that box.
     await page.evaluate(`document.querySelector("#reader").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
     const second = await page.evaluate(`__drop(document.body, __files("third.txt", "three"))`);
     expect(second.hint).toBe("Drop to attach to: Ship the migration tonight?");
-    await until(`document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.card').length === 3`);
+    await until(`document.querySelectorAll('[data-chips="${ids.alpha}"] .chip.acard').length === 3`);
     await page.evaluate(`(() => { let b; while ((b = document.querySelector('[data-chips="${ids.alpha}"] [data-chip-rm]'))) b.click(); })()`);
     expect(await page.evaluate(`document.querySelectorAll('[data-chips="${ids.alpha}"] .chip').length`)).toBe(0);
   });
@@ -187,6 +189,8 @@ describe.skipIf(!chromeFound)("attach and threads", () => {
     // The lane answers in the thread with hud room say; it shows, and the owner has seen it.
     await server.post(`/api/rooms/thread-q${ids.flaky}/say`, { text: "Because the old key leaked.", as: "flaky" });
     await until(`[...document.querySelectorAll('#reader .ithread .msg.lane .text')].some((t) => t.textContent.includes("old key leaked"))`);
+    // The head says there is a thread, and takes you to it.
+    expect(await page.evaluate(`document.querySelector("#reader .askview .rv-head [data-thread-jump]")?.textContent.startsWith("THREAD")`)).toBe(true);
     await until(`(async () => (await (await fetch("/api/rooms/thread-q${ids.flaky}")).json()).unread === 0)()`);
     // To HQ: the chip switches, and the reply goes to HQ.
     await page.evaluate(`(() => { const s = document.querySelector('#reader .askview .tobar select'); s.value = "hq"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
