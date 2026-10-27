@@ -17,12 +17,28 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   finish), an unknown band colour (`color.token`) and an unknown band pattern (`finish.pattern`).
 - A primitive may carry `base`, the height its foot darkening counts from. The stretches of a cut wall carry the
   wall's foot, so the darkening does not start again at each band.
+- `lintViews(lot, catalog, cuts)`: the coplanar lint of a lot in many views (cut sets), one pair list per cut,
+  each equal to `lintCoplanar(lotPrims(lot, catalog, cut))`. It lints every distinct primitive of all the views
+  once and lints a view again on its own only when it holds both parts of a clash. `check.ts` uses it: the 24
+  views of a 24-lane office take under 1 s instead of about 6 s (measured on a loaded machine).
 
 ### Changed
 
+- `createWorld` draws the objects of a type with two or more copies as one batch: an `InstancedMesh` per material,
+  an instance per object. `instance: false` on a definition opts out; `instance: true` is now the default. Each
+  object keeps an anchor group (`object:<id>`) for `attach()`, `pick` and `hover`; a batched object's meshes are its
+  batch's (`batch:<type>`), so the anchor holds only what the host attached. Hover lifts the object out of its batch
+  and highlights its own copy. An edit redraws only the types of the objects it touched. A character is one
+  `SkinnedMesh` per material, bound to the rig's bones, instead of a mesh per joint. A 12-lane office draws 83 calls
+  with a shadow redraw instead of 497 (42 instead of 249 without), 24 lanes 107 instead of 861; the triangles are
+  the same, and a shot of the office differs in 10 pixels of a million. No export changed.
 - `lintCoplanar` skips two faces in one plane when their bounding boxes are apart, before it clips them. The
   findings are the same; linting a lot with many like objects (an office of 24 desks, in 24 views) takes 3 s
   instead of 16 s. No export changed, so `api.txt` did not.
+- `lintCoplanar` cuts each plane's faces into runs of nearly equal offset and sweeps each run along one axis, so it
+  no longer compares every face of a plane with every other; it skips two square faces that meet only at an edge
+  without clipping them. The pairs and their order are the same (`lint.test.ts` compares it with the plain scan).
+  One lint of a 24-lane office: about 0.2 s instead of 0.6 s.
 
 ## [0.2.1] - 2026-10-27
 

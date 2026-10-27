@@ -85,31 +85,78 @@ function clipPoly(subject, clip) {
 // Faces facing opposite ways (two boxes touching) are fine: one is always culled.
 /** @returns {CoplanarPair[]} */
 export function lintCoplanar(prims) {
-  const faces = [];
   const named = new Map(), nth = [];
   for (const p of prims) { const k = `${p.owner ?? ""}|${p.part}`; named.set(k, (named.get(k) ?? 0) + 1); nth.push(named.get(k)); }
   const part = (i) => { const p = prims[i]; return { owner: p.owner, part: p.part, ...(named.get(`${p.owner ?? ""}|${p.part}`) > 1 ? { n: nth[i] } : {}) }; };
-  prims.forEach((p, i) => { for (const f of facesOf(p)) faces.push({ ...f, i, key: f.n.map((x) => Math.round(x * 1e4)).join(","), box: boxOf(f.pts) }); });
+  return clashes(prims).map(({ i, j, ...rest }) => ({ a: part(i), b: part(j), ...rest }));
+}
+
+// The clashes by primitive index ({ i, j, normal, offset, area }), in the lint's order. candidates picks a sorted
+// group's pairs to clip: nearPairs, or allPairs (the plain scan, which the tests compare it with).
+export function clashes(prims, candidates = nearPairs) {
+  const faces = [];
+  prims.forEach((p, i) => { for (const f of facesOf(p)) { f.i = i; f.key = `${Math.round(f.n[0] * 1e4)},${Math.round(f.n[1] * 1e4)},${Math.round(f.n[2] * 1e4)}`; f.box = boxOf(f.pts); faces.push(f); } });
   const groups = new Map();
   for (const f of faces) { if (!groups.has(f.key)) groups.set(f.key, []); groups.get(f.key).push(f); }
-  const pairs = [];
+  const out = [];
   for (const group of groups.values()) {
     group.sort((a, b) => a.d - b.d);
-    for (let i = 0; i < group.length; i++) {
-      for (let j = i + 1; j < group.length && group[j].d - group[i].d < COPLANAR_EPS; j++) {
-        const A = group[i], B = group[j];
-        // every desk top in a lot lies in one plane: faces whose boxes are apart cannot overlap, so skip the clip
-        if (A.i === B.i || apart(A.box, B.box)) continue;
-        const pa = flatten(A.pts, A.n), pb = flatten(B.pts, A.n);
-        const o = clipPoly(ccw(pa), ccw(pb));
-        const ar = o.length >= 3 ? area(o) : 0;
-        if (ar > MIN_AREA) {
-          pairs.push({ a: part(A.i), b: part(B.i), normal: A.n.map((x) => +x.toFixed(3)), offset: +A.d.toFixed(4), area: +ar.toFixed(5) });
-        }
-      }
+    for (const [i, j] of candidates(group)) {
+      const A = group[i], B = group[j];
+      const o = clipPoly(ccw(flatten(A.pts, A.n)), ccw(flatten(B.pts, A.n)));
+      const ar = o.length >= 3 ? area(o) : 0;
+      if (ar > MIN_AREA) out.push({ i: A.i, j: B.i, normal: A.n.map((x) => +x.toFixed(3)), offset: +A.d.toFixed(4), area: +ar.toFixed(5) });
     }
   }
-  return pairs;
+  return out;
+}
+
+// The plain scan: every pair of faces of two primitives closer than COPLANAR_EPS whose boxes meet.
+export function allPairs(group) {
+  const out = [];
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length && group[j].d - group[i].d < COPLANAR_EPS; j++) {
+      if (group[i].i !== group[j].i && !apart(group[i].box, group[j].box)) out.push([i, j]);
+    }
+  }
+  return out;
+}
+
+// The pairs [i, j] (i < j, ascending) of a group sorted by d that may overlap: closer than COPLANAR_EPS in d, of two
+// primitives, with boxes neither apart nor meeting only at an edge. Every desk top of a lot lies in one plane, so comparing all of a plane's faces
+// is quadratic; instead the group is cut into runs of nearly equal d (a pair always falls in one run), and each run
+// is swept along the in-plane axis it spreads most on, comparing a face only with those whose span there meets its.
+// The clashes are the same as allPairs gives, in the same order (lint.test.ts).
+function nearPairs(group) {
+  const out = [];
+  for (let s = 0; s < group.length;) {
+    let e = s + 1;
+    while (e < group.length && group[e].d - group[e - 1].d < COPLANAR_EPS) e++;
+    if (e - s > 1) sweepRun(group, s, e, out);
+    s = e;
+  }
+  return out.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+
+function sweepRun(group, s, e, out) {
+  const spread = [0, 1, 2].map((k) => {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = s; i < e; i++) { lo = Math.min(lo, group[i].box[0][k]); hi = Math.max(hi, group[i].box[1][k]); }
+    return hi - lo;
+  });
+  const ax = spread.indexOf(Math.max(...spread));
+  const order = [];
+  for (let i = s; i < e; i++) order.push(i);
+  order.sort((a, b) => group[a].box[0][ax] - group[b].box[0][ax]);
+  for (let x = 0; x < order.length; x++) {
+    const A = group[order[x]];
+    for (let y = x + 1; y < order.length; y++) {
+      const B = group[order[y]];
+      if (B.box[0][ax] > A.box[1][ax] + COPLANAR_EPS) break;
+      if (A.i === B.i || Math.abs(A.d - B.d) >= COPLANAR_EPS || apart(A.box, B.box) || meetOnlyAtEdge(A, B)) continue;
+      out.push(order[x] < order[y] ? [order[x], order[y]] : [order[y], order[x]]);
+    }
+  }
 }
 
 // A face's bounding box, [min, max]; two boxes are apart when they miss each other on some axis by more than the
@@ -119,7 +166,22 @@ function boxOf(pts) {
   for (const p of pts) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
   return [min, max];
 }
-const apart = ([amin, amax], [bmin, bmax]) => [0, 1, 2].some((k) => amax[k] < bmin[k] - COPLANAR_EPS || bmax[k] < amin[k] - COPLANAR_EPS);
+function apart([amin, amax], [bmin, bmax]) {
+  for (let k = 0; k < 3; k++) if (amax[k] < bmin[k] - COPLANAR_EPS || bmax[k] < amin[k] - COPLANAR_EPS) return true;
+  return false;
+}
+
+// Two faces square to an axis are rectangles in their boxes, so what they share is the boxes' overlap in the other
+// two axes. Under half of MIN_AREA (faces that meet along an edge: stacked wall stretches, a post beside its wall)
+// they cannot overlap, and the clip is skipped. A turned object's normals are off an axis by about 1e-16.
+const SQUARE = 1 - 1e-9;
+function meetOnlyAtEdge(A, B) {
+  const k = A.n.findIndex((x) => Math.abs(x) > SQUARE);
+  if (k < 0 || !(Math.abs(B.n[k]) > SQUARE)) return false;
+  let shared = 1;
+  for (let a = 0; a < 3; a++) if (a !== k) shared *= Math.max(0, Math.min(A.box[1][a], B.box[1][a]) - Math.max(A.box[0][a], B.box[0][a]));
+  return shared < MIN_AREA / 2;
+}
 
 function ccw(poly) {
   let s = 0;

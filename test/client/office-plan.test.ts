@@ -3,7 +3,7 @@
 // desk, a chair and a worker with stable ids; the act per status is a table; and as lanes come and go, the doc
 // changes only where the layout did, so world.apply(next) rebuilds only that.
 import { describe, expect, test } from "bun:test";
-import { fromJSON, validateWorld, formatProblems, buildLot, diffWorld, cutaway, lotPrims, lintCoplanar, describePairs, WALL_MODES, CLIPS } from "@hq/world/model";
+import { fromJSON, validateWorld, formatProblems, buildLot, diffWorld, cutaway, lotPrims, lintCoplanar, lintViews, describePairs, defineObject, WALL_MODES, WALL_T, FLOOR_Y, CLIPS } from "@hq/world/model";
 import japandi from "../../src/client/office/japandi/index.js";
 import { officeDoc, deskId, chairId, workerId } from "../../src/client/office/plan.js";
 import { STATUS_ACTS } from "../../src/client/office/acts.js";
@@ -23,14 +23,13 @@ const withHq = (lanes: Lane[]) => [{ name: "hq", status: "moving" }, ...lanes];
 const worldOf = (doc: any) => fromJSON(doc, PACKS);
 const errors = (doc: any) => formatProblems(validateWorld(worldOf(doc)).filter((p: any) => p.severity === "error"));
 // The coplanar lint as check.ts runs it: every wall mode and rotation, and every quarter turn between them.
+const views = (lot: any) => WALL_MODES.flatMap((mode: string) => [0, 1, 2, 3].flatMap((rot) => {
+  const cut = cutaway(lot, { mode, rot });
+  return [cut, new Set([...cut, ...cutaway(lot, { mode, rot: rot + 1 })])];
+}));
 function lint(doc: any) {
   const { lot, catalog } = buildLot(worldOf(doc));
-  const out = new Set<string>();
-  for (const mode of WALL_MODES) for (let rot = 0; rot < 4; rot++) {
-    const cut = cutaway(lot, { mode, rot });
-    for (const set of [cut, new Set([...cut, ...cutaway(lot, { mode, rot: rot + 1 })])]) for (const l of describePairs(lintCoplanar(lotPrims(lot, catalog, set)))) out.add(l);
-  }
-  return [...out];
+  return [...new Set(lintViews(lot, catalog, views(lot)).flatMap(describePairs))];
 }
 const tilesOf = (doc: any) => {
   const { lot } = buildLot(worldOf(doc));
@@ -65,6 +64,25 @@ describe("office doc", () => {
       expect(layout.desks.length).toBe(lanes.length);
     }, 120_000);
   }
+
+  test("lintViews finds what linting each view on its own finds, on a 24-lane office with planted clashes", () => {
+    const { lot, catalog } = buildLot(worldOf(officeDoc(withHq(SIZES[4][1])).doc));
+    // every seventh object again, 3 cm east: it clashes with itself in every view
+    const copies = lot.objects.filter((_: any, i: number) => i % 7 === 0).map((o: any) => ({ ...o, id: `copy:${o.id}`, pos: [o.pos[0] + 0.03, o.pos[1], o.pos[2]] }));
+    // a plaque as deep as a plain wall, up where only a full wall reaches: it clashes only in views that keep that wall up
+    const cutaways = views(lot).slice(8, 16);
+    const [edge] = [...lot.walls.keys()].filter((k: string) => k.startsWith("h:") && !lot.walls.get(k).opening && cutaways.some((c: Set<string>) => c.has(k)) && cutaways.some((c: Set<string>) => !c.has(k)));
+    const [x, z] = edge.slice(2).split(",").map(Number);
+    const plaque = defineObject({ id: "plaque", blocks: false, build: (k: any) => k.box("plaque", [0.4, 0.3, WALL_T], [0, 1.6, 0], "#ffffff") });
+    lot.objects.push(...copies, { id: "plaque", def: plaque, q: 0, pos: [x + 0.5, FLOOR_Y, z] });
+    const cuts = views(lot);
+    const each = cuts.map((c: Set<string>) => lintCoplanar(lotPrims(lot, catalog, c)));
+    expect(lintViews(lot, catalog, cuts)).toEqual(each);
+    const plaqueIn = each.map((pairs: any[]) => pairs.some((p) => p.b.owner === "plaque" || p.a.owner === "plaque"));
+    expect(plaqueIn).toContain(true);
+    expect(plaqueIn).toContain(false);
+    expect(Math.min(...each.map((pairs: any[]) => pairs.length))).toBeGreaterThan(copies.length);
+  }, 120_000);
 
   test("the two-tile footprints the generator assumes are the packs' own", () => {
     const { doc } = officeDoc(withHq(loose(12)));

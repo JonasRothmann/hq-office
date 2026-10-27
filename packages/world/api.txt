@@ -39,6 +39,7 @@
 @hq/world formatProblems
 @hq/world fromJSON
 @hq/world lintCoplanar
+@hq/world lintViews
 @hq/world lotMap
 @hq/world lotPrims
 @hq/world objectPrims
@@ -97,6 +98,7 @@
 @hq/world/model formatProblems
 @hq/world/model fromJSON
 @hq/world/model lintCoplanar
+@hq/world/model lintViews
 @hq/world/model lotMap
 @hq/world/model lotPrims
 @hq/world/model objectPrims

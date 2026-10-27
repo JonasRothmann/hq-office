@@ -476,9 +476,11 @@ and `ppm` (current pixels per metre). Rules:
   world, not to the screen.
 - Materials: one Lambert material per finish class (matte, glow, glass), vertex colours from palette tokens, flat
   shading. Each theme (light, dark) is a palette.
-- Meshes: architecture merged per finish class; each placed object one merged mesh per finish class (so it can be
-  picked and highlighted); `instance: true` objects with four or more copies draw as `InstancedMesh` (phase 2).
-- Characters: a jointed mesh per character from the rig; casts real shadows (no blob decal lying on the floor).
+- Meshes: architecture merged per finish class; objects of a type with two or more copies draw as one `InstancedMesh`
+  per material, with an instance per object (`instance: false` opts out). Each object keeps an anchor group, so pick,
+  hover and attach still work on it.
+- Characters: one `SkinnedMesh` per character, bound to the rig's bones; casts real shadows (no blob decal lying on
+  the floor).
 
 ### 3.8 sim
 
@@ -744,7 +746,7 @@ Costs are estimates for a 2020-era laptop GPU (Apple M1 or Intel Iris Xe) at 144
 | Shadows | 2048² PCF, 5 taps, world-fixed rotation, lot-fitted, texel-snapped, redrawn only on change | ~0.5-1 ms per redraw; 5 taps per pixel otherwise |
 | Contact darkening | baked vertex shade at wall bases and under objects | free |
 | Materials | Lambert, vertex colours, ≤ 4 classes | one program each |
-| Draw calls | architecture 3-4; one per object per class; instancing for repeated objects | tiny house ~30; HQ at 12 lanes ~60 with instancing |
+| Draw calls | architecture 3-4; one per type per class (a batch of instances), one per character | HQ at 12 lanes 42 calls, 83 with a shadow redraw; 24 lanes 54 and 107 |
 | Frame loop | render on change at display rate; nothing when still | 0 when idle |
 | Later, optional | half-resolution SAO or GTAO | 2-6 ms; has its own noise, so only with a world-fixed pattern |
 | Later, optional | edge outline (depth and normal) | ~1 ms |
@@ -907,19 +909,33 @@ a shadow redraw; a pan, 1 render and no shadow redraw; a turn, 23 renders (the l
 shadow redraws in cutaway mode (one per cut change), none with walls up or down; a zoom, 16 renders; a `fitBox`, 26
 renders; an edit or a theme change, 1 render and 1 shadow redraw.
 
+**Draw calls, after step 5**: `bun packages/world/tools/proof.ts --only perf --worlds src/client/office/lab/office-4.world.js,src/client/office/lab/office-12.world.js,src/client/office/lab/office-24.world.js`
+runs the three lab offices in headless Chrome (SwiftShader, 1280×800, zoom 0, walls cutaway). "With shadow redraw"
+counts the shadow pass too. The old renderer's office was 148 calls at 12 lanes by that count (limit 220) and 275k
+triangles (limit 450k). The ms per frame the tool prints is not a real measurement under SwiftShader.
+
+| Lanes | Objects | Characters | Before: calls with shadow redraw / without | After: with / without | Triangles with / without (same before and after) |
+| --- | --- | --- | --- | --- | --- |
+| 4 | 23 | 5 | 187 / 94 | 53 / 27 | 36k / 18k |
+| 12 | 69 | 13 | 497 / 249 | 83 / 42 | 83k / 42k |
+| 24 | 101 | 25 | 861 / 431 | 107 / 54 | 130k / 66k |
+
+A screenshot of the 12-lane office before and after differs in 10 pixels of 1,024,000 (day) and 5 (night). At 12 lanes
+the scene now has 23 meshes for objects, 13 for characters and 6 for architecture (before: 100, 143, 6).
+
 **Tests**: `bun test packages/world docs/engine/compare test/client/modules.test.ts test/client/world-package.test.ts`
 gives 288 pass, 0 fail (phase 1: 157; phase 1.5: 225). The package has 212 tests (phase 1: 94; phase 1.5: 162).
 The second review's probes are package tests now: `settle.test.ts` (8; 7 failed before the fix), `edits.test.ts`
 and `doc-at.test.ts`, and the boundary probe lists (31 in the package, 12 on the app side).
 
 **What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), a real HiDPI screen,
-instancing, per-room light, and the HQ office itself.
+per-room light, and the HQ office itself.
 
 ## 12. Migration order
 
 The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
-above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Steps 2 and 3 are done; step 4 has not
-started.
+above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Steps 2, 3 and 5 are done;
+step 4 has not started.
 
 1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
    map redraws only on change (3.9). The canvas is sized to its device pixels (3.9). The boundary test closes the
@@ -930,7 +946,7 @@ started.
    end of every motion is drawn, a floor edit rebuilds what stands on it, a doc's `at` is a spawn tile only, a
    refused doc act is a `cancel` event, a cancel never leaves a character inside an object, a loaded save is
    checked against the lot, and the boundary tests read imports with Bun's parser. Still open from the reviews:
-   avoidance between characters, `instance` and `lod` (declared, unused), and `lot.js` importing nav and act.
+   avoidance between characters, `lod` (declared, unused), and `lot.js` importing nav and act.
 2. **The lane tree to a `WorldDoc`, as a pure function.** `src/client/office/plan.js` takes the lane tree and returns
    a doc: team rooms as wall paths, one desk and chair per lane with stable ids, workers as characters, doors that
    connect every room. It runs headless in Bun. Tests cover 1 lane, a full team, several teams of uneven sizes, and N
@@ -987,8 +1003,8 @@ started.
      `/?world=/src/client/office/lab/office-12.world.js` (`&lanes=N`, `&status=S`). Shots are
      `docs/screens/office-engine-*.jpg`.
    - Cost: a 12-lane lot is about 2,200 primitives, 450 draw calls and 75k triangles. The bands make a wall four
-     boxes instead of one, which makes the coplanar lint about a third slower. Instancing (step 5) is where to win
-     the draw calls back.
+     boxes instead of one, which makes the coplanar lint about a third slower. Step 5 brought the draw calls down
+     (below).
 4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
    `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
    back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the
@@ -1001,6 +1017,18 @@ started.
 5. **Instancing, measured.** Seed an office of 12 or more lanes and measure draw calls and frame time while panning
    and walking. Add `InstancedMesh` for `instance: true` objects only if the numbers ask for it, and report the
    before and after. Per-room light at night belongs here too.
+
+   **Done.** `createWorld` draws the objects of a type with two or more copies as one `InstancedMesh` per material, an
+   instance per object (the pure plan is `packages/world/src/view/batches.js`, tested in `test/batches.test.ts`);
+   `instance: false` opts out. Every object keeps an anchor group, so pick, hover and attach still work: a pick on an
+   instance names its object, hover lifts the object out of its batch and highlights its own copy, and an edit redraws
+   only the types of the objects it touched. A character is one `SkinnedMesh` bound to the rig's bones, not a mesh per
+   joint. At 12 lanes the draw calls with a shadow redraw went from 497 to 83 (without: 249 to 42), and at 24 lanes from
+   861 to 107 (431 to 54). The triangles are the same before and after (12 lanes: 83k with a shadow redraw, 42k
+   without). The lint is faster too: the coplanar lint sweeps each plane's runs along one axis, and `lintViews` lints
+   every distinct primitive of all views once. `test/client/office-plan.test.ts` went from 33 s (14 s CPU) to about 5 s
+   CPU, one 24-lane lint from about 0.6 s to 0.2 s, and its 24 views from about 6 s to under 1 s. Per-room light at night
+   is not part of this step and is still open.
 6. **The outside generator, last.** The city around the office becomes an app-side generator that adds ground
    objects around the lot, or a separate pack when a second world wants it.
 
