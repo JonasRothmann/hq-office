@@ -86,7 +86,10 @@ export async function sendAnswer(id, btn) {
     if (reading) { if (next != null && askOf(next)) show("question", next, { advanced: true }); else hide(); }
   } catch (err) {
     sending.delete(id);
-    toast(err.message);
+    // Lost a race with a lead's answer (decision D20): the draft stays, and it can go to HQ as a follow-up.
+    if (/ was answered first by /.test(err.message) && confirm(`${err.message}\n\nYour answer is kept. Send it to HQ as a follow-up?`))
+      post("/api/notes", { text: `re: #${id} ("${ask.title.slice(0, 50).replace(/"/g, "'")}") ${answer}` }).then(() => { drafts.delete(id); toast("SENT TO HQ AS A FOLLOW-UP."); }, (e) => toast(e.message));
+    else toast(err.message);
     emit("draft", id);
   }
 }

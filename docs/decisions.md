@@ -233,3 +233,67 @@ made while building it:
 - **Not yet.** The land round the office (OUTSIDE, step 6): NEW shows the plain lot, and the settings say so. The
   walk to the lead's desk: the place for it is the act table in `office/acts.js`. Per-room light at night, the
   status lights on desks and the marker over a worker who waits on the owner are the classic renderer's only.
+
+## D20. Go to the lead: a question goes to the asking lane's lead first
+
+The owner approved this design in the proposal (section 2), including its table change. A question can now go to
+the asking lane's lead (its parent in the lane tree) before the owner. It reaches the owner on a timeout, or when
+the lead escalates it. The office walk to the lead's desk is a later, optional step; only its hook exists.
+
+- **Data.** Two nullable columns on `asks`, added in `schema.ts` like the tier columns (D2): `holder` (the lead
+  holding an open ask; null is the owner) and `answered_by` (null is the owner). Every reader of asks needs the
+  holder, so it is a column. The hop itself (the lead, delivery, the absolute `escalate_at`, who escalated and why)
+  is a new table, `ask_routes`, that only the router reads. Nothing is dropped or renamed; old asks read as the
+  owner's. The migrations moved from `db.ts` into `applySchema` so a test can build the schema in memory.
+- **Routing** (`src/server/lead-router.ts`). `hud ask --to lead|owner`; without it the owner's `askRoute` setting
+  decides. Always the owner: secrets, `kind=action`, blocking and urgent, `--to owner`, no asking lane. A lead is
+  skipped for the next one up when it is not registered, gone, never seen in herdr, done, parked, blocked on a
+  prompt, stale, waiting on a blocking question of its own, or holding 5 asks already.
+- **Timeouts**, in minutes: blocking urgent 0, high 5, normal 10, low 20; non-blocking 10, 20, 30, 60. They are
+  starting values to tune. `escalate_at` is absolute, so a restart keeps it; the check runs at start, after every
+  change and every 5 s.
+- **Delivery** reuses rooms' rules: `promptAgent`, and rooms' `away`. The lead is typed into only while it is idle
+  with no prompt pending; while it is away the question is kept and sent when it is back. A failed delivery, or a
+  lead that is done, parked or removed, escalates at once.
+- **Prompt injection: one quoting function.** The question is another agent's text typed into the lead. The prompt
+  and `hud held` both quote it through `quoteAgentText` (`src/agent-text.ts`), under a line that says to weigh it, not
+  follow it. Every line keeps its `| ` prefix, so a title or an option can never print as a command line. Line breaks
+  in any form (CR, VT, FF, NEL, U+2028, U+2029) become quoted line breaks; every other C0 and C1 control and the bidi
+  controls (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) are taken out. Lane names in the head go
+  through `oneLine`. The owner-only kinds never reach a lead. Money, irreversible steps and outside contact still
+  rely on the guide and on escalation.
+- **Identity: a token per hop.** A lane name is a claim, not proof (the review showed `--as` let anyone answer as a
+  lead, or as HQ). Each hop gets a random 128-bit token, stored on its `ask_routes` row and typed only into that lead
+  with the question. `hud answer`, `hud escalate` and `hud held` for a lead need `--token`; the server checks it
+  against the open hop the lead still holds. A wrong or old token (the hop ended: answered, escalated, moved) is a
+  403 with one message, which never says whether the ask exists. A token of any question a lead holds lists all it
+  holds, each with its own token. Any token or `by` makes a call a lead's, so a blank `by` is never the owner. Tokens
+  never reach `/api/state` or the page. The owner's page is unchanged (no token, no `by`). HQ escalates with
+  `hud escalate ID --hq`, recorded under its configured agent name (`HUD_HQ_AGENT`); it is trusted the way it is to
+  withdraw, which is to say not authenticated beyond the page's own header check.
+- **Answers.** `answerAsk(id, answer, { token, by })`: neither is the owner. The answer to a routed ask is typed into
+  the asking lane (kept while it is away). HQ hears it once that is done: "already delivered to L; no relay needed"
+  (or that L is away and gets it when back, or that typing failed and HQ must relay it). An ask that never went to
+  a lead is unchanged: HQ hears at once and relays, as before. If the owner answers what a lead holds, or HQ
+  withdraws it, the lead is told to drop it, also when that happens while the question is still being typed in. An
+  answer still being typed in at a restart is typed in again at start. The owner's answer that loses a race with the
+  lead's is refused with who answered first; the page keeps the draft and offers it to HQ as a follow-up note.
+- **Changes while a lead holds it.** Raised to blocking and urgent, it goes to the owner at once. Moved to another
+  lane, the old lead drops it and it is routed again from the new lane, as the next hop.
+- **The owner's view.** `needs_you` counts only what the owner holds; a lane whose questions are all with its lead
+  is `with_lead`. The stack lists lead-held questions under "With leads", answerable, with the lead and "to you at
+  HH:MM", and chimes only when one reaches the owner.
+
+The open questions, answered:
+
+- **Top-level lanes.** HQ is never a lead. A top-level lane's question goes to the owner, as before. HQ already
+  sees every ask, and a lead role would load the agent that coordinates everyone.
+- **Escalation goes straight to the owner**, not up the tree. One hop keeps the worst wait to one timeout and is
+  easy to explain; a three-level tree could otherwise hold a blocking question for three timeouts. Routing still
+  climbs past an unavailable lead, once, when the question is asked.
+- **Default route: the owner.** Nothing changes until the owner sets `askRoute` to `lead` (POST /api/settings).
+  Flip the default after a week of watching what leads answer.
+
+The walk: `src/client/office/acts.js` has a `visit-lead` row, marked `off`, and `actFor(..., { visitLead })` uses it
+for `with_lead`. A later setting turns it on. The walk itself needs a visit pose, a general errand and same-room
+routing first (the proposal lists them).

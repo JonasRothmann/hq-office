@@ -25,7 +25,7 @@ export function renderMachines() {
 
 // The top bar. The oldest wait ticks with the page clock (tick), the rest changes only with the state.
 export function renderStats() {
-  const n = S.open.length;
+  const n = S.open.filter((a) => !a.holder).length;
   const sw = $("sWait");
   setClass(sw, "box urgent " + (n ? "alert" : "ok"));
   setText(sw.querySelector(".count"), n);

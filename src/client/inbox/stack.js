@@ -32,6 +32,7 @@ export function setFilter(f) {
 const GROUPS = [
   ["blocking", "Blocking"],
   ["open", "Open"],
+  ["leads", "With leads"],
   ["updates", "From HQ"],
   ["rooms", "Rooms"],
 ];
@@ -39,7 +40,7 @@ const GROUPS = [
 // under every filter: a filter saved in this browser must never hide one.
 export const shown = () => {
   const reading = readerKey(current);
-  return (S?.inbox ?? []).filter((i) => filter === "all" || i.group === "blocking" || (filter === "rooms" ? i.kind === "room" : i.needsYou || i.key === reading));
+  return (S?.inbox ?? []).filter((i) => filter === "all" || i.group === "blocking" || i.tier === "blocking" || (filter === "rooms" ? i.kind === "room" : i.needsYou || i.group === "leads" || i.key === reading));
 };
 const PRIO = ["URGENT", "HIGH", "", "LOW"];
 
@@ -69,14 +70,17 @@ function askCard(i) {
   const d = drafts.get(a.id) || {}, blocking = i.group === "blocking";
   const prio = PRIO[i.priority] ? `<span class="tag prio p${i.priority}">${PRIO[i.priority]}</span>` : "";
   const lock = blocking && i.locked ? `<span class="tag waits" title="${esc(i.lane)} cannot go on without the answer">${esc(i.lane)} waits</span>` : "";
+  // With a lead: its name, and the time the question comes to the owner if the lead does not answer it first.
+  const lead = i.holder ? `<span class="tag lead" title="${esc(i.holder)} holds this question. It comes to you if they do not answer it.">→ ${esc(i.holder)}</span>` : "";
+  const toLead = i.escalateAt ? `<span class="tolead">to you at ${esc(new Date(i.escalateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}</span>` : "";
   // Short: all of it (the body is at most 200 characters, its links, its images), its options and the send button on
   // the card. Long: a preview and what the reader holds.
   const quick = i.short
     ? `${a.body ? `<div class="sbody md">${markdown(a.body, true)}</div>` : ""}${i.links?.length ? `<div class="slinks">${i.links.map(linkChip).join("")}</div>` : ""}${a.options.length ? `<div class="sopts">${a.options.map((o, n) => `<button class="opt${d.opt === o ? " sel" : ""}" type="button" data-opt="${esc(o)}">${n < 9 ? `<kbd>${n + 1}</kbd>` : ""}${esc(o)}${a.recommended === o ? `<span class="pick">HQ PICK</span>` : ""}</button>`).join("")}</div>` : ""}
        <div class="qfoot"><button class="link" type="button" data-reply>Reply…</button><button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-quick${ready(a, d) ? "" : " disabled"}>${sendLabel(a)}</button></div>`
     : `${i.preview ? `<p class="pv">${esc(i.preview)}</p>` : ""}<div class="shapes">${shapeChips(i)}<span class="open">Open ›</span></div>`;
-  return `<article class="item ask${blocking ? " blocking" : ""}${i.short ? " short" : ""}" data-key="${esc(i.key)}" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
-    <div class="meta">${laneHead(i)}${kindTag(a)}${prio}${lock}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span><span class="timer"></span></div>
+  return `<article class="item ask${blocking ? " blocking" : ""}${i.short ? " short" : ""}${i.holder ? " held" : ""}" data-key="${esc(i.key)}" data-ask="${a.id}" data-lane="${esc(a.lane || "")}" data-created="${a.created_at}" data-due="${a.due || ""}">
+    <div class="meta">${laneHead(i)}${lead}${kindTag(a)}${prio}${lock}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span>${i.holder ? toLead : `<span class="timer"></span>`}</div>
     <h3 class="st">${linkify(i.title)}</h3>${quick}
   </article>`;
 }
@@ -108,7 +112,7 @@ export function render() {
     b.classList.toggle("on", b.dataset.filter === filter);
     b.setAttribute("aria-selected", String(b.dataset.filter === filter));
   }
-  const needs = S.inbox.filter((i) => i.kind === "question").length, rooms = S.inbox.filter((i) => i.kind === "room" && i.unread).length;
+  const needs = S.inbox.filter((i) => i.kind === "question" && !i.holder).length, rooms = S.inbox.filter((i) => i.kind === "room" && i.unread).length;
   setText($("fNeeds"), needs || "");
   setText($("fRooms"), rooms || "");
   const unreadUpdates = items.some((i) => i.kind === "update" && i.unread);
@@ -240,8 +244,9 @@ banner.addEventListener("click", () => { const id = Number(banner.dataset.ask); 
 let seenAsks = null, seenUpdates = null;
 function announce(keys) {
   if (!keys || keys.has("open")) {
-    const ids = new Set(S.open.map((a) => a.id));
-    const fresh = seenAsks ? S.open.filter((a) => !seenAsks.has(a.id)) : [];
+    // Only the asks the owner holds: a lead's question chimes when it reaches the owner (then it is fresh here).
+    const mine = S.open.filter((a) => !a.holder), ids = new Set(mine.map((a) => a.id));
+    const fresh = seenAsks ? mine.filter((a) => !seenAsks.has(a.id)) : [];
     if (fresh.length) {
       chime();
       if (filter === "rooms") setFilter("needs");

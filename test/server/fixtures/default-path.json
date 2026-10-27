@@ -1,0 +1,336 @@
+{
+  "replies": [
+    [
+      "/api/lanes",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/lanes",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/sync",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/asks",
+      200,
+      {
+        "id": 1
+      }
+    ],
+    [
+      "/api/asks",
+      200,
+      {
+        "id": 2
+      }
+    ],
+    [
+      "/api/asks",
+      200,
+      {
+        "id": 3
+      }
+    ],
+    [
+      "/api/ledger/asks",
+      200,
+      {
+        "id": 4
+      }
+    ],
+    [
+      "/api/asks",
+      200,
+      {
+        "id": 5
+      }
+    ],
+    [
+      "/api/asks/1/answer",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/asks/2/answer",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/asks/2/answer",
+      400,
+      {
+        "error": "ask 2 is already answered"
+      }
+    ],
+    [
+      "/api/asks/99/answer",
+      400,
+      {
+        "error": "no ask 99"
+      }
+    ],
+    [
+      "/api/asks/3/withdraw",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/sync",
+      200,
+      {
+        "ok": true
+      }
+    ],
+    [
+      "/api/sync",
+      200,
+      {
+        "ok": true
+      }
+    ]
+  ],
+  "statusBefore": [
+    [
+      "kid",
+      "needs_you",
+      4,
+      1
+    ],
+    [
+      "lead",
+      "hq_turn",
+      0,
+      0
+    ]
+  ],
+  "openOrder": [
+    "B blocking",
+    "A plain one",
+    "C no lane",
+    "D with items",
+    "E secret"
+  ],
+  "inboxBefore": [
+    [
+      "ask:2",
+      "blocking",
+      true
+    ],
+    [
+      "ask:1",
+      "open",
+      true
+    ],
+    [
+      "ask:3",
+      "open",
+      true
+    ],
+    [
+      "ask:4",
+      "open",
+      true
+    ],
+    [
+      "ask:5",
+      "open",
+      true
+    ]
+  ],
+  "statusAfter": [
+    [
+      "kid",
+      "needs_you",
+      2,
+      0
+    ],
+    [
+      "lead",
+      "hq_turn",
+      0,
+      0
+    ]
+  ],
+  "answered": [
+    [
+      3,
+      "C no lane",
+      "withdrawn",
+      "withdrawn by HQ"
+    ],
+    [
+      2,
+      "B blocking",
+      "answered",
+      "done"
+    ],
+    [
+      1,
+      "A plain one",
+      "answered",
+      "x"
+    ]
+  ],
+  "asks": [
+    {
+      "id": 1,
+      "lane": "kid",
+      "kind": "decision",
+      "title": "A plain one",
+      "body": "b",
+      "options": "[\"x\",\"y\"]",
+      "recommended": "x",
+      "status": "answered",
+      "answer": "x",
+      "tier": "nonblocking",
+      "priority": 2,
+      "tier_locked": 0,
+      "secrets": null,
+      "acked": 0
+    },
+    {
+      "id": 2,
+      "lane": "kid",
+      "kind": "decision",
+      "title": "B blocking",
+      "body": null,
+      "options": null,
+      "recommended": null,
+      "status": "answered",
+      "answer": "done",
+      "tier": "blocking",
+      "priority": 1,
+      "tier_locked": 1,
+      "secrets": null,
+      "acked": 0
+    },
+    {
+      "id": 3,
+      "lane": null,
+      "kind": "decision",
+      "title": "C no lane",
+      "body": null,
+      "options": null,
+      "recommended": null,
+      "status": "withdrawn",
+      "answer": "withdrawn by HQ",
+      "tier": "nonblocking",
+      "priority": 2,
+      "tier_locked": 0,
+      "secrets": null,
+      "acked": 1
+    },
+    {
+      "id": 4,
+      "lane": "kid",
+      "kind": "decision",
+      "title": "D with items",
+      "body": null,
+      "options": null,
+      "recommended": null,
+      "status": "open",
+      "answer": null,
+      "tier": "nonblocking",
+      "priority": 2,
+      "tier_locked": 0,
+      "secrets": null,
+      "acked": 0
+    },
+    {
+      "id": 5,
+      "lane": "kid",
+      "kind": "decision",
+      "title": "E secret",
+      "body": null,
+      "options": null,
+      "recommended": null,
+      "status": "open",
+      "answer": null,
+      "tier": "nonblocking",
+      "priority": 2,
+      "tier_locked": 0,
+      "secrets": "[\"API_KEY\"]",
+      "acked": 0
+    }
+  ],
+  "events": [
+    [
+      "hq",
+      "reports to lead",
+      "kid"
+    ],
+    [
+      "hq",
+      "asked: A plain one",
+      "kid"
+    ],
+    [
+      "hq",
+      "asked: B blocking",
+      "kid"
+    ],
+    [
+      "hq",
+      "asked: C no lane",
+      null
+    ],
+    [
+      "hq",
+      "asked: D with items",
+      "kid"
+    ],
+    [
+      "hq",
+      "asked: E secret",
+      "kid"
+    ],
+    [
+      "the owner",
+      "answered \"A plain one\": x",
+      "kid"
+    ],
+    [
+      "the owner",
+      "answered \"B blocking\": done",
+      "kid"
+    ],
+    [
+      "hq",
+      "withdrew ask #3",
+      null
+    ]
+  ],
+  "outbox": [
+    {
+      "text": "HUD answer #1 (kid): \"A plain one\" -> x",
+      "ref": "ask:1",
+      "error": null
+    },
+    {
+      "text": "HUD answer #2 (kid): \"B blocking\" -> done",
+      "ref": "ask:2",
+      "error": null
+    }
+  ],
+  "prompts": [
+    "hq\nHUD answer #1 (kid): \"A plain one\" -> x",
+    "hq\nHUD answer #2 (kid): \"B blocking\" -> done"
+  ]
+}
