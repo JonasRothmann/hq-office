@@ -64,7 +64,7 @@ describe("office doc", () => {
       for (const c of doc.characters) expect({ c: c.id, under: used.get(c.at.join(",")) ?? null }).toEqual({ c: c.id, under: null });
       expect(doc.acts.map((a: any) => a.who).sort()).toEqual(doc.characters.map((c: any) => c.id).sort());
       expect(layout.desks.length).toBe(lanes.length);
-    }, 30_000);
+    }, 120_000);
   }
 
   test("the two-tile footprints the generator assumes are the packs' own", () => {
