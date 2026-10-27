@@ -39,6 +39,14 @@ starts when the next doc adds it. If the sim cannot start it (a held seat, no wa
 and the host gets `cancel` with `{ who, problem, act, refused: true }`. A save loaded with `sim.ecs.load` is checked
 against the lot the same way: a seat whose object is gone is let go, and its holder stands up and steps clear.
 
+## Finishes
+
+A floor or wall finish is `defineObject({ id, kind: "floor" | "wall", color, pattern })`. Patterns are `plain`,
+`planks`, `tiles`, `boards` and `battens`. A wall finish may add `bands` from the floor up, such as a skirting, a
+slatted dado and a rail: `bands: [{ to: 0.1, color: "oak-dark" }, { to: 0.76, color: "oak", pattern: "battens" },
+{ to: 0.8, color: "oak-dark" }]`. Each band shows up to `to` metres above the floor, and the finish shows above the
+last one. A cut wall shows the bands under its kerb.
+
 ## Entries
 
 | Entry | What | Runs in |

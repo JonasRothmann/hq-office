@@ -74,6 +74,11 @@ floors: [{ rect: [2, 2, 6, 5], finish: "starter/oak" }],
 A door or window sits on the wall edge on `side` of tile `at`. A room needs a door to be reachable, and `check.ts`
 says which edge to use when it has none. A gap in a wall merges the room with the outdoors.
 
+A wall finish can carry bands under its plaster (skirting, battens, a rail), listed from the floor up:
+`defineObject({ id: "panelled", kind: "wall", color: "plaster", bands: [{ to: 0.1, color: "oak-dark" }, { to: 0.8,
+color: "oak", pattern: "battens" }] })`. `to` is metres above the floor, each higher than the last. The engine cuts
+the walls and posts at those heights, so no band lies on the wall as a second face.
+
 ## Add a world
 
 Copy `examples/tiny-house.world.js` (examples are for people; the tests use their own copy in `test/fixtures/`, so

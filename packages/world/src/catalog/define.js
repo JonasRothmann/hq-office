@@ -10,7 +10,7 @@ import { lintCoplanar, describePairs } from "../lint/coplanar.js";
 import { WALL_H, WALL_T, SIDES } from "../model/grid.js";
 
 const KINDS = ["object", "opening", "floor", "wall"];
-const PATTERNS = ["plain", "planks", "tiles", "boards"];
+const PATTERNS = ["plain", "planks", "tiles", "boards", "battens"];
 const MAX_SIZE = 6; // metres: anything larger is almost certainly centimetres
 
 /**
@@ -40,7 +40,9 @@ const MAX_SIZE = 6; // metres: anything larger is almost certainly centimetres
  * @property {number} [head]    an opening's top above the floor
  * @property {boolean} [passable] whether characters walk through an opening
  * @property {string} [color]   a finish's colour token
- * @property {"plain"|"planks"|"tiles"|"boards"} [pattern]
+ * @property {"plain"|"planks"|"tiles"|"boards"|"battens"} [pattern]
+ * @property {{ to: number, color: string, pattern?: string }[]} [bands]  a wall finish's bands from the floor up:
+ *   each shows up to `to` metres above the floor top; the finish's own colour and pattern show above the last
  */
 
 /** @stability stable  @returns {ObjectDef} */
@@ -72,7 +74,10 @@ export function definePack({ id, objects, palette = { light: {}, dark: {} } }) {
   const local = (c) => (typeof c === "string" && own.includes(c) ? `${id}/${c}` : c);
   return Object.freeze({
     id, palette,
-    objects: objects.map((o) => Object.freeze({ ...o, id: o.id.includes("/") ? o.id : `${id}/${o.id}`, pack: id, tokens: own, ...(o.color ? { color: local(o.color) } : {}) })),
+    objects: objects.map((o) => Object.freeze({
+      ...o, id: o.id.includes("/") ? o.id : `${id}/${o.id}`, pack: id, tokens: own, ...(o.color ? { color: local(o.color) } : {}),
+      ...(Array.isArray(o.bands) ? { bands: o.bands.map((b) => (b && typeof b === "object" ? { ...b, color: local(b.color) } : b)) } : {}),
+    })),
   });
 }
 
@@ -167,6 +172,7 @@ function packProblems(pack) {
       if (typeof o.color !== "string") out.push(problem("finish.color", at, "a finish needs a colour", `add color: "plaster" (a palette token) or a hex colour`));
       else colour(o.color, at, "");
       if (o.pattern && !PATTERNS.includes(o.pattern)) out.push(problem("finish.pattern", at, `pattern '${o.pattern}' is unknown`, `use one of ${PATTERNS.join(", ")}`));
+      if (o.bands !== undefined) checkBands(o, at, colour, out);
       return;
     }
     if (typeof o.build !== "function") { out.push(problem("object.build", at, "no build(k) function", "add build(k) { k.box(\"part\", [w, h, d], [x, y, z], \"wood\"); }")); return; }
@@ -183,6 +189,22 @@ function packProblems(pack) {
     for (const line of describePairs(lintCoplanar(prims))) out.push(problem("prim.coplanar", at, line, "they will z-fight (flicker); move one by at least 2 mm along the normal, or make a flat part a box at least 1 cm thick that stands on the other"));
   });
   return out;
+}
+
+function checkBands(o, at, colour, out) {
+  const example = `bands: [{ to: 0.1, color: "oak-dark" }, { to: 0.8, color: "oak", pattern: "battens" }]`;
+  if (o.kind !== "wall") { out.push(problem("finish.bands", at, "only a wall finish has bands", "remove bands, or make it kind: \"wall\"")); return; }
+  if (!Array.isArray(o.bands)) { out.push(problem("finish.bands", at, "bands is not a list", `write ${example}, from the floor up`)); return; }
+  let last = 0;
+  o.bands.forEach((b, i) => {
+    const where = `${at} band ${i}`;
+    if (!b || typeof b !== "object") { out.push(problem("finish.bands", where, `${JSON.stringify(b)} is not a band`, `write { to: 0.8, color: "oak" }: to is metres above the floor`)); return; }
+    if (typeof b.to !== "number" || !(b.to > last && b.to < WALL_H)) out.push(problem("finish.bands", where, `to ${JSON.stringify(b.to)} is not above the band under it (${last} m) and below the wall's top (${WALL_H} m)`, "list bands from the floor up, each to higher than the last, in metres (80 cm is 0.8)"));
+    else last = b.to;
+    if (typeof b.color !== "string") out.push(problem("finish.bands", where, "a band needs a colour", `add color: "oak" (a palette token) or a hex colour`));
+    else colour(b.color, where, "");
+    if (b.pattern !== undefined && !PATTERNS.includes(b.pattern)) out.push(problem("finish.pattern", where, `pattern '${b.pattern}' is unknown`, `use one of ${PATTERNS.join(", ")}`));
+  });
 }
 
 function checkObject(o, prims, at, out) {

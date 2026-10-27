@@ -44,7 +44,7 @@ export function primsToGeometries(prims, palette) {
     return buckets.get(key);
   };
   for (const p of prims) {
-    const base = p.at[1];
+    const base = p.base ?? p.at[1]; // a wall cut at its bands darkens from the wall's foot, not each stretch's
     const shade = (v, n) => (p.finish === "glow" || Math.abs(n[1]) > 0.5 ? 1 : FOOT_DARK + (1 - FOOT_DARK) * Math.min(1, (v[1] - base) / FOOT));
     if (p.shape === "box") {
       const c = corners(p);

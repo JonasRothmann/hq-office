@@ -918,7 +918,7 @@ instancing, per-room light, and the HQ office itself.
 ## 12. Migration order
 
 The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
-above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Step 2 is done; step 3 has not
+above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Steps 2 and 3 are done; step 4 has not
 started.
 
 1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
@@ -951,8 +951,8 @@ started.
    - `acts.js`: the act per status, one row each. Working types at the desk; waiting on CI leans back there; a
      question for the owner stands up beside the desk and waves; done and parked go to the break area (the hall
      at the studio stage), to a spot picked by the lane's name, so a worker keeps its spot.
-   - `placeholder/`: a pack of plain blocks (`placeholder/sofa`, `tea-table`, `kitchenette`, `bookshelf`) with
-     each piece's footprint and height. Step 3 replaces each with `japandi/<piece>`.
+   - `placeholder/`: a pack of plain blocks with each piece's footprint and height. Step 3 replaced it with
+     `japandi/` and deleted it.
 
    Ids: `desk:<lane>`, `chair:<lane>`, `lane:<lane>`, and `<piece>:<room>` for the rest. A lane that leaves keeps
    its desk and chair, empty, until another lane takes that seat. A worker spawns on the tile beside its desk.
@@ -964,9 +964,31 @@ started.
    The generator found a layout bug: a campus's second column of wings had no door. Each column's hall now ends
    in a front door. One engine change came with it: the coplanar lint skips faces whose boxes are apart (the package's
    `CHANGELOG.md`, Unreleased), which made the 24-view lint of a 24-desk office 3 s instead of 16 s.
-3. **The Japandi pack**, after the world lanes now in `src/client/world/` merge: `furniture.js` and `look.js`
-   reshaped into one `defineObject` file per piece, with a `{ light, dark }` palette, checked with `check.ts`. Until
-   then the generator places the starter pack's objects.
+3. **The Japandi pack**: `furniture.js` and `look.js` reshaped into one `defineObject` file per piece, with a
+   `{ light, dark }` palette, checked with `check.ts`.
+
+   **Done.** The pack is `src/client/office/japandi/` (app content, outside the package), ids `japandi/<piece>`:
+   desk, chair, sofa, tea table, kitchenette, bookshelf, sideboard, washi and ceramic pendants, floor lamp, fig,
+   snake plant, monstera, a floor vase with branches, linen and boro rugs, a tatami lounge, a shoji screen, a tea
+   corner with a scroll, the HQ workbench, a noren doorway, a steel window, oak, stone and terrazzo floors, charcoal
+   cladding, and plaster with the wall band. Colours are in `look/palette.js`, the same materials by night with warmer
+   light. The generator uses only this pack. The old renderer's geometry was copied as ideas, not imported.
+   - The wall band needed one engine change: a wall finish may carry `bands` (`[{ to, color, pattern? }]` from the
+     floor up), and a `battens` pattern. The plaster has a smoked skirting, oak battens and a smoked rail at the
+     window sills (0.8 m). A cut wall shows the skirting and battens. See the package's `CHANGELOG.md`.
+   - Rugs and pendants do not block (`blocks: false`), so they lie under desks and hang over them. Every rug piece
+     leaves out its bottom face: it would share the floor plane with a desk leg's. A washi pendant has a 2×2
+     footprint so its shade hangs over the middle of a facing pair of desks; a ceramic one is 2×1, over one desk.
+   - Pieces in a corner keep within 0.92 m of their centre: a wall's face is 0.075 m inside the tile, and the tatami
+     dais stops under a cut wall's top (0.41 m) so the two never share a plane.
+   - Furniture changes reachability. In a team room the chairs close rows 1 and 4, so the back row and the east
+     column stay clear. A break area's idle spots are now only the tiles reachable from a way into it.
+   - The lab: `bun packages/world/tools/serve.ts`, then
+     `/?world=/src/client/office/lab/office-12.world.js` (`&lanes=N`, `&status=S`). Shots are
+     `docs/screens/office-engine-*.jpg`.
+   - Cost: a 12-lane lot is about 2,200 primitives, 450 draw calls and 75k triangles. The bands make a wall four
+     boxes instead of one, which makes the coplanar lint about a third slower. Instancing (step 5) is where to win
+     the draw calls back.
 4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
    `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
    back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the

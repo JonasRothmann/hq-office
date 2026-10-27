@@ -15,7 +15,7 @@ const rows = catalog.list().map((o: any) => ({
   id: o.id, kind: o.kind,
   ...(o.kind === "object" ? { footprint: o.footprint, height: o.height, blocks: o.blocks, slots: Object.fromEntries(Object.entries(o.slots).map(([k, s]: any) => [k, `${s.clip}, facing ${s.facing}`])), anchors: Object.keys(o.anchors) } : {}),
   ...(o.kind === "opening" ? { width: o.width, sill: o.sill, head: o.head, passable: o.passable } : {}),
-  ...(o.kind === "floor" || o.kind === "wall" ? { color: o.color, pattern: o.pattern } : {}),
+  ...(o.kind === "floor" || o.kind === "wall" ? { color: o.color, pattern: o.pattern, ...(o.bands ? { bands: o.bands } : {}) } : {}),
   tags: o.tags,
 }));
 if (args.includes("--json")) console.log(JSON.stringify(rows, null, 2));

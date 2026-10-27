@@ -40,6 +40,17 @@ function patternTexture(pattern) {
     }
   } else if (pattern === "boards") {
     for (let i = 0; i < 8; i++) { g.fillStyle = "rgba(20,30,40,0.22)"; g.fillRect(0, (i * S) / 8, S, 2); }
+  } else if (pattern === "battens") {
+    // upright battens 4 cm apart (u runs along the wall), each a slightly different tone, with dark gaps between
+    const n = 25, w = S / n;
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = `rgba(0,0,0,${[0.0, 0.06, 0.03, 0.08, 0.02][i % 5]})`;
+      g.fillRect(i * w, 0, w, S);
+      g.fillStyle = "rgba(255,255,255,0.18)";
+      g.fillRect(i * w + 1.2, 0, 0.8, S);
+      g.fillStyle = "rgba(25,15,5,0.62)";
+      g.fillRect(i * w, 0, 1.2, S);
+    }
   } else if (pattern === "tiles") {
     g.fillStyle = "rgba(0,0,0,0.18)";
     for (let i = 0; i < 2; i++) { g.fillRect(0, (i * S) / 2, S, 2); g.fillRect((i * S) / 2, 0, 2, S); }
