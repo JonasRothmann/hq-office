@@ -103,10 +103,10 @@ test.skipIf(!chromeFound)("tiers: blocking group first, the lock, and the owner'
   await page.evaluate(`(() => { const b = document.createElement("button"); b.className = "btn-s tier-set"; b.dataset.tier = "nonblocking"; ${lockedCard}.querySelector(".pop").append(b); b.click(); })()`);
   await until(`/locked as blocking/.test(document.querySelector(".toast")?.textContent ?? "")`);
   expect((await (await fetch(`${server.base}/api/state`)).json()).open.find((a: any) => a.id === locked).tier).toBe("blocking");
-  // The owner promotes the ledger's question from its menu (E): it joins the blocking group, unlocked, and says who moved it.
+  // The owner promotes the ledger's question from its menu (M): it joins the blocking group, unlocked, and says who moved it.
   await openAsk(askId);
   await until(`!!${card()}`);
-  await page.evaluate(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }))`);
+  await page.evaluate(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "m", bubbles: true }))`);
   await until(`!!${card()}.querySelector(".tiermenu[open] .tier-set")`);
   await page.evaluate(`${card()}.querySelector(".tier-set").click()`);
   await until(`(${groups})[0] === "Blocking 2"`);

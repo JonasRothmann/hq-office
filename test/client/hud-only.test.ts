@@ -59,6 +59,8 @@ test.skipIf(!chromeFound)("?world=off: the question cards render and an answer g
   expect((await state()).answered.find((a: any) => a.title === "Ship the thing?")?.answer).toBe("Yes");
   // the reader moves on to the next question: the short one, which the stack answers on its card too
   await until(`document.querySelector("#reader .askview")?.dataset.lane === "charlie"`);
+  // Right after an answer no send is ready (a stray second press must not answer it); then it is.
+  await until(`!!document.querySelector('#hud .ask.short[data-lane="charlie"] [data-quick]:not([disabled])')`);
   await page.evaluate(`document.querySelector('#hud .ask.short[data-lane="charlie"] [data-quick]').click()`);
   await until(`document.querySelectorAll("#hud .ask").length === 0`);
   expect((await state()).answered.find((a: any) => a.title === "Approve the deploy")?.answer).toBe("done");
