@@ -24,13 +24,17 @@ function webgl() {
 let world = null;
 
 // The free part of the canvas, in CSS pixels: right of the question column and below the status pill. On a narrow
-// screen the canvas is a strip above the page and only its foot is covered (by the pill).
+// screen the canvas is a strip above the page and only its foot is covered (by the pill). The new office also keeps
+// right of the reader while it is open (D17 left this for the engine, D18); the classic one lets it float over.
 function insets() {
   if (narrow.matches) return { left: 0, top: 0, right: 0, bottom: 28 };
   const c = canvas.getBoundingClientRect();
   const desk = document.querySelector(".desk")?.getBoundingClientRect();
   const top = document.querySelector(".top")?.getBoundingClientRect();
-  return { left: desk ? Math.max(0, desk.right - c.left) : 0, top: top ? Math.max(0, top.bottom - c.top) : 0, right: 0, bottom: 0 };
+  const reader = office === "new" ? document.getElementById("reader") : null;
+  const open = reader && !reader.hidden ? reader.getBoundingClientRect() : null;
+  const right = Math.max(desk?.right ?? 0, open?.width ? open.right : 0);
+  return { left: Math.max(0, right - c.left), top: top ? Math.max(0, top.bottom - c.top) : 0, right: 0, bottom: 0 };
 }
 
 // HQ's desk in the suite: asleep while the server finds no HQ it can type into, else what its own lane says.
@@ -77,7 +81,7 @@ async function start() {
   world.setPaused(document.documentElement.classList.contains("roomopen")); // a room opened before this module ran
   const refit = () => world.setInsets(insets());
   const ro = new ResizeObserver(refit);
-  for (const sel of [".desk", ".top"]) { const el = document.querySelector(sel); if (el) ro.observe(el); }
+  for (const sel of [".desk", ".top", "#reader"]) { const el = document.querySelector(sel); if (el) ro.observe(el); }
   addEventListener("resize", refit);
   narrow.addEventListener("change", refit);
   render(first);

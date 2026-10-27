@@ -217,6 +217,12 @@ made while building it:
   in the part the stack and the top bar leave free, and `fit()` fits there. The old renderer had them; the engine's
   `offset` alone could not be changed after creation. `pause(on)`: a phone's reader covers the office, and nothing
   steps or draws until it closes.
+- **The new office keeps right of the open reader.** D17 let the reader float over the office until the engine
+  came. With the reader open, the inset is the reader's right edge, and the office eases there and fits; when it
+  closes, the office eases back. The first shots showed why: with the reader floating, more than half of a 12-lane
+  office and half its desk chips were under it. The engine's three zoom steps are coarse, so a 12-lane office is
+  wider than the space right of the reader at the far zoom and runs off the right edge a little. The classic
+  renderer keeps D17's behaviour.
 - **Kept from the classic renderer.** The subagent balls are `world/balls.js`'s `Balls`, on desk frames attached to
   `desk:<lane>`; they move to `office-view/` when `world/` goes. Picking maps `lane:`, `desk:` and `chair:` ids back
   to lanes; an empty desk is no one's. Hover lights only a lane's desk or chair. The selected worker gets a ring on

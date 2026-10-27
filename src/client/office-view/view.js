@@ -144,10 +144,12 @@ export function mountOffice(canvas, opts = {}) {
   }
 
   function setInsets(i) {
-    insets = { ...insets, ...i };
+    const next = { ...insets, ...i };
+    if (JSON.stringify(next) === JSON.stringify(insets)) return;
+    insets = next;
     if (!world) return;
     world.camera.setInsets(insets);
-    if (fitting) world.camera.fit();
+    if (fitting) world.camera.fit({ ease: true });
   }
 
   const rotate = (dir) => world?.camera.rotate(dir);
