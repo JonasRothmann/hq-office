@@ -324,7 +324,8 @@ export function pendant(kit, glow, L, x, z, { y = 1.75, kind = "bell", top = 2.9
     kit.add(g, color ?? S.forest, x, y, z);
     kit.cyl(0.035, 0.08, color ?? S.forest, x, y + 0.2, z, { seg: 8 });
     glow.cyl(0.2, 0.01, S.paper, x, y + 0.004, z, { seg: 14 });
-    glow.sphere(0.06, S.paper, x, y + 0.03, z, { detail: 1 });
+    // the bulb hangs a little below the rim, so the camera above still sees the lamp is on
+    glow.sphere(0.06, S.paper, x, y - 0.09, z, { detail: 1 });
   } else if (kind === "bell") {
     kit.cyl(0.19, 0.18, S.oak, x, y, z, { top: 0.06, seg: 12, open: true });
     kit.cyl(0.06, 0.03, S.oakDark, x, y + 0.17, z, { seg: 8 });

@@ -52,7 +52,10 @@ function rowan(kit, x, y, z) {
   for (let k = 0; k < 7; k++) { const a = k * 1.7; kit.sphere(0.06, "#c8443a", x + Math.cos(a) * 0.55, y + 1.45 + (k % 3) * 0.3, z + Math.sin(a) * 0.45, { detail: 0 }); }
 }
 
-export function garden(kit, lamps, p, L, slab, pools = null) {
+// `trees` ({ n, w }: Kits) takes the tree rows behind the back and the left walls, so the room can hide a row that
+// comes round in front of the building when the view turns.
+export function garden(kit, lamps, p, L, slab, pools = null, trees = null) {
+  const north = trees?.n ?? kit, west = trees?.w ?? kit;
   const y = -slab;
   const b = p.bounds;
   const S = L.studio;
@@ -65,10 +68,10 @@ export function garden(kit, lamps, p, L, slab, pools = null) {
 
   // birches behind and to the left, pines further back
   let i = 0;
-  for (let x = b.minX - 2.5; x <= b.maxX + 1.5; x += 2.9, i++) birch(kit, x + jitter(i) * 1.2, y, b.minZ - 2.0 - Math.abs(jitter(i + 7)) * 2.2, 0.95 + jitter(i + 3) * 0.3, i);
-  for (let x = b.minX - 1; x <= b.maxX + 3; x += 4.7, i++) pine(kit, x + jitter(i) * 2, y, b.minZ - 6.2 + jitter(i + 1) * 1.5, 1.1 + jitter(i + 2) * 0.4);
-  for (let z = b.minZ + 0.8; z <= b.maxZ + 1; z += 3.1, i++) birch(kit, b.minX - 2.2 - Math.abs(jitter(i)) * 1.5, y, z + jitter(i + 1), 0.9 + jitter(i + 4) * 0.3, i);
-  for (let z = b.minZ + 2; z <= b.maxZ + 3; z += 4.4, i++) pine(kit, b.minX - 5.8 + jitter(i) * 1.2, y, z, 1 + jitter(i + 2) * 0.3);
+  for (let x = b.minX - 2.5; x <= b.maxX + 1.5; x += 2.9, i++) birch(north, x + jitter(i) * 1.2, y, b.minZ - 2.0 - Math.abs(jitter(i + 7)) * 2.2, 0.95 + jitter(i + 3) * 0.3, i);
+  for (let x = b.minX - 1; x <= b.maxX + 3; x += 4.7, i++) pine(north, x + jitter(i) * 2, y, b.minZ - 6.2 + jitter(i + 1) * 1.5, 1.1 + jitter(i + 2) * 0.4);
+  for (let z = b.minZ + 0.8; z <= b.maxZ + 1; z += 3.1, i++) birch(west, b.minX - 2.2 - Math.abs(jitter(i)) * 1.5, y, z + jitter(i + 1), 0.9 + jitter(i + 4) * 0.3, i);
+  for (let z = b.minZ + 2; z <= b.maxZ + 3; z += 4.4, i++) pine(west, b.minX - 5.8 + jitter(i) * 1.2, y, z, 1 + jitter(i + 2) * 0.3);
 
   // front doors: outer walls with a door on the camera's side of the default view
   const fronts = p.walls.filter((w) => w.door && (!w.a || !w.b) && w.dir === "x" && w.z === b.maxZ);

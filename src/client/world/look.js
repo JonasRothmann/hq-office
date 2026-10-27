@@ -94,9 +94,9 @@ const LOOK = {
   },
   // A lawn under the moon, blue-lit and never black: `moon` is added to everything outdoors (ground, lot, courts).
   night: {
-    bg: "#2c3d55", ground: { base: "#6a8a80", alt: "#607f75", kind: "grass" },
+    bg: "#26374a", ground: { base: "#55805c", alt: "#4c7653", kind: "grass" },
     court: { base: "#6a6f78", alt: "#60656e", kind: "raked" }, path: "#4a4f5a",
-    moon: "#4a6a94",
+    moon: "#3c5a80",
     light: { amb: "#3e5898", ambI: 1.0, sky: "#4a64a8", ground: "#1b2030", hemi: 0.45, key: "#8aa0d8", keyI: 0.35, room: 0.6, shadow: 0.0 },
   },
 };

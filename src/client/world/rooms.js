@@ -79,10 +79,21 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     group.add(mesh);
   }
   let gardenGlow = null;
+  // the garden's tree rows, each with the outer walls it stands behind: a row whose walls are cut is on the camera's
+  // side of the building and would hide the rooms, so it is left out of that view
+  const treeRows = [];
+  const outerWalls = (side) => p.walls.flatMap((w, i) => ((!w.a || !w.b) && (side === "n" ? w.dir === "x" && w.z === p.bounds.minZ : w.dir === "z" && w.x === p.bounds.minX) ? [i] : []));
   {
-    const lot = new Kit(), lamps = new Kit(), pools = new Kit();
-    garden(lot, lamps, p, L, SLAB, pools);
-    group.add(lot.mesh(keep(roomMaterial({ room: outdoor }))));
+    const lot = new Kit(), lamps = new Kit(), pools = new Kit(), trees = { n: new Kit(), w: new Kit() };
+    garden(lot, lamps, p, L, SLAB, pools, trees);
+    const lotMat = keep(roomMaterial({ room: outdoor }));
+    group.add(lot.mesh(lotMat));
+    for (const side of ["n", "w"]) {
+      if (trees[side].empty) continue;
+      const mesh = trees[side].mesh(lotMat);
+      group.add(mesh);
+      treeRows.push({ mesh, walls: outerWalls(side) });
+    }
     if (L.night && !pools.empty) {
       const m = new THREE.Mesh(pools.geometry({ ownUv: true }), keep(new THREE.MeshBasicMaterial({ map: glowTexture("rgba(255,205,140,0.45)"), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
       m.renderOrder = 1;
@@ -211,7 +222,9 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     if (current) group.remove(current);
     current = perRot.get(r);
     group.add(current);
-    return current.userData.cuts;
+    const cuts = current.userData.cuts;
+    for (const row of treeRows) row.mesh.visible = !(row.walls.length && row.walls.filter((i) => cuts[i]).length * 2 > row.walls.length);
+    return cuts;
   };
 
   // The walls above the kerbs, squashed toward the floor (1 = full height): the world lowers them during a turn.
