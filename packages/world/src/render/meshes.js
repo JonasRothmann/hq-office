@@ -35,11 +35,11 @@ class Bucket {
 
 const linear = (hex) => { _c.set(hex); return [_c.r, _c.g, _c.b]; };
 
-// Map "finish|pattern" → BufferGeometry.
+// Map "finish|pattern" (or "finish|pattern|outdoor", for parts marked outdoor) → BufferGeometry.
 export function primsToGeometries(prims, palette) {
   const buckets = new Map();
-  const bucket = (finish, pattern) => {
-    const key = `${finish}|${pattern && pattern !== "plain" ? pattern : ""}`;
+  const bucket = (finish, pattern, outdoor) => {
+    const key = `${finish}|${pattern && pattern !== "plain" ? pattern : ""}${outdoor ? "|outdoor" : ""}`;
     if (!buckets.has(key)) buckets.set(key, new Bucket());
     return buckets.get(key);
   };
@@ -54,13 +54,13 @@ export function primsToGeometries(prims, palette) {
         const rgb = linear(resolveColor(style?.color ?? p.color, palette));
         const n = apply3(p.m, f.n);
         const [a, b, cc, d] = f.quad.map((k) => c[k]);
-        const B = bucket(p.finish, style?.pattern);
+        const B = bucket(p.finish, style?.pattern, p.outdoor);
         B.tri(a, b, cc, n, rgb, shade);
         B.tri(a, cc, d, n, rgb, shade);
       }
     } else if (p.shape === "cyl") {
       const rgb = linear(resolveColor(p.color, palette));
-      const B = bucket(p.finish);
+      const B = bucket(p.finish, null, p.outdoor);
       const h = p.size[1], seg = p.seg;
       const pt = (r, y, i) => { const a = (i / seg) * Math.PI * 2; const v = apply3(p.m, [Math.cos(a) * r, y, Math.sin(a) * r]); return [v[0] + p.at[0], v[1] + p.at[1], v[2] + p.at[2]]; };
       const top = apply3(p.m, [0, 1, 0]), bottom = apply3(p.m, [0, -1, 0]);
@@ -81,13 +81,19 @@ export function primsToGeometries(prims, palette) {
   return out;
 }
 
+// The material for a bucket key ("finish|pattern", with "|outdoor" for outdoor parts). outdoor: every part is.
+export function materialFor(materials, key, outdoor = false) {
+  const [finish, pattern, place] = key.split("|");
+  return materials.get(finish, pattern || null, { outdoor: outdoor || place === "outdoor" });
+}
+
 // One group of meshes for a primitive list.
 export function primsToGroup(prims, palette, materials, { cast = true, receive = true, name = "" } = {}) {
   const group = new THREE.Group();
   group.name = name;
   for (const [key, geo] of primsToGeometries(prims, palette)) {
-    const [finish, pattern] = key.split("|");
-    const mesh = new THREE.Mesh(geo, materials.get(finish, pattern || null));
+    const [finish] = key.split("|");
+    const mesh = new THREE.Mesh(geo, materialFor(materials, key));
     mesh.castShadow = cast && finish !== "glass";
     mesh.receiveShadow = receive && finish !== "glow";
     mesh.userData.finish = finish;

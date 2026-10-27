@@ -7,8 +7,10 @@
 
 /** @typedef {{ shape: "box"|"cyl", part: string, size: number[], at: number[], m: number[], color: string,
  *              finish: "matte"|"glow"|"glass", r?: number, top?: number, seg?: number, owner?: string,
- *              omit?: string[], faces?: Record<string, { color: string, pattern?: string }>, base?: number }} Primitive
- *  base: the height the foot darkening counts from (default at[1]). */
+ *              omit?: string[], faces?: Record<string, { color: string, pattern?: string }>, base?: number,
+ *              outdoor?: boolean }} Primitive
+ *  base: the height the foot darkening counts from (default at[1]). outdoor: drawn outdoors (the ground): the lamps,
+ *  which are indoors, never light it, and it fades with the scenery. */
 
 // 3×3 rotation matrices, row-major.
 export const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];

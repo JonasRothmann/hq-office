@@ -39,6 +39,29 @@ starts when the next doc adds it. If the sim cannot start it (a held seat, no wa
 and the host gets `cancel` with `{ who, problem, act, refused: true }`. A save loaded with `sim.ecs.load` is checked
 against the lot the same way: a seat whose object is gone is let go, and its holder stands up and steps clear.
 
+## Scenery
+
+The land round a lot (a garden, a valley, a town) is scenery: data drawn round the lot, never walked, picked or
+linted with it. Pass it as `createWorld(canvas, world, { scenery })`, give the world a `scenery` field, or call
+`world.setScenery(s)` when the land changes. Its pieces are objects of kind `"scenery"` (no footprint), placed freely:
+
+```js
+world.setScenery({
+  pieces: [{ type: "land/birch", at: [-3, 0, 4], ry: 0.6, s: 1.1, tint: "#e6e6e6", shadow: true }],
+  fields: [{ xs, zs, h, color, hole: { minX: 0, minZ: 0, maxX: lot.w, maxZ: lot.d } }],   // a height field
+  strips: [{ points: [[x, y, z, halfWidth], ...], color: "land/water", finish: "glass" }],  // a river, a path
+  movers: [{ type: "land/car", route: [[x, y, z], ...], speed: 4, at: [0, 30], tint: ["land/car-1", "land/car-4"] }],
+  fade: { box: { minX: -8, minZ: -8, maxX: 40, maxZ: 30 }, from: 34, to: 60 },
+  shade: { minX: -8, minZ: -8, maxX: 40, maxZ: 30 }, ground: true,
+});
+```
+
+Pieces of one type and params are one instanced mesh per material; a `tint` multiplies a copy's colours, so a piece
+is white where its tint should show. Movers go round their closed loop at their speed and cast no shadows. They are
+ambient motion: they draw at `idleFps`, and at `idleFps` 0 they stand still. Everything outdoors, the lot's own ground
+too, takes no light from lamps (they are indoors, and shine through walls) and fades into the background past `fade`.
+`checkScenery(scenery, catalog)` names each mistake and its fix.
+
 ## Finishes
 
 A floor or wall finish is `defineObject({ id, kind: "floor" | "wall", color, pattern })`. Patterns are `plain`,
@@ -99,6 +122,7 @@ GPU is needed. The tools find three.js through `--three`, `HQ_WORLD_THREE`, a `n
 - Shadow filtering is fixed to the world, never to the screen.
 - No two same-facing faces overlap in a plane, in any rotation, wall mode or turn; `check.ts` fails if a pack adds one.
 - Frames are drawn at display rate while the camera or a character moves, and not at all while the view is still.
+  Moving scenery draws at `idleFps` too, and holds still at 0.
   A clip looping in place (typing, breathing) is not motion: it draws at `idleFps` (default 0, never). The shadow
   map is redrawn only when a character moved, the cut walls changed, or an edit, theme or time change asked.
 - A system that throws is logged once with its name and switched off; the loop and the other systems keep running.

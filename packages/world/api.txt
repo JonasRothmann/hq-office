@@ -20,6 +20,7 @@
 @hq/world buildPrims
 @hq/world cameraPose
 @hq/world checkPack
+@hq/world checkScenery
 @hq/world createCamera
 @hq/world createCatalog
 @hq/world createEcs
@@ -43,10 +44,12 @@
 @hq/world lintViews
 @hq/world lotMap
 @hq/world lotPrims
+@hq/world moverPlaces
 @hq/world objectPrims
 @hq/world panCamera
 @hq/world parseTime
 @hq/world planAct
+@hq/world planScenery
 @hq/world problem
 @hq/world project
 @hq/world rect
@@ -81,6 +84,7 @@
 @hq/world/model buildPrims
 @hq/world/model cameraPose
 @hq/world/model checkPack
+@hq/world/model checkScenery
 @hq/world/model createCamera
 @hq/world/model createCatalog
 @hq/world/model createEcs
@@ -103,9 +107,11 @@
 @hq/world/model lintViews
 @hq/world/model lotMap
 @hq/world/model lotPrims
+@hq/world/model moverPlaces
 @hq/world/model objectPrims
 @hq/world/model panCamera
 @hq/world/model planAct
+@hq/world/model planScenery
 @hq/world/model problem
 @hq/world/model project
 @hq/world/model rect

@@ -14,9 +14,12 @@ import { createDriver } from "../view/driver.js";
 import { canvasSize } from "../view/size.js";
 import { createStage } from "../render/stage.js";
 import { createMaterials } from "../render/materials.js";
-import { primsToGroup, primsToGeometries } from "../render/meshes.js";
+import { primsToGroup, primsToGeometries, materialFor } from "../render/meshes.js";
 import { buildCharacter } from "../render/character.js";
 import { planBatches, staleTypes, typesOf, hungOn, shows } from "../view/batches.js";
+import { checkScenery, planScenery } from "../view/scenery.js";
+import { buildScenery } from "../render/scenery.js";
+import { WorldError, errorsOf } from "../model/problems.js";
 
 const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
 
@@ -35,6 +38,8 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
+ * @property {import("../view/scenery.js").Scenery|null} [scenery]   the land round the lot (default: the world's own
+ *                                           `scenery`, if it carries one); setScenery changes it
  * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number, oldSizing?: boolean }} [debug]
  *   reproduce the old defects, for comparisons
  */
@@ -77,7 +82,12 @@ export function createWorld(canvas, world, opts = {}) {
   const materials = createMaterials({ screenNoise: !!debug.screenNoise });
   const { scene, renderer } = stage;
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
-  const shadowBox = () => ({ min: [-2, 0, -2], max: [driver.lot.w + 2, 3.2, driver.lot.d + 2] });
+  // the sun's shadows cover the lot and 2 m round it, and the scenery's `shade` (a garden beside the lot)
+  let scenery = null, sceneryView = null;
+  const shadowBox = () => {
+    const s = scenery?.shade;
+    return { min: [Math.min(-2, s?.minX ?? 0), 0, Math.min(-2, s?.minZ ?? 0)], max: [Math.max(driver.lot.w + 2, s?.maxX ?? 0), 3.2, Math.max(driver.lot.d + 2, s?.maxZ ?? 0)] };
+  };
   stage.setShadowBox(shadowBox());
   function applySize(s) {
     if (s.style && !deviceBoxes && !opts.size) { canvas.style.width = `${s.style.w}px`; canvas.style.height = `${s.style.h}px`; }
@@ -95,7 +105,9 @@ export function createWorld(canvas, world, opts = {}) {
     if (key === archKey) return;
     if (!archCache.has(key)) {
       if (archCache.size > 24) clearArch();
-      archCache.set(key, primsToGroup(buildArchitecture(driver.lot, driver.catalog, cut), palette, materials, { name: "architecture" }));
+      // scenery that draws its own ground replaces the engine's land round the lot
+      const prims = buildArchitecture(driver.lot, driver.catalog, cut).filter((p) => !(scenery?.ground && p.part === "land"));
+      archCache.set(key, primsToGroup(prims, palette, materials, { name: "architecture" }));
     }
     if (arch) scene.remove(arch);
     arch = archCache.get(key);
@@ -158,8 +170,8 @@ export function createWorld(canvas, world, opts = {}) {
     const made = [];
     if (plan.batches.has(type)) {
       for (const [key, geo] of primsToGeometries(buildPrims(objectOf(ids[0]).def), palette)) {
-        const [finish, pattern] = key.split("|");
-        const mesh = new THREE.InstancedMesh(geo, materials.get(finish, pattern || null), ids.length);
+        const [finish] = key.split("|");
+        const mesh = new THREE.InstancedMesh(geo, materialFor(materials, key), ids.length);
         ids.forEach((id, i) => mesh.setMatrixAt(i, matrixOf(objectOf(id))));
         mesh.computeBoundingSphere(); // round every instance, hidden or not, so one shown later is never culled
         mesh.castShadow = finish !== "glass";
@@ -277,6 +289,7 @@ export function createWorld(canvas, world, opts = {}) {
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     renderSync();
+    sceneryView?.update(driver.sceneryTime);
     emit("frame", { pose });
     stats.renders++;
     if (renderer.shadowMap.needsUpdate) stats.shadowRedraws++;
@@ -305,10 +318,33 @@ export function createWorld(canvas, world, opts = {}) {
 
   function applyTime() {
     stage.setTime(time, palette);
+    materials.setFade(scenery?.fade ?? null, palette.bg);
     driver.invalidate({ shadows: true });
   }
 
-  applyTime();
+  // --- scenery: the land round the lot, drawn in the theme's colours; the driver keeps its clock
+  function drawScenery() {
+    if (sceneryView) { scene.remove(sceneryView.group); sceneryView.dispose(); sceneryView = null; }
+    if (!scenery) return;
+    sceneryView = buildScenery(planScenery(scenery), driver.catalog, palette, materials);
+    sceneryView.update(driver.sceneryTime);
+    scene.add(sceneryView.group);
+  }
+  function setScenery(next) {
+    if (next) {
+      const errors = errorsOf(checkScenery(next, driver.catalog));
+      if (errors.length) throw new WorldError(errors, "scenery");
+    }
+    const ground = !!scenery?.ground;
+    scenery = next ?? null;
+    if (ground !== !!scenery?.ground) clearArch();
+    stage.setShadowBox(shadowBox());
+    driver.setScenery({ moving: !!scenery?.movers?.length });
+    applyTime();
+    drawScenery();
+  }
+
+  setScenery(opts.scenery ?? world.scenery ?? null);
   plan = planBatches(driver.lot.objects);
   for (const o of driver.lot.objects) placeObject(o.id);
   for (const type of typesOf(plan)) drawType(type);
@@ -382,8 +418,16 @@ export function createWorld(canvas, world, opts = {}) {
       for (const id of sim.characters()) buildCharacterMesh(id);
       setHover(h);
       applyTime();
+      drawScenery();
       if (!running) draw(driver.tick(0, 0));
     },
+    /**
+     * The land round the lot (experimental): a Scenery, or null for none. Checked first against the world's catalog;
+     * a WorldError changes nothing. It is drawn whole again, so give it when the land changes, not every frame.
+     */
+    setScenery(s) { setScenery(s); if (!running) draw(driver.tick(0, 0)); },
+    /** How often ambient motion (clips looping in place, moving scenery) draws while nothing else moves; 0: never. */
+    setIdleFps(fps) { driver.setIdleFps(fps); },
     setTime(t) { time = t; applyTime(); if (!running) draw(driver.tick(0, 0)); },
     /**
      * Change the world without a restart: a World or a doc (validated whole; a WorldError changes nothing). Only what
@@ -408,7 +452,7 @@ export function createWorld(canvas, world, opts = {}) {
       setHover(h);
       for (const id of diff.characters.removed) dropCharacter(id);
       for (const id of recolour ? sim.characters() : [...diff.characters.added, ...diff.characters.changed]) buildCharacterMesh(id);
-      if (recolour) applyTime();
+      if (recolour) { applyTime(); drawScenery(); }
       if (!running) draw(driver.tick(0, 0));
       return diff;
     },
@@ -444,7 +488,8 @@ export function createWorld(canvas, world, opts = {}) {
         camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
         size: { w: cam.w, h: cam.h, dpr: cam.dpr, buffer: [canvas.width, canvas.height] },
         stats: { ...stats, frames: driver.stats.frames },
-        characters: sim.characters().map((id) => sim.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+        characters: sim.characters().map((id) => sim.character(id)), draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+        scenery: sceneryView ? { ...sceneryView.counts(), time: driver.sceneryTime } : null };
     },
     three: { renderer, scene, camera },
     dispose() {
@@ -453,6 +498,7 @@ export function createWorld(canvas, world, opts = {}) {
       for (const type of [...typeMeshes.keys()]) undrawType(type);
       for (const id of [...objectGroups.keys()]) dropObject(id);
       for (const id of [...meshes.keys()]) dropCharacter(id);
+      sceneryView?.dispose();
       materials.dispose(); renderer.dispose();
     },
   };

@@ -1,24 +1,55 @@
 // Materials: Lambert with vertex colours (matte), unlit glow, and glass; patterned variants with small textures drawn
 // in code. Every engine material swaps three's screen-space shadow dither for a fixed rotation, per material (never by
-// editing THREE.ShaderChunk, which the app's other three.js code shares).
+// editing THREE.ShaderChunk, which the app's other three.js code shares). An outdoor variant of each (the ground and
+// the scenery) takes no light from the lamps, which would shine through walls, and fades into the background colour
+// away from a box (the scenery's fade).
 import * as THREE from "three";
 
 // three r186's PCF filter rotates its taps by interleavedGradientNoise(gl_FragCoord.xy): a dither fixed to the screen,
 // so every penumbra crawls while the world pans under it. A constant angle fixes the taps to the shadow map (the world).
 const SCREEN_NOISE = "interleavedGradientNoise( gl_FragCoord.xy ) * PI2";
 let warned = false;
-export function worldFixedShadows(material) {
+export function worldFixedShadows(material, then = null) {
   material.onBeforeCompile = (shader) => {
     const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
     if (!chunk.includes(SCREEN_NOISE)) {
       if (!warned) console.warn("@hq/world: three's shadow chunk changed; shadows keep the screen-space dither");
       warned = true;
-      return;
-    }
-    shader.fragmentShader = shader.fragmentShader.replace("#include <shadowmap_pars_fragment>", chunk.replace(SCREEN_NOISE, "0.7853981"));
+    } else shader.fragmentShader = shader.fragmentShader.replace("#include <shadowmap_pars_fragment>", chunk.replace(SCREEN_NOISE, "0.7853981"));
+    then?.(shader);
   };
-  material.customProgramCacheKey = () => "hq-world-fixed-shadows";
+  material.customProgramCacheKey = () => `hq-world-fixed-shadows${then ? "-outdoor" : ""}`;
   return material;
+}
+
+// Lamps are spot lights with no shadows, so they light whatever lies in their cone, walls or not. Outdoor surfaces
+// leave every spot light out (the lamps are the lot's own, indoors), and fade toward the fade colour from `from` to
+// `to` metres outside the fade box. The colour is in the output space, like the cleared background, so they meet.
+const SPOTS = "#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )";
+function outdoor(fade) {
+  return (shader) => {
+    Object.assign(shader.uniforms, { hqFadeBox: fade.box, hqFadeRange: fade.range, hqFadeColor: fade.color });
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;")
+      .replace("#include <project_vertex>", `#include <project_vertex>
+  {
+    vec4 hqW = vec4( transformed, 1.0 );
+  #ifdef USE_INSTANCING
+    hqW = instanceMatrix * hqW;
+  #endif
+    hqXZ = ( modelMatrix * hqW ).xz;
+  }`);
+    const lights = THREE.ShaderChunk.lights_fragment_begin;
+    let f = shader.fragmentShader;
+    if (lights.includes(SPOTS)) f = f.replace("#include <lights_fragment_begin>", lights.replace(SPOTS, "#if 0"));
+    shader.fragmentShader = f
+      .replace("#include <common>", "#include <common>\nvarying vec2 hqXZ;\nuniform vec4 hqFadeBox;\nuniform vec2 hqFadeRange;\nuniform vec3 hqFadeColor;")
+      .replace("#include <colorspace_fragment>", `#include <colorspace_fragment>
+  {
+    vec2 hqD = max( max( hqFadeBox.xy - hqXZ, hqXZ - hqFadeBox.zw ), 0.0 );
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, hqFadeColor, smoothstep( hqFadeRange.x, hqFadeRange.y, length( hqD ) ) );
+  }`);
+  };
 }
 
 // Greyscale patterns, one metre per repeat (UVs are world-mapped), multiplied by the vertex colour.
@@ -65,21 +96,38 @@ function patternTexture(pattern) {
 }
 
 export function createMaterials({ screenNoise = false } = {}) {
-  const fix = (m) => (screenNoise ? m : worldFixedShadows(m));
+  // the outdoor variants' fade, shared by all of them: off (infinitely far) until setFade
+  const fade = { box: { value: new THREE.Vector4(0, 0, 0, 0) }, range: { value: new THREE.Vector2(1e6, 2e6) }, color: { value: new THREE.Color(1, 1, 1) } };
+  const fix = (m, then = null) => {
+    if (!screenNoise) return worldFixedShadows(m, then);
+    if (then) { m.onBeforeCompile = then; m.customProgramCacheKey = () => "hq-world-outdoor"; }
+    return m;
+  };
   const cache = new Map();
-  const make = (finish, pattern) => {
-    const key = `${finish}:${pattern ?? ""}`;
+  // opts.outdoor: the variant for the ground and the scenery (no lamp light; the fade). Outdoor glass is water.
+  const make = (finish, pattern, { outdoor: out = false } = {}) => {
+    const key = `${finish}:${pattern ?? ""}${out ? ":outdoor" : ""}`;
     if (cache.has(key)) return cache.get(key);
+    const then = out ? outdoor(fade) : null;
     let m;
-    if (finish === "glow") m = new THREE.MeshBasicMaterial({ vertexColors: true });
-    else if (finish === "glass") m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false }));
-    else m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: pattern && pattern !== "plain" ? patternTexture(pattern) : null }));
+    if (finish === "glow") { m = new THREE.MeshBasicMaterial({ vertexColors: true }); if (then) { m.onBeforeCompile = then; m.customProgramCacheKey = () => "hq-world-outdoor"; } }
+    else if (finish === "glass") m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: out ? 0.86 : 0.45, depthWrite: false }), then);
+    else m = fix(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: pattern && pattern !== "plain" ? patternTexture(pattern) : null }), then);
     cache.set(key, m);
     return m;
   };
+  // The outdoor fade: from `from` to `to` metres outside `box` ({ minX, minZ, maxX, maxZ }) everything outdoors turns
+  // to `color` (the background's hex). null switches it off.
+  function setFade(f, color) {
+    if (!f) { fade.range.value.set(1e6, 2e6); return; }
+    fade.box.value.set(f.box.minX, f.box.minZ, f.box.maxX, f.box.maxZ);
+    fade.range.value.set(f.from, f.to);
+    if (color) fade.color.value.set(color).convertLinearToSRGB();
+  }
   const highlight = fix(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: new THREE.Color("#ffd27a"), emissiveIntensity: 0.28 }));
   return {
     get: make,
+    setFade,
     highlight,
     dispose() { for (const m of cache.values()) { m.map?.dispose(); m.dispose(); } highlight.dispose(); },
   };

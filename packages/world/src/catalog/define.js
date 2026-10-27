@@ -9,9 +9,10 @@ import { CLIPS, clipProblem } from "../anim/clips.js";
 import { lintCoplanar, describePairs } from "../lint/coplanar.js";
 import { WALL_H, WALL_T, SIDES } from "../model/grid.js";
 
-const KINDS = ["object", "opening", "floor", "wall"];
+const KINDS = ["object", "opening", "floor", "wall", "scenery"];
 const PATTERNS = ["plain", "planks", "tiles", "boards", "battens"];
 const MAX_SIZE = 6; // metres: anything larger is almost certainly centimetres
+const MAX_SCENERY = 40; // metres: a piece of scenery (a house, a boat) may be bigger, never this big
 
 /**
  * @typedef {object} SlotDef
@@ -25,7 +26,8 @@ const MAX_SIZE = 6; // metres: anything larger is almost certainly centimetres
 /**
  * @typedef {object} ObjectDef
  * @property {string} id
- * @property {"object"|"opening"|"floor"|"wall"} kind
+ * @property {"object"|"opening"|"floor"|"wall"|"scenery"} kind   scenery: a piece of the land round a lot (a tree, a
+ *   house, a car), placed freely by a world's scenery, never on the lot's tiles: no footprint, slots or anchors
  * @property {[number, number]} [footprint]   tiles, before turning
  * @property {number} [height]
  * @property {boolean} [blocks]
@@ -196,10 +198,11 @@ function packProblems(pack) {
       colour(p.color, `${at} part '${p.part}'`, "");
       for (const [face, st] of Object.entries(p.faces ?? {})) colour(st.color, `${at} part '${p.part}'`, `face ${face} `);
       if (p.size.some((s) => !(s > 0))) out.push(problem("prim.size", `${at} part '${p.part}'`, `size ${JSON.stringify(p.size)} has a zero or negative side`, "give every side a positive size in metres"));
-      if (p.size.some((s) => s > MAX_SIZE)) out.push(problem("prim.units", `${at} part '${p.part}'`, `size ${JSON.stringify(p.size)} is over ${MAX_SIZE} m`, "sizes are metres, not centimetres: 45 cm is 0.45"));
+      const max = o.kind === "scenery" ? MAX_SCENERY : MAX_SIZE;
+      if (p.size.some((s) => s > max)) out.push(problem("prim.units", `${at} part '${p.part}'`, `size ${JSON.stringify(p.size)} is over ${max} m`, "sizes are metres, not centimetres: 45 cm is 0.45"));
     }
     if (o.kind === "object") checkObject(o, prims, at, out);
-    else checkOpening(o, prims, at, out);
+    else if (o.kind === "opening") checkOpening(o, prims, at, out);
     for (const line of describePairs(lintCoplanar(prims))) out.push(problem("prim.coplanar", at, line, "they will z-fight (flicker); move one by at least 2 mm along the normal, or make a flat part a box at least 1 cm thick that stands on the other"));
   });
   return out;

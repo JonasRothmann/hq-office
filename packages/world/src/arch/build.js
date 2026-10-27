@@ -25,8 +25,9 @@ export function buildArchitecture(lot, catalog, cut = new Set()) {
   const finish = (id) => catalog.get(id) ?? { color: "#ff00ff", pattern: "plain" };
 
   // ground: the lot, and lower land round it
-  prims.push(box("lot", [lot.w, 0.04, lot.d], [lot.w / 2, -0.04, lot.d / 2], "ground", { owner: "ground" }));
-  prims.push(box("land", [lot.w + PAD * 2, 0.04, lot.d + PAD * 2], [lot.w / 2, -0.04 - LAND_DROP, lot.d / 2], "ground-dark", { owner: "ground" }));
+  // (outdoor: the lamps indoors never light them through the walls)
+  prims.push(box("lot", [lot.w, 0.04, lot.d], [lot.w / 2, -0.04, lot.d / 2], "ground", { owner: "ground", outdoor: true }));
+  prims.push(box("land", [lot.w + PAD * 2, 0.04, lot.d + PAD * 2], [lot.w / 2, -0.04 - LAND_DROP, lot.d / 2], "ground-dark", { owner: "ground", outdoor: true }));
   // the land's top face is 3 cm under the lot's, so the lot's sides show as a small kerb round it.
 
   // floor slabs, one box per run of same-finish tiles along x

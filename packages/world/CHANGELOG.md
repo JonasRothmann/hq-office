@@ -6,6 +6,31 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ### Added
 
+- Scenery (experimental): the land round a lot, as data. `createWorld(canvas, world, { scenery })` (or a world that
+  carries `scenery`) and `view.setScenery(s)` draw it; it is never walked, picked or linted with the lot. A scenery
+  has `pieces` (`{ type, at: [x, y, z], ry, s, tint, params, shadow }`: objects of the new kind `"scenery"`, placed
+  freely, drawn as one instanced mesh per type, params and material, a `tint` token or hex multiplying each copy),
+  `fields` (height fields with a colour and tone per vertex and a `hole` for the lot), `strips` (ribbons such as
+  paths and rivers; outdoor `glass` is water), `movers` (copies of a piece going round a closed loop at a speed),
+  `fade` (everything outdoors fades into the background between `from` and `to` metres outside a box), `shade` (the
+  ground the sun's shadows cover besides the lot) and `ground` (the scenery draws the land, so the engine leaves out
+  its own). `checkScenery(scenery, catalog)` names each mistake with its path and a fix; `createWorld` and
+  `setScenery` throw a `WorldError` on one. `planScenery` and `moverPlaces(mover, t)` are the pure plan and where
+  each mover is at a time. New in `api.txt`: `checkScenery`, `planScenery`, `moverPlaces`.
+- `defineObject({ kind: "scenery" })`: a piece of scenery. It has no footprint, slots or anchors, and its parts may
+  be up to 40 m (a house) instead of 6. `checkPack` checks its colours, sizes and coplanar parts. Placed on the lot,
+  it is refused with a fix that says where it goes.
+- Moving scenery is ambient motion, like a clip looping in place: it draws at `idleFps` and never redraws the
+  shadow map (movers cast no shadows). Its clock runs only while `idleFps` is above 0, so at 0 the land holds still
+  (a power saver) instead of jumping ahead when something else draws. `view.setIdleFps(fps)` changes the rate while
+  the view runs. `inspect()` reports `scenery: { pieces, batches, movers, time }`.
+
+### Fixed
+
+- Lamps no longer light the ground outside through the walls. A lamp is a spot light with no shadow, so it lit
+  everything in its cone. Outdoor surfaces (the lot's ground, the land round it and all scenery) now use outdoor
+  materials that leave spot lights out. A primitive marked `outdoor: true` takes them; the lamps light only indoors.
+
 - The engine's own colours can be recoloured. `definePack({ overrides: { light, dark } })` names engine tokens (the
   wall caps `cap`, the ground `ground` and `ground-dark`, the slab's sides `foundation`, the background `bg`, or any
   other in `PALETTES`) for every world that uses the pack; a later pack wins. A world doc's optional `palette`

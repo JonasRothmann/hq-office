@@ -137,7 +137,7 @@ export function analyse(world, { live = new Set(), moved = new Set() } = {}) {
     const at = `objects[${i}]`;
     const def = catalog.get(o.type);
     if (!def) { P.push(problem("object.type", `${at}.type`, `unknown type '${o.type}'`, suggest(catalog, String(o.type), "object"))); return; }
-    if (def.kind !== "object") { P.push(problem("object.kind", `${at}.type`, `'${o.type}' is a ${def.kind}, not an object`, def.kind === "opening" ? "put doors and windows in openings: [{ type, at, side }]" : "put finishes in floors or walls")); return; }
+    if (def.kind !== "object") { P.push(problem("object.kind", `${at}.type`, `'${o.type}' is a ${def.kind}, not an object`, def.kind === "opening" ? "put doors and windows in openings: [{ type, at, side }]" : def.kind === "scenery" ? "put scenery pieces in the world's scenery: { pieces: [{ type, at: [x, y, z] }] }" : "put finishes in floors or walls")); return; }
     if (ids.has(o.id)) P.push(problem("object.id", `${at}.id`, `id '${o.id}' is used twice`, "give each object its own id"));
     ids.add(o.id);
     const q = QUARTER[o.facing];
