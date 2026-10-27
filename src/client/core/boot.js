@@ -1,22 +1,19 @@
-// Loads the state, renders every panel, listens to the server's stream and reloads the page when its files change.
-import { PANELS, keepDrafts } from "../questions/drafts.js";
+// Loads the state, tells every panel (the bus "state" event), listens to the server's stream and reloads the page
+// when its files change.
+import { keepDrafts } from "../inbox/drafts.js";
 import { CONFIG, S, setCONFIG, setS } from "./state.js";
-import { announce } from "../questions/announce.js";
-import { announceUpdates } from "../feed/feed.js";
-import { scheduleTick, tick } from "../questions/questions.js";
+import { scheduleTick, tick } from "../inbox/clock.js";
 import { emit } from "./bus.js";
 
 let pageStamp = null;
+// The stream's first message is the whole state; after that each message holds only the parts of the state that
+// changed. Listeners get the names of those parts (null for a whole state) and draw only what shows one of them.
 function apply(part, whole) {
   setS(whole ? part : Object.assign(S, part));
-  const changed = (k) => whole || k in part;
   setCONFIG(S.config ?? CONFIG);
   if (pageStamp == null) pageStamp = S.page;
   else if (S.page !== pageStamp) { keepDrafts(); location.reload(); return; }
-  if (changed("open")) announce();
-  if (changed("updates")) announceUpdates();
-  for (const [keys, render] of PANELS) if (keys.some(changed)) render();
-  emit("state", S);
+  emit("state", S, whole ? null : new Set(Object.keys(part)));
   tick();
   scheduleTick();
 }

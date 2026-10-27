@@ -21,15 +21,17 @@ src/client/               the page, plain ES modules and stylesheets, served as 
   main.js                 loads every built-in area in the old order
   core/                   shared by every area: state, net, bus, formatting, rich text, base styles, layout
   world/                  the 3D office (three.js): plan, rooms, furniture, people, camera, scene, api
-  theme/ glass/           light, dark or system theme; the glass shell's small behaviour
+  theme/                  light, dark or system theme
   vendor/three/           three.js r186, vendored (the page's import map points "three" here)
-  topbar/ questions/ tell/ feed/ card/ messages/ images/ sound/ settings/ rooms/ desk-hud/
+  inbox/                  the owner's inbox: the stack, the pills, the keys, drafts and the page clock
+  reader/                 the reader beside the stack: one item in full (on a phone, a full-screen sheet)
+  topbar/ card/ images/ sound/ settings/ secrets/ work-board/ ledger/ hq-link/ blocked/ phone/ rooms/ desk-hud/
                           one folder per panel or feature: its module(s) and its stylesheet
   <feature>/index.js      a new feature: loaded by the page on its own
 src/server/               the server, one file per concern
   main.ts                 loads every module in the old order, starts the timers
   config.ts db.ts push.ts router.ts page.ts json.ts http.ts
-  herdr.ts lanes.ts asks.ts updates.ts events.ts inbox.ts score.ts state.ts machines.ts
+  herdr.ts lanes.ts asks.ts updates.ts events.ts inbox.ts owner-inbox.ts score.ts state.ts machines.ts
   routes/                 one file per resource: a list of { method, path | prefix | pattern, handle }
   schema/                 one .sql file per table, applied at startup
   machine-stats.sh        the machine sampler (runs here or over ssh)
@@ -39,6 +41,16 @@ scripts/                  restructure.ts (the split), room-hash.ts (Chrome, test
                           world-lab.ts, world-shots.ts, world-page-shots.ts, shell-shots.ts (the lab and screenshots)
 docs/                     this file
 ```
+
+## The page's layout
+
+On a desktop (1151px and wider) the page is a grid of three columns (core/layout.css). The stack is on the left, from
+the top of the window, as tall as its content. The status pill is top right. Under it, the reader sits beside the
+stack, about 640px wide, and never covers it. The worker card and the pills are bottom right. The office is drawn in
+the space right of the stack and under the status pill.
+
+Under 1151px the page scrolls as one. On a phone the world is a strip at the top, the stack is below it, and the
+reader is a full-screen sheet.
 
 ## Module boundaries and contracts
 

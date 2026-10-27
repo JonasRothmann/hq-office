@@ -1,8 +1,8 @@
-/* The WORK tab: work in flight by state, and the red strip of stalled work over the column's lists. */
-.qwrap:has(> .stall:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
-.work { display: grid; gap: 6px; align-content: start; padding: 10px 8px 12px; }
+/* The work board in the reader: work in flight by state. */
+.work { display: grid; gap: 6px; align-content: start; }
 .work .sum { padding: 0 4px; font: 500 11px/1.5 var(--font); letter-spacing: 0.03em; color: var(--text-2); }
-.work h4 { margin: 8px 4px 0; font: 600 11px/1 var(--font); letter-spacing: 0.05em; color: var(--text-2); }
+.work h4 { margin: 8px 0 0; font: 600 11px/1 var(--font); letter-spacing: 0.05em; color: var(--text-2); }
+.work h4:first-child { margin-top: 0; }
 .work h4.stalled, .work h4.blocked { color: var(--st-red-text); }
 .wi { display: grid; gap: 3px; padding: 7px 10px; border-radius: var(--radius-s); background: var(--surface); box-shadow: var(--card-shadow); }
 .wi.stalled, .wi.blocked { box-shadow: inset 3px 0 0 var(--st-red), var(--card-shadow); }
@@ -25,11 +25,5 @@
 .tag.pr.merged { background: var(--violet-fill); color: var(--violet); }
 .tag.pr.draft { background: var(--surface-3); color: var(--text-3); }
 .tag.muted { background: var(--surface-3); color: var(--text-3); }
-/* the stalled strip: red, over QUESTIONS and MESSAGES */
-.stall { display: grid; gap: 3px; margin: 8px 8px 0; padding: 8px 10px; border: 0; border-radius: 10px; background: var(--st-red); color: #fff; text-align: left; font: inherit; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2); }
-.stall:hover { filter: brightness(1.05); }
-.stall .k { color: #fff; }
-.stall .row { font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.stall .row b { margin-right: 6px; font: 600 11px/1 var(--mono); }
 /* the manager a group of work reports to, when lanes form a tree */
 .work .under { display: flex; align-items: center; gap: 6px; margin: 6px 4px 2px; font: 600 10.5px/1 var(--font); letter-spacing: 0.04em; color: var(--text-3); }

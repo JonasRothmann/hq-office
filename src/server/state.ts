@@ -25,7 +25,7 @@ export function state() {
   for (const a of open) if (a.lane) openByLane.set(a.lane, (openByLane.get(a.lane) ?? 0) + 1);
   for (const a of open) if (a.lane && a.tier === "blocking") blockingByLane.set(a.lane, (blockingByLane.get(a.lane) ?? 0) + 1);
   const parse = (a: Ask) => ({ ...a, options: a.options ? JSON.parse(a.options) : [], secrets: a.secrets ? JSON.parse(a.secrets) : [] });
-  return {
+  const base = {
     now,
     version,
     lanes: withTree(lanes).map((l) => ({ ...l, status: laneStatus(l, openByLane, now), asks: openByLane.get(l.name) ?? 0, blocking: blockingByLane.get(l.name) ?? 0 })),
@@ -41,17 +41,24 @@ export function state() {
     page: pageStamp(),
     config: CONFIG,
     machines: machineHealth(),
-    ...stateParts(),
+  };
+  return {
+    ...base,
+    ...stateParts(base),
     secrets: secrets.list(),
     board: board.view(),
   };
 }
 
 // A feature adds its own part of the state here instead of editing state(): addStatePart("board", () => board.view()).
-const parts = new Map<string, () => unknown>();
-export function addStatePart(key: string, value: () => unknown) {
+// A part gets the state built so far (the core above and the parts added before it), so it can build on what is
+// already loaded instead of querying it again.
+const parts = new Map<string, (sofar: Record<string, any>) => unknown>();
+export function addStatePart(key: string, value: (sofar: Record<string, any>) => unknown) {
   parts.set(key, value);
 }
-function stateParts() {
-  return Object.fromEntries([...parts].map(([k, value]) => [k, value()]));
+function stateParts(base: Record<string, any>) {
+  const sofar: Record<string, any> = { ...base };
+  for (const [k, value] of parts) sofar[k] = value(sofar);
+  return Object.fromEntries([...parts.keys()].map((k) => [k, sofar[k]]));
 }

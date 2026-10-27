@@ -1,5 +1,6 @@
 // The top bar: waiting count, oldest wait, working, on HQ, bank, FROM HQ, machines.
 import { $ } from "../core/dom.js";
+import { on } from "../core/bus.js";
 import { S } from "../core/state.js";
 import { dur, esc, setClass, setHTML, setText } from "../core/format.js";
 
@@ -38,3 +39,8 @@ export function renderStats() {
   const title = (S.hq?.ok === false ? "HQ ISN'T RECEIVING · " : "") + (n ? `(${n}) HQ Office` : "HQ Office");
   if (document.title !== title) document.title = title;
 }
+on("state", (S, keys) => {
+  const has = (...k) => !keys || k.some((x) => keys.has(x));
+  if (has("open", "lanes", "score", "updatesUnread", "hq")) renderStats();
+  if (has("machines")) renderMachines();
+});

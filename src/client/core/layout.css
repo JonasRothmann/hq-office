@@ -1,68 +1,50 @@
-/* Where the panels float over the world: the question column on the left, the status pill top right, the feed and the card bottom right; on a phone, one scroll under a strip of the world. */
-/* Desktop: nothing scrolls the page. The question column is a glass panel the full height of the window on the left,
-   and nothing else may overlap it: the stage (the feed, the worker card, a conference room) is the area right of it. */
-:root { --qcol: 420px; --pill-h: 44px; --side: 470px; }
-@media (max-width: 1279px) { :root { --qcol: 360px; } }
-.wrap { min-width: 0; }
-.main, .desk, .stage { min-width: 0; }
-.qwrap { position: relative; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+/* Where the glass floats over the world: the stack on the left, the reader beside it, the status pill top right, the
+   worker card and the pills bottom right; on a phone, one scroll under a strip of the world. */
+/* Desktop: nothing scrolls the page. The window is a grid of three columns: the stack, the reader's column and the
+   dock. Nothing overlaps the stack, and the reader sits beside it, never over it. --qcol is the stack's width (the
+   world's turn buttons sit right of it); --side is the dock's and the settings panel's. */
+:root { --stack: 340px; --qcol: var(--stack); --side: 340px; --reader: 640px; --pill-h: 44px; }
+.wrap, .main, .desk, .reader, .dock { min-width: 0; }
 
 @media (min-width: 1151px) {
   html, body { overflow: hidden; height: 100%; }
-  /* the overlay passes clicks through to the world, except on the panels */
-  .wrap { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
-  .wrap > *, .main > *, .stage > *, .under > * { pointer-events: none; }
-  .top, .desk, .under > .card, .under > .feed, .stage > .roomview, .wrap > .hqdown { pointer-events: auto; }
-  .main { position: absolute; inset: 0; }
-  .desk { position: absolute; top: var(--gap); bottom: var(--gap); left: max(var(--gap), env(safe-area-inset-left, 0px)); width: var(--qcol); display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
-  .stage { position: absolute; top: var(--gap); bottom: var(--gap); right: max(var(--gap), env(safe-area-inset-right, 0px)); left: calc(var(--qcol) + 2 * var(--gap)); }
-  .top { position: absolute; top: var(--gap); right: max(var(--gap), env(safe-area-inset-right, 0px)); max-width: calc(100vw - var(--qcol) - 3 * var(--gap)); z-index: 3; }
-  .qwrap { min-height: 0; }
-  .hud, .msgs, .work, .rooms { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--hairline-2) transparent;
-    -webkit-mask-image: linear-gradient(transparent, #000 8px, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(transparent, #000 8px, #000 calc(100% - 8px), transparent); }
-  /* the feed and the card: a column at the bottom right of the stage, under the pill */
-  .under { position: absolute; right: 0; bottom: 0; top: calc(var(--pill-h) + var(--gap)); width: min(var(--side), 100%); display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: var(--gap); }
-  .under > .card { flex: 0 1 auto; min-height: 0; overflow: auto; }
-  .under > .feed { flex: 0 1 auto; min-height: 0; max-height: clamp(240px, 42vh, 380px); }
-  .feed .body { overflow: auto; min-height: 0; }
+  /* the overlay passes clicks through to the world, except on the glass */
+  .wrap { position: fixed; inset: 0; z-index: 1; pointer-events: none; display: grid;
+    grid-template-columns: var(--stack) minmax(0, 1fr) var(--side); grid-template-rows: auto auto minmax(0, 1fr); column-gap: var(--gap);
+    padding: var(--gap) max(var(--gap), env(safe-area-inset-right, 0px)) var(--gap) max(var(--gap), env(safe-area-inset-left, 0px)); }
+  .main { display: contents; }
+  .top, .desk, .reader, .card, .pill, .wrap > .hqdown { pointer-events: auto; }
+  .top { grid-column: 2 / 4; grid-row: 1; justify-self: end; align-self: start; max-width: 100%; z-index: 3; }
+  /* the stack: as tall as its content, up to the window; its list scrolls inside it */
+  .desk { grid-column: 1; grid-row: 1 / 4; align-self: start; max-height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+  .desk > .list { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--hairline-2) transparent; }
+  /* the reader: beside the stack under the pill, as tall as its item up to the window. The world's turn buttons sit at
+     the foot of this column, so with the world on the reader stops above them. */
+  .reader { grid-column: 2; grid-row: 3; justify-self: start; align-self: start; width: min(var(--reader), 100%); max-height: 100%; margin-top: var(--gap); }
+  html:not([data-world="off"]) .reader { max-height: calc(100% - 44px); }
+  /* the dock: the worker card over the pills, at the bottom right */
+  .dock { grid-column: 3; grid-row: 3; align-self: end; max-height: 100%; margin-top: var(--gap); display: flex; flex-direction: column; justify-content: flex-end; gap: var(--gap); min-height: 0; }
+  .dock > .card { flex: 0 1 auto; min-height: 0; overflow: auto; }
 }
 
-/* Under 1151px the page scrolls as one: a strip of the world at the top, the status pill, the question column the
-   full width, then the feed and the card. */
+/* Under 1151px the page scrolls as one: a strip of the world at the top, the status pill, the stack the full width,
+   then the pills and the card. The reader is a full-screen sheet over all of it. */
 @media (max-width: 1150px) {
   :root { --strip: clamp(150px, 26vh, 230px); }
   .world { position: absolute; top: 0; left: 0; width: 100%; height: var(--strip); }
   .wrap { position: relative; z-index: 1; display: grid; gap: 10px; padding: calc(var(--strip) - 28px) max(10px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px)); }
   .main { display: grid; gap: 10px; }
-  .desk { display: grid; gap: 0; }
-  .stage { display: grid; gap: 10px; }
-  .under { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .desk { display: flex; flex-direction: column; }
+  .dock { display: flex; flex-direction: column; gap: 10px; }
+  .dock > .pills { order: -1; }
+  html.reading, html.reading body { overflow: hidden; }
 }
-@media (min-width: 801px) and (max-width: 1150px) { .under { grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: start; } .under > .card { order: 2; } }
 
-/* phone: a touch screen with the stacked layout. One page scroll and no zoom: no list scrolls inside the page, the
-   question tabs stay in reach while their list scrolls under them, the page only pans (no double-tap or pinch zoom),
-   and no text field is under 16px, which makes iOS zoom in when it gets focus. */
+/* phone: a touch screen with the stacked layout. One page scroll and no zoom: the page only pans (no double-tap or
+   pinch zoom), and no text field is under 16px, which makes iOS zoom in when it gets focus. */
 @media (max-width: 1150px) and (pointer: coarse) {
   html { touch-action: pan-x pan-y; }
-  .qtabs { position: sticky; top: 0; z-index: 5; background: var(--surface-solid); border-radius: var(--radius) var(--radius) 0 0; }
   html .reply textarea, html .compose textarea, html .sin, html .sin.name { font-size: 16px; }
-  html .log { max-height: none; overflow: visible; }
-  /* MESSAGES and FROM HQ have a bounded height and scroll inside themselves, so the page around them stays in reach
-     (heights measured at 390x664 and 390x844): the thread leaves room for its tabs above it and Tell HQ under it on
-     one screen; FROM HQ fits one screen. Momentum on, and reaching an end does not drag the page. They lay out
-     as blocks so a fade can stick to each end without taking space: it shows where there is more that way
-     (data-more, set by messages.js and feed.js). */
-  html .msgs, html .feed .body { display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-  html .msgs { max-height: max(240px, calc(100vh - 230px)); max-height: max(240px, calc(100svh - 230px)); }
-  html .feed .body { max-height: max(200px, calc(100vh - 430px)); max-height: max(200px, calc(100svh - 430px)); }
-  html .msgs > * + *, html .feed .body > * + * { margin-top: 8px; }
-  html .msgs::before, html .msgs::after, html .feed .body::before, html .feed .body::after { content: ""; display: block; position: sticky; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .15s; height: 32px; }
-  html .msgs::before { top: 0; margin: -8px -8px -24px; background: linear-gradient(var(--surface-solid), transparent); }
-  html .msgs::after { bottom: 0; margin: -24px -8px -8px; background: linear-gradient(transparent, var(--surface-solid)); }
-  html .feed .body::before { top: 0; margin-bottom: -32px; background: linear-gradient(var(--surface-solid), transparent); }
-  html .feed .body::after { bottom: 0; margin-top: -32px; background: linear-gradient(transparent, var(--surface-solid)); }
-  html [data-more~="up"]::before, html [data-more~="down"]::after { opacity: 1; }
   /* on a phone the glass is near-opaque: a small screen has no room for a busy background behind text */
-  .desk.glass, .feed.glass, .card.glass { background: var(--surface); }
+  .desk.glass, .card.glass, .pill.glass { background: var(--surface); }
 }

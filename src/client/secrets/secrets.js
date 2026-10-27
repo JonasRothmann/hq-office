@@ -1,4 +1,4 @@
-// The SECRETS pane: paste a value, see names and deadlines (with the date), and the names a restart lost.
+// The secrets drop, in Tell HQ: paste a value, see names and deadlines (with the date), and the names a restart lost.
 import { $, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
@@ -47,4 +47,10 @@ $("secretForm").addEventListener("submit", async (e) => {
     $("secName").value = "";
     toast(`SAVED ${name}. HQ CAN READ IT.`);
   } catch (err) { toast(err.message); }
+});
+$("secretList").addEventListener("click", async (e) => {
+  const rm = e.target.closest("[data-secret-rm]");
+  if (!rm) return;
+  rm.disabled = true;
+  try { await post("/api/secrets/rm", { name: rm.dataset.secretRm }); toast(`DELETED ${rm.dataset.secretRm}.`); } catch (err) { toast(err.message); rm.disabled = false; }
 });
