@@ -47,7 +47,8 @@ afterAll(async () => {
 });
 
 test.skipIf(!chromeFound)("OFFICE new mounts the engine on #world and draws the generated office", async () => {
-  await until(`__world.inspect().frames > 0 && __world.inspect().engine.draws > 0`);
+  // drawn, with lane-00's two subagents as balls round its desk
+  await until(`__world.inspect().frames > 0 && __world.inspect().engine.draws > 0 && __world.inspect().balls === 2`);
   const got = await page.evaluate(`(() => {
     const files = performance.getEntriesByType("resource").map((r) => new URL(r.name).pathname);
     return { engine: files.includes("/packages/world/src/index.js"), classic: files.includes("/src/client/world/world.js"), stage: __world.stage, rooms: __world.rooms, characters: __world.inspect().engine.characters };

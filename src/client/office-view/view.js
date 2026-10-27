@@ -271,6 +271,7 @@ export function mountOffice(canvas, opts = {}) {
       paused,
       fitting,
       outside: null,
+      balls: balls.mesh.count, // subagent balls drawn in the last frame
       // the engine's own: draws and shadow redraws, the canvas's size, the zoom step, the cut walls, the characters
       engine: e ? { stats: e.stats, draws: e.draws, triangles: e.triangles, size: e.size, zoom: e.zoom, walls: e.walls, cut: e.cut.length, characters: e.characters.length } : null,
     };
