@@ -800,7 +800,7 @@ adapter that keeps today's `api.js` contract. Nothing in `src/client/world/` cha
 
 | Today | Becomes | Kept, moved or deleted |
 | --- | --- | --- |
-| `plan.js` (lanes → rooms, desks, walls, doors) | `src/client/office/plan.js`: lanes → a `WorldDoc` (rooms as wall paths, desks as objects with ids `desk:<lane>`, workers as characters `lane:<name>`) | logic kept, output changed to the doc |
+| `plan.js` (lanes → rooms, desks, walls, doors) | `src/client/office/layout.js` (the layout, moved in step 2) and `plan.js`: lanes → a `WorldDoc` (rooms as wall paths, desks as objects with ids `desk:<lane>`, workers as characters `lane:<name>`) | logic kept, output changed to the doc |
 | `plan.js` `wallCuts`, `cameraSide` | engine `cutaway` | deleted |
 | `walk.js` (BFS) | engine `nav` | deleted |
 | `camera.js` | engine `camera` | deleted |
@@ -918,7 +918,8 @@ instancing, per-room light, and the HQ office itself.
 ## 12. Migration order
 
 The review of phase 1 set this order. Each step ends in something a test proves, and no step starts before the one
-above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1); step 2 has not started.
+above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1). Step 2 is done; step 3 has not
+started.
 
 1. **Engine fixes (phase 1.5, done).** Edits at run time (`apply`, 3.10). A still view draws nothing and the shadow
    map redraws only on change (3.9). The canvas is sized to its device pixels (3.9). The boundary test closes the
@@ -936,6 +937,33 @@ above it has merged. Phase 1.5 is step 1, with the second review's fixes (0.2.1)
    lanes for N up to the largest office the page supports. Each generated doc passes `validateWorld` and the
    coplanar lint, every room is reachable, and adding a lane changes only what the diff says (a desk, a chair, a
    worker, and the room when it grows). It does not render anything yet.
+
+   **Done.** `officeDoc(lanes, prev, { hq, hqStatus })` in `src/client/office/plan.js` returns `{ doc, layout }`;
+   the next call takes that result as `prev`. The parts:
+   - `layout.js`: the lane tree to rooms, seats, walls, doors and stages. It is `src/client/world/plan.js`'s
+     layout, moved unchanged. The old `plan.js` now imports it and keeps only what dies with the old renderer: the
+     sub-tile desk places, the cutaway and its rebuild diff. The layout moved instead of being called in place
+     because `src/client/world/` is deleted at step 4, and the generator must not depend on a folder that goes.
+     Moving it now also gives one copy of the rules while both worlds run.
+   - `furnish.js`: each room's furniture in the room's own frame (back wall north), turned onto the lot. Four
+     seats per team room, two facing pairs either side of an aisle. A seat is a 2×1 desk, a chair and the tile
+     at the island's outer end where its worker stands.
+   - `acts.js`: the act per status, one row each. Working types at the desk; waiting on CI leans back there; a
+     question for the owner stands up beside the desk and waves; done and parked go to the break area (the hall
+     at the studio stage), to a spot picked by the lane's name, so a worker keeps its spot.
+   - `placeholder/`: a pack of plain blocks (`placeholder/sofa`, `tea-table`, `kitchenette`, `bookshelf`) with
+     each piece's footprint and height. Step 3 replaces each with `japandi/<piece>`.
+
+   Ids: `desk:<lane>`, `chair:<lane>`, `lane:<lane>`, and `<piece>:<room>` for the rest. A lane that leaves keeps
+   its desk and chair, empty, until another lane takes that seat. A worker spawns on the tile beside its desk.
+   The lot is the layout's bounds plus 2 tiles of ground, so its origin moves only when the stage changes.
+   `test/client/office-plan.test.ts` checks 1, 4, 5, 12 and 24 lanes, loose and in uneven teams (24 in teams is a
+   campus), and a run of lanes that come and go across every stage. On each step the diff touches exactly the
+   objects whose seat or room moved, the workers that joined or left, and the walls only when a room changed.
+   A lane joining a room with a free desk is 2 objects, 1 worker and 1 act; a status change is 1 act.
+   The generator found a layout bug: a campus's second column of wings had no door. Each column's hall now ends
+   in a front door. One engine change came with it: the coplanar lint skips faces whose boxes are apart (the package's
+   `CHANGELOG.md`, Unreleased), which made the 24-view lint of a 24-desk office 3 s instead of 16 s.
 3. **The Japandi pack**, after the world lanes now in `src/client/world/` merge: `furniture.js` and `look.js`
    reshaped into one `defineObject` file per piece, with a `{ light, dark }` palette, checked with `check.ts`. Until
    then the generator places the starter pack's objects.
