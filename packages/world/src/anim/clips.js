@@ -2,6 +2,7 @@
 // blending. Pure. render builds a jointed mesh from RIG and applies poses from samplePose / blendPose.
 //
 // A person is 1.35 m standing (0.45 of a wall), the proportion that makes a Sims-like room read.
+import { problem, closest } from "../model/problems.js";
 
 /** @typedef {{ name: string, parent: string|null, at: [number, number, number], size: [number, number, number], color: string }} Joint */
 /** @typedef {Record<string, [number, number, number]>} Pose  joint → [rx, ry, rz] */
@@ -100,4 +101,10 @@ export function blendPose(a, b, w) {
     out[j] = [p[0] + (q[0] - p[0]) * w, p[1] + (q[1] - p[1]) * w, p[2] + (q[2] - p[2]) * w];
   }
   return out;
+}
+
+// A clip name that is not in CLIPS, with the nearest names.
+export function clipProblem(clip, path) {
+  const near = closest(String(clip), Object.keys(CLIPS));
+  return problem("clip.unknown", path, `'${clip}' is not a clip`, near.length ? `did you mean ${near.join(" or ")}?` : `use one of: ${Object.keys(CLIPS).join(", ")}`);
 }

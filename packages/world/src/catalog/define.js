@@ -1,9 +1,11 @@
 // The catalog: defineObject (one object, opening or finish), definePack (a named list of them) and createCatalog (the
 // objects one world can use, ids prefixed by pack). There is no global registry: each world builds its own catalog
-// from the packs it names, so load order never matters and two packs cannot silently claim one id. Pure.
+// from the packs it names, so load order never matters and two packs cannot silently claim one id. A pack's colour
+// tokens are its own: stored as "<pack>/<token>" for light and dark, so two packs never overwrite each other's. Pure.
 import { Kit, bounds } from "./kit.js";
-import { PALETTES } from "./palette.js";
+import { PALETTES, isHex } from "./palette.js";
 import { problem, closest } from "../model/problems.js";
+import { CLIPS, clipProblem } from "../anim/clips.js";
 import { lintCoplanar, describePair } from "../lint/coplanar.js";
 import { WALL_H, WALL_T, SIDES } from "../model/grid.js";
 
@@ -50,11 +52,28 @@ export function defineObject(def) {
   return Object.freeze(out);
 }
 
-/** @typedef {{ id: string, objects: ObjectDef[], palette?: Record<string, string>, problems?: object[] }} Pack */
+/**
+ * @typedef {{ light: Record<string, string>, dark: Record<string, string> }} PackPalette   token → hex, per theme
+ * @typedef {{ id: string, objects: ObjectDef[], palette: PackPalette }} Pack
+ */
 
-/** @stability stable  @returns {Pack} */
-export function definePack({ id, objects, palette = {} }) {
-  return Object.freeze({ id, objects: objects.map((o) => Object.freeze({ ...o, id: o.id.includes("/") ? o.id : `${id}/${o.id}`, pack: id })), palette });
+// The tokens a pack's palette names (both themes).
+const tokensOf = (palette) => [...new Set(Object.values(themesOf(palette)).flatMap((m) => Object.keys(m)))];
+// { light, dark } as given; a flat map (the old form, which checkPack reports) stands for both.
+const themesOf = (palette = {}) => (palette.light || palette.dark ? { light: palette.light ?? {}, dark: palette.dark ?? {} } : { light: palette, dark: palette });
+
+/**
+ * A pack: its objects with ids prefixed by the pack's id, and its palette: { light: { token: hex }, dark: {...} }.
+ * Objects and finishes in the pack name their own tokens bare ("cushion"); they resolve to "<pack>/cushion".
+ * @stability stable  @returns {Pack}
+ */
+export function definePack({ id, objects, palette = { light: {}, dark: {} } }) {
+  const own = Object.freeze(tokensOf(palette));
+  const local = (c) => (typeof c === "string" && own.includes(c) ? `${id}/${c}` : c);
+  return Object.freeze({
+    id, palette,
+    objects: objects.map((o) => Object.freeze({ ...o, id: o.id.includes("/") ? o.id : `${id}/${o.id}`, pack: id, tokens: own, ...(o.color ? { color: local(o.color) } : {}) })),
+  });
 }
 
 /**
@@ -69,7 +88,7 @@ export function definePack({ id, objects, palette = {} }) {
 /** @stability stable  @returns {Catalog} */
 export function createCatalog(packs) {
   const byId = new Map(), problems = [];
-  const extra = {};
+  const extra = { light: {}, dark: {} };
   packs.forEach((pack, pi) => {
     if (!pack?.id || !Array.isArray(pack.objects)) {
       problems.push(problem("pack.shape", `packs[${pi}]`, "this is not a pack", "import a pack's index.js (its default export is definePack({ id, objects }))"));
@@ -79,23 +98,26 @@ export function createCatalog(packs) {
       if (byId.has(o.id)) problems.push(problem("catalog.duplicate", `packs[${pi}]`, `${o.id} is defined by pack '${byId.get(o.id).pack}' and again by pack '${pack.id}'`, "rename one of them; ids are per pack, so two packs never need the same id"));
       else byId.set(o.id, o);
     }
-    Object.assign(extra, pack.palette);
+    for (const [theme, map] of Object.entries(themesOf(pack.palette))) for (const [k, v] of Object.entries(map)) extra[theme][`${pack.id}/${k}`] = v;
   });
   return {
     get: (id) => byId.get(id),
     has: (id) => byId.has(id),
     ids: () => [...byId.keys()],
     list: ({ kind, tag } = {}) => [...byId.values()].filter((o) => (!kind || o.kind === kind) && (!tag || o.tags.includes(tag))),
-    palette: (theme = "light") => ({ ...(PALETTES[theme] ?? PALETTES.light), ...extra }),
+    palette: (theme = "light") => ({ ...(PALETTES[theme] ?? PALETTES.light), ...(extra[theme] ?? extra.light) }),
     problems,
   };
 }
 
-// The primitives an object or opening builds, in its own frame.
+// The primitives an object or opening builds, in its own frame; a bare token the object's pack defines becomes
+// "<pack>/<token>".
 export function buildPrims(def, params = {}) {
   const k = new Kit();
   def.build?.(k, params);
-  return k.prims;
+  if (!def.tokens?.length) return k.prims;
+  const local = (c) => (def.tokens.includes(c) ? `${def.pack}/${c}` : c);
+  return k.prims.map((p) => ({ ...p, color: local(p.color), ...(p.faces ? { faces: Object.fromEntries(Object.entries(p.faces).map(([f, st]) => [f, { ...st, color: local(st.color) }])) } : {}) }));
 }
 
 // "Did you mean" for an unknown catalog id.
@@ -105,11 +127,37 @@ export function suggest(catalog, id, kind) {
   return near.length ? `did you mean ${near.join(" or ")}?` : `known ${kind ?? ""} ids: ${ids.slice(0, 12).join(", ")}`;
 }
 
-// Everything wrong with a pack's definitions: shapes, footprints, slots, coplanar parts. Pure; the file listing is
-// checked by tools/check.ts and the pack test, which can read the folder.
+// Everything wrong with a pack's definitions: its palette, shapes, footprints, colour tokens, slots and their clips,
+// coplanar parts. Pure; the file listing is checked by tools/check.ts and the pack test, which can read the folder.
+// The result is kept per pack (packs are frozen), so validating a world again costs nothing.
+const checked = new WeakMap();
 /** @stability stable */
 export function checkPack(pack) {
+  if (pack && typeof pack === "object" && checked.has(pack)) return checked.get(pack);
+  const out = packProblems(pack);
+  if (pack && typeof pack === "object") checked.set(pack, out);
+  return out;
+}
+
+function packProblems(pack) {
   const out = [];
+  const pal = pack.palette ?? {};
+  if (Object.keys(pal).length && !(pal.light && pal.dark)) out.push(problem("pack.palette", `${pack.id}.palette`, "the palette is not split by theme", `write palette: { light: { token: "#hex" }, dark: { token: "#hex" } }; a token needs a colour in both`));
+  else {
+    const light = Object.keys(pal.light ?? {}), dark = Object.keys(pal.dark ?? {});
+    for (const t of light.filter((t) => !dark.includes(t))) out.push(problem("pack.palette", `${pack.id}.palette.dark`, `token '${t}' has a light colour but no dark one`, `add ${JSON.stringify(t)}: "#hex" to palette.dark`));
+    for (const t of dark.filter((t) => !light.includes(t))) out.push(problem("pack.palette", `${pack.id}.palette.light`, `token '${t}' has a dark colour but no light one`, `add ${JSON.stringify(t)}: "#hex" to palette.light`));
+    for (const [theme, map] of Object.entries(pal)) for (const [t, v] of Object.entries(map ?? {})) if (!isHex(v)) out.push(problem("pack.palette", `${pack.id}.palette.${theme}.${t}`, `${JSON.stringify(v)} is not a hex colour`, `write it as "#rrggbb"`));
+  }
+  // the tokens this pack's objects may name: the engine's, and the pack's own (bare, or with the pack's prefix)
+  const own = tokensOf(pal);
+  const known = new Set([...Object.keys(PALETTES.light), ...own.map((t) => `${pack.id}/${t}`)]);
+  const colour = (c, where, part) => {
+    if (typeof c !== "string" || isHex(c) || known.has(c)) return;
+    const bare = c.startsWith(`${pack.id}/`) ? c.slice(pack.id.length + 1) : c;
+    const near = closest(bare, [...Object.keys(PALETTES.light), ...own]);
+    out.push(problem("color.token", where, `${part}colour '${c}' is not a palette token (it would draw magenta)`, near.length ? `did you mean ${near.join(" or ")}?` : `use a token from the engine's palette (src/catalog/palette.js) or add it to this pack's palette: { light: { ${JSON.stringify(bare)}: "#hex" }, dark: { ... } }`));
+  };
   pack.objects.forEach((o, i) => {
     const at = `${pack.id}.objects[${i}] (${o.id})`;
     const local = o.id.split("/").pop();
@@ -117,6 +165,7 @@ export function checkPack(pack) {
     if (!KINDS.includes(o.kind)) { out.push(problem("object.kind", at, `kind '${o.kind}' is not one of ${KINDS.join(", ")}`, "set kind to one of those")); return; }
     if (o.kind === "floor" || o.kind === "wall") {
       if (typeof o.color !== "string") out.push(problem("finish.color", at, "a finish needs a colour", `add color: "plaster" (a palette token) or a hex colour`));
+      else colour(o.color, at, "");
       if (o.pattern && !PATTERNS.includes(o.pattern)) out.push(problem("finish.pattern", at, `pattern '${o.pattern}' is unknown`, `use one of ${PATTERNS.join(", ")}`));
       return;
     }
@@ -124,6 +173,8 @@ export function checkPack(pack) {
     let prims;
     try { prims = buildPrims(o); } catch (e) { out.push(problem("object.build", at, `build threw: ${e.message}`, "fix build so it runs with no params")); return; }
     for (const p of prims) {
+      colour(p.color, `${at} part '${p.part}'`, "");
+      for (const [face, st] of Object.entries(p.faces ?? {})) colour(st.color, `${at} part '${p.part}'`, `face ${face} `);
       if (p.size.some((s) => !(s > 0))) out.push(problem("prim.size", `${at} part '${p.part}'`, `size ${JSON.stringify(p.size)} has a zero or negative side`, "give every side a positive size in metres"));
       if (p.size.some((s) => s > MAX_SIZE)) out.push(problem("prim.units", `${at} part '${p.part}'`, `size ${JSON.stringify(p.size)} is over ${MAX_SIZE} m`, "sizes are metres, not centimetres: 45 cm is 0.45"));
     }
@@ -158,6 +209,7 @@ function checkObject(o, prims, at, out) {
     if (!Array.isArray(s.stand) || !s.stand.length) out.push(problem("slot.stand", sp, "no stand tiles", "add stand: [[0, 1]] (the tile in front), and side tiles as fallbacks"));
     else if (o.blocks && w === 1 && d === 1 && s.stand.some(([x, z]) => x === 0 && z === 0)) out.push(problem("slot.stand", sp, "a stand tile is the object's own tile, which blocks walking", "stand on a neighbouring tile, such as [0, 1]"));
     if (typeof s.clip !== "string") out.push(problem("slot.clip", sp, "no clip", "add clip: \"sit\", \"type\" or \"idle\""));
+    else if (!CLIPS[s.clip]) out.push(clipProblem(s.clip, `${sp}.clip`));
   }
 }
 

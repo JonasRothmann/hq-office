@@ -1,4 +1,5 @@
-// Palette tokens: the colours objects and finishes name ("wood", "leaf"), per theme. A pack may add its own tokens.
+// Palette tokens: the colours objects and finishes name ("wood", "leaf"), per theme. A pack adds its own tokens, for
+// both themes, under its own prefix ("<pack>/<token>"); see definePack.
 // Original colours, picked for a calm, warm late-90s life-sim look; nothing is sampled from a real game.
 
 export const PALETTES = {
@@ -24,7 +25,9 @@ export const PALETTES = {
   },
 };
 
-// A token or a hex colour to a hex colour; an unknown token is magenta, so it shows.
+export const isHex = (c) => typeof c === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+
+// A token or a hex colour to a hex colour; an unknown token is magenta, so it shows (checkPack names it first).
 export function resolveColor(c, palette) {
   if (typeof c === "string" && c.startsWith("#")) return c;
   return palette[c] ?? "#ff00ff";

@@ -2,7 +2,7 @@
 // a path, turn, wait, enter the slot with a transition clip, then loop the slot's clip. Pure.
 import { simplify } from "./nav.js";
 import { problem, closest } from "../model/problems.js";
-import { CLIPS } from "../anim/clips.js";
+import { CLIPS, clipProblem } from "../anim/clips.js";
 
 /**
  * @typedef {{ kind: "walk", points: [number, number][] }
@@ -54,12 +54,6 @@ export function planAct(lot, nav, who, act, { at = "acts", holder = () => null }
   steps.push({ kind: "enter", to: slot.at, y: slot.y, facing: slot.facing, clip: ENTER[slot.clip] ?? slot.clip, object: o.id, slot: slotName });
   steps.push({ kind: "loop", clip: act.clip ?? slot.clip });
   return { steps, hold: { object: o.id, slot: slotName }, stand: tiles[tiles.length - 1] };
-}
-
-// A clip name that is not in CLIPS, with the nearest names.
-export function clipProblem(clip, path) {
-  const near = closest(String(clip), Object.keys(CLIPS));
-  return problem("clip.unknown", path, `'${clip}' is not a clip`, near.length ? `did you mean ${near.join(" or ")}?` : `use one of: ${Object.keys(CLIPS).join(", ")}`);
 }
 
 // Visit: walk to a free tile beside an object, face it, wait, then do `then` (another act) from there, or stand idle.
