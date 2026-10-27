@@ -108,7 +108,8 @@ const teamRoom = (seating, i, x, z, back) => rect(`room:${i}`, "team", x, z, ROO
 });
 
 // The building's front door, on the outer wall toward the default view (south): the hall's at the studio stage, the
-// break area's on a floor, the main hall's end in wings. The garden's path and the land's path lead to it.
+// break area's on a floor, each hall's end in wings (a campus's second column of wings has no other way in). The
+// garden's path and the land's path lead to it.
 const FRONT = (at, width = 1) => ({ side: "s", at, width });
 
 function layout(stage, seating) {
@@ -144,7 +145,7 @@ function layout(stage, seating) {
       const inCol = wings.filter((_, j) => j % cols === c);
       if (!inCol.length) continue;
       const end = (inCol.length - 1) * pitch + ROOM.d + CORRIDOR;
-      rooms.push(rect(`hall:${c}`, "corridor", hallX, 0, CORRIDOR, end, c === 0 ? { door: FRONT(0, CORRIDOR) } : {}));
+      rooms.push(rect(`hall:${c}`, "corridor", hallX, 0, CORRIDOR, end, { door: FRONT(0, CORRIDOR) }));
       if (c > 0) rooms.push(rect(`court:col${c}`, "court", hallX - COURT, 0, COURT, end));
     }
     wings.forEach((w, j) => {
