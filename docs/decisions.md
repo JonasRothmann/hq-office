@@ -187,3 +187,40 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
   only on the shelf of a room archived more than 7 days ago is no longer named after that shelf.
 - Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
   on). Nothing is fetched from another site; a picture shows only when it is on this HUD.
+
+## D18. The office on the engine, behind a setting: an adapter with the classic renderer's calls
+
+Step 4 of the migration (`docs/engine/rfc.md`, 12). The owner's OFFICE setting picks the renderer: CLASSIC (the
+default, `src/client/world/world.js`) or NEW (`src/client/office-view/view.js` on `@hq/world`). These choices were
+made while building it:
+
+- **Same calls, not a new contract.** `mountOffice(canvas, opts)` answers what `mountWorld` answers (`setLanes`,
+  `setHq`, `setTheme`, `setSelected`, `setPerformance`, `setPaused`, `setInsets`, `rotate`, `fit`, `inspect`,
+  `roomWalls`, `workerOf`). `world/index.js` keeps the insets, the keys, the turn buttons and `window.__world`, and
+  changes one line: which module it imports. Both renderers bind to `world/api.js` the same way, so the desk chips
+  and `addToWorld` never know which one draws. `deskAnchor` is the desk's `hud` anchor, `project` is the engine's,
+  `addToWorld` is `attach` to `desk:<lane>`, and `onFrame` runs on the engine's `frame` event.
+- **Its own folder, with no `index.js`.** The page loads every `src/client/<name>/index.js`, so `office-view/` has
+  `view.js` instead and is fetched only when OFFICE is NEW. The RFC named `src/client/office/adapter.js`; we kept
+  `office/` pure (no three.js, no DOM), so the headless tests of the generator stay headless.
+- **One renderer per page.** A canvas holds one WebGL context, so changing OFFICE reloads the page. A browser with no
+  copy of the settings waits for the server's before it picks, so it never mounts the wrong one first.
+  `?office=new` or `?office=classic` picks for one page, for tests and shots.
+- **State to `apply`.** Every state change builds the doc again with `officeDoc(lanes, last)` and hands it to
+  `world.apply`. The same doc twice does nothing; a new lane adds a desk, a chair, a worker and its act. Nothing is
+  rebuilt by the adapter itself. `officeDoc` now also returns `origin`, where the layout's (0, 0) lies on the lot, so
+  `roomWalls` can name the engine's wall edges.
+- **PERFORMANCE as a host system.** The engine draws only on change. A small system (`hq/pace`) says it is busy 30
+  times a second (SMOOTH) or 15 (BALANCED), so workers type and balls hop as before; POWER SAVER says nothing, and
+  the office draws only when something moves or changes. Motion still draws at display rate.
+- **Two engine additions, both additive.** Insets (`createWorld({ insets })`, `camera.setInsets`): the view centres
+  in the part the stack and the top bar leave free, and `fit()` fits there. The old renderer had them; the engine's
+  `offset` alone could not be changed after creation. `pause(on)`: a phone's reader covers the office, and nothing
+  steps or draws until it closes.
+- **Kept from the classic renderer.** The subagent balls are `world/balls.js`'s `Balls`, on desk frames attached to
+  `desk:<lane>`; they move to `office-view/` when `world/` goes. Picking maps `lane:`, `desk:` and `chair:` ids back
+  to lanes; an empty desk is no one's. Hover lights only a lane's desk or chair. The selected worker gets a ring on
+  the floor, attached to its character, so it follows the worker.
+- **Not yet.** The land round the office (OUTSIDE, step 6): NEW shows the plain lot, and the settings say so. The
+  walk to the lead's desk: the place for it is the act table in `office/acts.js`. Per-room light at night, the
+  status lights on desks and the marker over a worker who waits on the owner are the classic renderer's only.
