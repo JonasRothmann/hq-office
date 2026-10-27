@@ -1,5 +1,5 @@
 // The architecture: ground, courts, floors, walls with the Sims cutaway (recomputed per rotation), door gaps, windows, caps.
-import { THREE, Kit, roomMaterial } from "./kit.js";
+import { THREE, Kit, roomMaterial, roomsMaterial } from "./kit.js";
 import { WALL_H, KERB_H, wallCuts, toWorld } from "./plan.js";
 import { surface, wallpaper, cladding } from "./textures.js";
 import { scatterCourt, scatterLot } from "./furniture.js";
@@ -18,18 +18,19 @@ const wallShade = (n, v) => (v.y < 0.05 ? 0.8 : 1);
 // (into `out`), so the cut walls along the front show the building's outside, as in the reference.
 function segBox(kit, w, y0, y1, hex, out = null, extend = HALF) {
   const len = 1 + extend * 2;
+  const room = w.light;
   const outside = out && (!w.a || !w.b) ? (!w.a ? -1 : 1) : 0;
   if (!outside) {
-    if (w.dir === "x") kit.box(len, y1 - y0, T, hex, w.x + 0.5, y0, w.z);
-    else kit.box(T, y1 - y0, len, hex, w.x, y0, w.z + 0.5);
+    if (w.dir === "x") kit.box(len, y1 - y0, T, hex, w.x + 0.5, y0, w.z, { room });
+    else kit.box(T, y1 - y0, len, hex, w.x, y0, w.z + 0.5, { room });
     return;
   }
   const q = T / 4;
   if (w.dir === "x") {
-    kit.box(len, y1 - y0, T / 2, hex, w.x + 0.5, y0, w.z - outside * q);
+    kit.box(len, y1 - y0, T / 2, hex, w.x + 0.5, y0, w.z - outside * q, { room });
     out.box(len, y1 - y0, T / 2, "#ffffff", w.x + 0.5, y0, w.z + outside * q);
   } else {
-    kit.box(T / 2, y1 - y0, len, hex, w.x - outside * q, y0, w.z + 0.5);
+    kit.box(T / 2, y1 - y0, len, hex, w.x - outside * q, y0, w.z + 0.5, { room });
     out.box(T / 2, y1 - y0, len, "#ffffff", w.x + outside * q, y0, w.z + 0.5);
   }
 }
@@ -56,7 +57,8 @@ function windowKeys(p) {
   return keys;
 }
 
-export function buildRooms(p, L, lightOf) {
+// lightOf(id): a room's light uniform; rooms: { value: Color[] } with indexOf(id) giving each room's slot in it.
+export function buildRooms(p, L, lightOf, rooms, indexOf) {
   const group = new THREE.Group();
   group.name = "rooms";
   const disposables = [];
@@ -106,7 +108,17 @@ export function buildRooms(p, L, lightOf) {
   }
 
   // Walls: kerbs always; per rotation, the full walls (uppers, windows, lintels) and the caps
-  const wallMat = keep(roomMaterial({ map: wallpaper(L.wall) }));
+  const wallMat = keep(roomsMaterial({ map: wallpaper(L.wall), rooms }));
+  // which room's light each face of a wall gets: the room on the side its normal points to
+  for (const w of p.walls) {
+    const ia = w.a ? indexOf(w.a) : 0, ib = w.b ? indexOf(w.b) : 0;
+    w.light = (n) => {
+      const s = w.dir === "x" ? n.z : n.x;
+      if (s < -0.5) return ia;
+      if (s > 0.5) return ib;
+      return Math.max(ia, ib);
+    };
+  }
   const capMat = keep(roomMaterial());
   const cladMat = keep(roomMaterial({ map: cladding(L.cladding) }));
   const glassMat = keep(new THREE.MeshBasicMaterial({ color: L.night ? "#1d2a44" : "#cfe3ee" }));

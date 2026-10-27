@@ -24,6 +24,8 @@ export const SHOTS: [string, string][] = [
   ["b-light-18", "look=b&theme=light&lanes=18"],
   ["b-light-close", "look=b&theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
   ["a-light-close", "look=a&theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
+  ["b-light-poses", "look=b&theme=light&lanes=3&statuses=hq_turn,done,stale&zoom=2&focus=0,1"],
+  ["b-light-4-rot1", "look=b&theme=light&lanes=4&rot=1"],
 ];
 
 // Chrome with WebGL on SwiftShader (room-hash's startChrome takes no extra flags).
@@ -61,10 +63,11 @@ if (import.meta.main) {
       await s("Page.navigate", { url: `http://127.0.0.1:${server.port}/docs/design/world-lab.html?${query}` });
       let ready = false;
       for (let i = 0; i < 1200 && !ready; i++) {
+        if (errors.some((e) => /Error/.test(e))) break; // a module or script error: the page will never be ready
         ready = await evaluate("!!window.__worldReady").catch(() => false);
         if (!ready) await Bun.sleep(100);
       }
-      if (!ready) { console.error(`${name}: not ready after 120 s`, errors.slice(0, 5)); continue; }
+      if (!ready) { console.error(`${name}: not ready`, errors.slice(0, 5)); continue; }
       await Bun.sleep(Number(process.env.SHOT_SETTLE ?? 1500));
       const png = Buffer.from((await s("Page.captureScreenshot", { format: "png" })).data, "base64");
       for (const ext of ["png", "jpg"]) { const f = join(out, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }

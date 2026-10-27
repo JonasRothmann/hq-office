@@ -357,3 +357,33 @@ export function face(skin, hair, mood = "calm") {
   cache.set(id, t);
   return t;
 }
+
+// The outside face of an outer wall, one metre square: brick (look A) or vertical boards (look B).
+export function cladding(spec) {
+  const id = `cladding:${JSON.stringify(spec)}`;
+  if (cache.has(id)) return cache.get(id);
+  const r = rng(hash(id));
+  const c = canvas(128, 128, (g, w, h) => {
+    g.fillStyle = spec.line; g.fillRect(0, 0, w, h);
+    if (spec.kind === "brick") {
+      const bh = 16, bw = 42;
+      for (let y = 0, row = 0; y < h; y += bh, row++) {
+        for (let x = (row % 2) * -bw / 2; x < w; x += bw) {
+          g.fillStyle = r() < 0.5 ? spec.base : spec.alt;
+          g.fillRect(x + 1, y + 1, bw - 2, bh - 2);
+        }
+      }
+    } else {
+      for (let x = 0; x < w; x += 16) {
+        g.fillStyle = r() < 0.5 ? spec.base : spec.alt;
+        g.fillRect(x + 1, 0, 14, h);
+        g.globalAlpha = 0.12; g.fillStyle = spec.line;
+        for (let k = 0; k < 3; k++) g.fillRect(x + 3 + r() * 10, 0, 1, h);
+        g.globalAlpha = 1;
+      }
+    }
+  });
+  const t = texture(c, { metres: 1 });
+  cache.set(id, t);
+  return t;
+}

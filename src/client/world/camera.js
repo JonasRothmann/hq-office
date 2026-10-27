@@ -78,7 +78,7 @@ export class View {
       }
     }
     const { w, h } = this.size, i = this.insets;
-    const freeW = Math.max(80, w - i.left - i.right - 48), freeH = Math.max(80, h - i.top - i.bottom - 48);
+    const freeW = Math.max(80, w - i.left - i.right - 32), freeH = Math.max(80, h - i.top - i.bottom - 32);
     const ppm = Math.max(MIN_PPM, Math.min(ZOOMS[2], freeW / (maxU - minU), freeH / (maxV - minV)));
     this.ppmTo = ppm;
     // the ground point that projects to the middle of the box

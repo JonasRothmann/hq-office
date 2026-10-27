@@ -74,9 +74,9 @@ const A = {
     light: { amb: "#fff2e2", ambI: 1.95, sky: "#fff6e8", ground: "#b9a58a", hemi: 0.75, key: "#fff1dc", keyI: 1.05, room: 0.0, shadow: 0.38 },
   },
   night: {
-    bg: "#16202c", ground: { base: "#24361f", alt: "#1f2f1b", kind: "grass" },
+    bg: "#1a2431", ground: { base: "#3b5532", alt: "#344c2c", kind: "grass" },
     court: { base: "#3a3d42", alt: "#33363a", kind: "gravel" }, path: "#3d3f44",
-    light: { amb: "#3e5898", ambI: 0.5, sky: "#3e5898", ground: "#1b2030", hemi: 0.3, key: "#8aa0d8", keyI: 0.3, room: 0.62, shadow: 0.0 },
+    light: { amb: "#3e5898", ambI: 1.0, sky: "#4a64a8", ground: "#1b2030", hemi: 0.45, key: "#8aa0d8", keyI: 0.35, room: 0.62, shadow: 0.0 },
   },
 };
 
@@ -90,12 +90,12 @@ const B = {
     floor: {
       office: { base: "#e4cfa8", alt: "#d9c095", line: "#c4a77a", kind: "planks" },
       hq: { base: "#d4cf98", alt: "#c8c38a", line: "#6d6a45", kind: "tatami" },
-      corridor: { base: "#e9e5dd", alt: "#dedad1", line: "#cfcac0", kind: "cement" },
+      corridor: { base: "#dcd6cb", alt: "#d0c9bc", line: "#bdb5a6", kind: "cement" },
       break: { base: "#ece7de", alt: "#c9c2b4", line: "#a39b8b", kind: "terrazzo" },
     },
     wall: { face: "#f4f1ea", alt: "#ebe6dc", trim: "#d9c095", kind: "plain" },
     cladding: { base: "#cfb38a", alt: "#c4a77c", line: "#a88d66", kind: "boards" },
-    cap: "#a8936f",
+    cap: "#9a8462",
     wood: "#dcc29a", woodEdge: "#c4a77a", steel: "#2b2b2e",
     chair: { seat: "#e9e4da", frame: "#2b2b2e" },
     rug: { base: "#cdc890", alt: "#c2bd84", line: "#4a4a3a", kind: "tatami" },
@@ -109,9 +109,9 @@ const B = {
     light: { amb: "#fff8ef", ambI: 2.0, sky: "#fffaf2", ground: "#c8bca8", hemi: 0.75, key: "#fff4e4", keyI: 0.95, room: 0.0, shadow: 0.3 },
   },
   night: {
-    bg: "#151b26", ground: { base: "#2a3426", alt: "#252e22", kind: "grass" },
+    bg: "#182030", ground: { base: "#43523d", alt: "#3b4936", kind: "grass" },
     court: { base: "#3d3f44", alt: "#36383c", kind: "raked" }, path: "#3d3f44",
-    light: { amb: "#3e5898", ambI: 0.5, sky: "#3e5898", ground: "#1b2030", hemi: 0.3, key: "#8aa0d8", keyI: 0.28, room: 0.6, shadow: 0.0 },
+    light: { amb: "#3e5898", ambI: 1.0, sky: "#4a64a8", ground: "#1b2030", hemi: 0.45, key: "#8aa0d8", keyI: 0.35, room: 0.6, shadow: 0.0 },
   },
 };
 

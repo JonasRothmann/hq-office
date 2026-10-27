@@ -1,6 +1,6 @@
 // The world's entry: mountWorld(canvas, { look, theme }) builds the offices for the lanes and keeps them drawn.
 import { THREE } from "./kit.js";
-import { roomLight } from "./kit.js";
+import { roomLight, MAX_ROOMS } from "./kit.js";
 import { plan as makePlan, diff, toWorld } from "./plan.js";
 import { lookFor, STATUS } from "./look.js";
 import { View } from "./camera.js";
@@ -32,8 +32,18 @@ export function mountWorld(canvas, opts = {}) {
   const rising = new Map(); // lane -> start time
   const hqName = opts.hq ?? "hq";
 
+  // Each room's light: one Color, shared by the room's own materials (a uniform) and by the walls (a slot in an array).
+  const roomArray = { value: Array.from({ length: MAX_ROOMS }, () => new THREE.Color(0, 0, 0)) };
+  function indexOf(id) {
+    if (!built.slots.has(id)) built.slots.set(id, Math.min(MAX_ROOMS - 1, built.slots.size + 1));
+    return built.slots.get(id);
+  }
   function lightOf(id) {
-    if (!built.lights.has(id)) built.lights.set(id, roomLight());
+    if (!built.lights.has(id)) {
+      const u = roomLight();
+      u.value = roomArray.value[indexOf(id)];
+      built.lights.set(id, u);
+    }
     return built.lights.get(id);
   }
 
@@ -48,9 +58,11 @@ export function mountWorld(canvas, opts = {}) {
 
   function build(added = []) {
     teardown();
-    built = { root: new THREE.Group(), lights: new Map(), offices: new Map(), suite: null, lounge: null, rooms: null, cuts: null, wallIndex: new Map() };
+    for (const c of roomArray.value) c.setRGB(0, 0, 0);
+    built = { root: new THREE.Group(), lights: new Map(), slots: new Map(), offices: new Map(), suite: null, lounge: null, rooms: null, cuts: null, wallIndex: new Map() };
     built.root.name = "world";
-    built.rooms = buildRooms(p, L, lightOf);
+    for (const r of p.rooms) lightOf(r.id);
+    built.rooms = buildRooms(p, L, lightOf, roomArray, indexOf);
     built.root.add(built.rooms.group);
     p.walls.forEach((w, i) => built.wallIndex.set(`${w.dir}:${w.x}:${w.z}`, i));
     for (const room of p.offices) {

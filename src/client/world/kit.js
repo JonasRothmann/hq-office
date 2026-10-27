@@ -26,6 +26,24 @@ export function roomMaterial({ map = null, room = roomLight(), vertexColors = tr
   return m;
 }
 
+// Like roomMaterial, for meshes that span rooms (the walls): each vertex carries `aRoom`, an index into `rooms`
+// (an array of the rooms' light colours, 0 = outdoors), so a wall's face lights with the room it faces.
+export const MAX_ROOMS = 96;
+export function roomsMaterial({ map = null, rooms } = {}) {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true, map, flatShading: true });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uRooms = rooms;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float aRoom;\nvarying float vRoom;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvRoom = aRoom;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", `#include <common>\nuniform vec3 uRooms[${MAX_ROOMS}];\nvarying float vRoom;`)
+      .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse += diffuseColor.rgb * uRooms[int(vRoom + 0.5)];");
+  };
+  m.customProgramCacheKey = () => "rooms-lit";
+  return m;
+}
+
 // Parts in, one mesh out. Positions are in the kit's current frame (see `at`); `y` is the bottom of a part.
 export class Kit {
   constructor() {
@@ -48,7 +66,7 @@ export class Kit {
       new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx || 0, o.ry || 0, o.rz || 0, "YXZ")),
       new THREE.Vector3(1, 1, 1),
     );
-    this.parts.push({ geo, color: color(hex), matrix: this.frame.clone().multiply(m), shade: o.shade, uv: o.uv });
+    this.parts.push({ geo, color: color(hex), matrix: this.frame.clone().multiply(m), shade: o.shade, uv: o.uv, room: o.room });
     return this;
   }
 
@@ -95,6 +113,7 @@ export class Kit {
       return { g, p };
     });
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), uvs = uv ? new Float32Array(n * 2) : null;
+    const rooms = this.parts.some((p) => p.room) ? new Float32Array(n) : null;
     let o = 0;
     const v = new THREE.Vector3(), nv = new THREE.Vector3();
     for (const { g, p } of geos) {
@@ -105,6 +124,7 @@ export class Kit {
         pos.set([v.x, v.y, v.z], o * 3);
         nor.set([nv.x, nv.y, nv.z], o * 3);
         const f = (p.shade ?? shade)?.(nv, v) ?? 1;
+        if (rooms) rooms[o] = p.room ? p.room(nv) : 0;
         col.set([p.color.r * f, p.color.g * f, p.color.b * f], o * 3);
         if (uvs) {
           // world-mapped: walls by their run and height, floors by x and z (one texture repeat per metre)
@@ -119,6 +139,7 @@ export class Kit {
     out.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
     out.setAttribute("color", new THREE.BufferAttribute(col, 3));
     if (uvs) out.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    if (rooms) out.setAttribute("aRoom", new THREE.BufferAttribute(rooms, 1));
     out.computeBoundingSphere();
     return out;
   }

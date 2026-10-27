@@ -206,8 +206,28 @@ export function buildOffice(room, L, light) {
   monitor(kit, L, 2, 0.32);
   deskLamp(kit, L, 1.32, 0.3);
   chair(kit, L, 2, 1.27, 0);
-  kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 2.62, DESK_H, 0.56, { seg: 8 }); // a mug
   kit.box(0.22, 0.03, 0.3, "#f4f1ea", 1.55, DESK_H, 0.62, { ry: 0.2 }); // a notebook
+  const extra = seed % 3;
+  if (extra === 0) {
+    // a laptop on a stand, open toward the chair
+    kit.box(0.08, 0.1, 0.18, L.steel, 2.62, DESK_H, 0.4, { rx: 0 });
+    kit.box(0.32, 0.015, 0.22, "#b9bcc2", 2.62, DESK_H + 0.1, 0.4, { rx: -0.25 });
+    kit.box(0.32, 0.2, 0.012, "#b9bcc2", 2.62, DESK_H + 0.12, 0.29, { rx: 0.2 });
+    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 1.2, DESK_H, 0.62, { seg: 8 });
+  } else if (extra === 1) {
+    // a second screen, turned in
+    kit.box(0.16, 0.012, 0.12, L.steel, 2.6, DESK_H, 0.36);
+    kit.box(0.03, 0.14, 0.03, L.steel, 2.6, DESK_H, 0.34);
+    kit.rbox(0.46, 0.3, 0.03, L.screenFrame, 2.6, DESK_H + 0.12, 0.36, 0.008, { ry: -0.45 });
+    kit.box(0.42, 0.26, 0.005, "#30384a", 2.6 - 0.007, DESK_H + 0.14, 0.38, { ry: -0.45 });
+    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 1.2, DESK_H, 0.62, { seg: 8 });
+  } else {
+    // headphones and a small plant
+    kit.box(0.16, 0.05, 0.05, L.steel, 2.6, DESK_H, 0.6, { ry: 0.3 });
+    kit.cyl(0.05, 0.07, L.plant.pot, 2.62, DESK_H, 0.3, { seg: 8 });
+    kit.sphere(0.07, L.plant.leaf, 2.62, DESK_H + 0.12, 0.3, { sy: 0.8 });
+    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 2.55, DESK_H, 0.42, { seg: 8 });
+  }
   plant(kit, L, 4.55, 0.48, true, seed % 7);
   if (L.shoji) {
     shoji(kit, L, 0.3, 0.75, Math.PI / 2);
@@ -375,8 +395,8 @@ export function scatterCourt(kit, c, L, i) {
   for (const t of [-1, 1]) kit.box(0.06, 0.38, 0.3, L.steel, tx + 3.2 + t * 0.5, y, tz + 0.2);
 }
 
-// The lot round the building: trees behind and beside it (pines in look B, round trees in look A), low bushes in
-// front, kept clear of the building and of the camera's side so nothing outdoors hides a room.
+// The lot round the building: trees behind it and to its left (pines in look B, round trees in look A), kept off the
+// camera's side of the default view so nothing outdoors hides a room.
 export function scatterLot(kit, b, L) {
   const y = -0.12;
   const pine = (x, z, s) => {
@@ -393,12 +413,4 @@ export function scatterLot(kit, b, L) {
   let i = 0;
   for (let x = b.minX - 2; x <= b.maxX + 2; x += 4.5, i++) tree(x + jitter(i) * 1.5, b.minZ - 3.2 + jitter(i + 3), 1 + jitter(i + 5) * 0.4);
   for (let z = b.minZ + 1.5; z <= b.maxZ + 1; z += 4.5, i++) tree(b.minX - 3.2 + jitter(i), z + jitter(i + 1) * 1.5, 1 + jitter(i + 2) * 0.4);
-  for (let x = b.minX + 1; x <= b.maxX - 1; x += 1.6, i++) {
-    if (i % 4 === 3) continue;
-    kit.sphere(0.32 + jitter(i) * 0.1, i % 2 ? L.plant.leaf : L.plant.leaf2, x, y + 0.12, b.maxZ + 1.3 + jitter(i + 4) * 0.2, { sy: 0.7, ry: i, detail: 1 });
-  }
-  for (let z = b.minZ + 1; z <= b.maxZ - 1; z += 1.6, i++) {
-    if (i % 4 === 3) continue;
-    kit.sphere(0.32 + jitter(i) * 0.1, i % 2 ? L.plant.leaf : L.plant.leaf2, b.maxX + 1.3 + jitter(i + 4) * 0.2, y + 0.12, z, { sy: 0.7, ry: i, detail: 1 });
-  }
 }

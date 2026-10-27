@@ -50,6 +50,8 @@ const POSES = {
     armL: [-1.55, 0, 0.35], armR: [-1.55, 0, -0.35], elbowL: [-0.4, 1.0, 0], elbowR: [-0.4, -1.0, 0] }),
 };
 const SEATED = new Set(["work", "fold", "lean", "mug", "sleep"]);
+// How far a seated pose turns from the desk toward the camera (0 faces the desk, 1 faces the camera).
+const SWIVEL = { fold: 0.55, lean: 0.5, mug: 0.7 };
 const JOINTS = ["spine", "head", "legL", "legR", "kneeL", "kneeR", "armL", "armR", "elbowL", "elbowR"];
 
 export class Worker {
@@ -175,6 +177,14 @@ export class Worker {
       this.J[j].rotation.set(cur[0], cur[1], cur[2]);
     }
     if (this.pose === "raise") this.root.rotation.y = facingCamera;
+    else if (SWIVEL[this.pose] !== undefined) {
+      // a worker who is not working swivels the chair away from the screen, part way toward the room (the camera):
+      // waiting reads from the silhouette, not only from the colour of the badge
+      const d = Math.atan2(Math.sin(facingCamera - this.spots.faceDesk), Math.cos(facingCamera - this.spots.faceDesk));
+      const to = this.spots.faceDesk + d * SWIVEL[this.pose];
+      const cur = this.root.rotation.y;
+      this.root.rotation.y = cur + Math.atan2(Math.sin(to - cur), Math.cos(to - cur)) * Math.min(1, k * 0.6);
+    } else if (SEATED.has(this.pose)) this.root.rotation.y = this.spots.faceDesk;
     this.mug.visible = this.pose === "mug";
     if (this.badge.visible) this.badge.position.y = (SEATED.has(this.pose) ? 1.62 : 1.86) + Math.sin(tt * 2.4) * 0.035;
   }
