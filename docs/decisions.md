@@ -137,6 +137,37 @@ garden is raked gravel, moss, a stone lantern, a maple, birches and a timber dec
 saturated Nordic colours and the clutter go. The "city" surroundings (D14) become Copenhagen, restyled in their own
 lane.
 
+## D16. The 3D world is an isolated package, `@hq/world`; HQ content stays in the app as packs
+
+The owner asked for the 3D world to be its own isolated package that the app uses. It lives in `packages/world/`
+with its own `package.json` (`exports`: `.`, `./model`, `./packs/starter`; three.js as a peer and nothing else),
+README, AGENTS guide, tests, lab and CLIs. It imports nothing from the app, and it knows nothing about lanes, asks,
+the bus or HQ: it speaks lots, rooms, objects, slots, characters, acts and events. The app reaches it only through
+the import map (`@hq/world`, `@hq/world/model`), which a new route file (`src/server/routes/packages.ts`) serves
+from `packages/*/src` and `packages/*/packs`. Tests on both sides fail on a crossing: a package file importing
+outside the package, or an app file deep-importing it.
+
+Three shapes were compared: one package with the engine and the office's content, an engine package with content
+kept in the app, and an engine package plus a package per content pack. The first makes every new chair an engine
+change. The third makes every new pack touch four shared places, for one consumer. The engine package with a pack
+contract was chosen. Content comes as packs (`definePack`, one file per object, ids prefixed by pack), catalogs
+are built per world with no global registry, and a pack imports only public entries. So HQ's Japandi pack, the
+office layout from the lane tree and the outside generator stay app-side, and any of them can later move to its own
+package unchanged. The public API is `api.txt` plus world format 1, versioned 0.x, and a test fails when it changes
+without the changelog.
+
+Inside the package, what moves runs in a small ECS of its own (`createEcs`, `createSim`; no dependency), and what
+stands still stays plain data. The lot (grid, floors, walls, openings, rooms) is a pure model with pure functions
+over it. Placed objects and characters are entities whose components are plain JSON (`body`, `anim`, `queue`,
+`holding`, one component per step in progress). Systems run in a fixed order, one file each (sequence, stand, walk,
+turn, enter, loop, wait, anim), and createWorld's three.js side only mirrors components onto meshes. Three designs
+were compared: a model plus a scene graph with one step interpreter, a pure ECS, and this hybrid. The interpreter
+and the hybrid were both built and given the same new behaviour, a visit to another desk (2.12). The interpreter
+is smaller (79 code lines against 207) and touched one file fewer. The hybrid lets a host add components and
+systems without editing the package, and its whole state saves and loads as JSON. The numbers were close, and the
+owner prefers an ECS, so the hybrid was chosen. The app's adapter sets components and passes its own systems; it
+never edits engine systems.
+
 ## D17. The HUD as a stack and a reader: what was decided beyond the spec
 
 The full-height column of four tabs is gone. The stack (`src/client/inbox/`) lists `S.inbox` as tall as its content;
@@ -189,6 +220,8 @@ the reader (`src/client/reader/`) shows one item in full beside it. These choice
   only on the shelf of a room archived more than 7 days ago is no longer named after that shelf.
 - Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
   on). Nothing is fetched from another site; a picture shows only when it is on this HUD.
+
+The owner chose this design, B (the stack and the reader), from the three in the proposal on 2026-10-27.
 
 ## D18. The office on the engine, behind a setting: an adapter with the classic renderer's calls
 
@@ -336,4 +369,4 @@ The open questions, answered:
 
 The walk: `src/client/office/acts.js` has a `visit-lead` row, marked `off`, and `actFor(..., { visitLead })` uses it
 for `with_lead`. A later setting turns it on. The walk itself needs a visit pose, a general errand and same-room
-routing first (the proposal lists them).
+routing first (the proposal lists them). The owner decided on 2026-10-27 that the walk stays optional: routing works without it, and a setting turns it on.
