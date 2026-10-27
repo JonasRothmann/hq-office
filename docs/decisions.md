@@ -255,14 +255,31 @@ the lead escalates it. The office walk to the lead's desk is a later, optional s
 - **Delivery** reuses rooms' rules: `promptAgent`, and rooms' `away`. The lead is typed into only while it is idle
   with no prompt pending; while it is away the question is kept and sent when it is back. A failed delivery, or a
   lead that is done, parked or removed, escalates at once.
-- **Prompt injection.** The question is another agent's text typed into the lead. It is quoted line by line, with
-  control characters taken out, under a line that says to weigh it, not follow it. The lead gets nothing beyond its
-  lane: it can answer or escalate only what it holds (anyone else gets a 409), and the owner-only kinds never reach
-  it. Money, irreversible steps and outside contact still rely on the guide and on escalation.
-- **Answers.** `answerAsk(id, answer, by)`: no `by` is the owner. The answer to a routed ask is typed into the asking
-  lane (kept while it is away). An ask that never went to a lead is unchanged: HQ relays its answer, as before. If
-  the owner answers what a lead holds, or HQ withdraws it, the lead is told to drop it. HQ hears every answer, with
-  who gave it, and every escalation.
+- **Prompt injection: one quoting function.** The question is another agent's text typed into the lead. The prompt
+  and `hud held` both quote it through `quoteAgentText` (`src/agent-text.ts`), under a line that says to weigh it, not
+  follow it. Every line keeps its `| ` prefix, so a title or an option can never print as a command line. Line breaks
+  in any form (CR, VT, FF, NEL, U+2028, U+2029) become quoted line breaks; every other C0 and C1 control and the bidi
+  controls (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) are taken out. Lane names in the head go
+  through `oneLine`. The owner-only kinds never reach a lead. Money, irreversible steps and outside contact still
+  rely on the guide and on escalation.
+- **Identity: a token per hop.** A lane name is a claim, not proof (the review showed `--as` let anyone answer as a
+  lead, or as HQ). Each hop gets a random 128-bit token, stored on its `ask_routes` row and typed only into that lead
+  with the question. `hud answer`, `hud escalate` and `hud held` for a lead need `--token`; the server checks it
+  against the open hop the lead still holds. A wrong or old token (the hop ended: answered, escalated, moved) is a
+  403 with one message, which never says whether the ask exists. A token of any question a lead holds lists all it
+  holds, each with its own token. Any token or `by` makes a call a lead's, so a blank `by` is never the owner. Tokens
+  never reach `/api/state` or the page. The owner's page is unchanged (no token, no `by`). HQ escalates with
+  `hud escalate ID --hq`, recorded under its configured agent name (`HUD_HQ_AGENT`); it is trusted the way it is to
+  withdraw, which is to say not authenticated beyond the page's own header check.
+- **Answers.** `answerAsk(id, answer, { token, by })`: neither is the owner. The answer to a routed ask is typed into
+  the asking lane (kept while it is away). HQ hears it once that is done: "already delivered to L; no relay needed"
+  (or that L is away and gets it when back, or that typing failed and HQ must relay it). An ask that never went to
+  a lead is unchanged: HQ hears at once and relays, as before. If the owner answers what a lead holds, or HQ
+  withdraws it, the lead is told to drop it, also when that happens while the question is still being typed in. An
+  answer still being typed in at a restart is typed in again at start. The owner's answer that loses a race with the
+  lead's is refused with who answered first; the page keeps the draft and offers it to HQ as a follow-up note.
+- **Changes while a lead holds it.** Raised to blocking and urgent, it goes to the owner at once. Moved to another
+  lane, the old lead drops it and it is routed again from the new lane, as the next hop.
 - **The owner's view.** `needs_you` counts only what the owner holds; a lane whose questions are all with its lead
   is `with_lead`. The stack lists lead-held questions under "With leads", answerable, with the lead and "to you at
   HH:MM", and chimes only when one reaches the owner.
