@@ -153,8 +153,11 @@ Left for phase 2:
 - **Bun side**: nothing in the app server imports the package in phase 1. Bun resolves `@hq/world/model` by
   self-reference inside the package (its tests and the starter pack use it), but not from app files. The package's
   tools load app-side worlds and packs through `tools/resolve.ts`, which points `@hq/world...` at the exports on load.
-  When app tests import an app pack directly, the root `package.json` gets `"workspaces": ["packages/*"]` (a symlink in
-  `node_modules`, no dependency).
+  Step 2 (12) is the first time app tests import an app pack. The plan was `"workspaces": ["packages/*"]` in the
+  root `package.json`, but that needs a `bun install` in every checkout and worktree before `bun test` passes. The
+  root `tsconfig.json` maps the three public entries to their files instead (`compilerOptions.paths`, which Bun reads
+  for JS too), so it works with no install. `test/client/world-package.test.ts` holds those paths equal to the
+  package's exports.
 
 ### 2.6 How `modules.test.ts` treats it
 

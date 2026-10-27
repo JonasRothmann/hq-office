@@ -68,6 +68,13 @@ describe("@hq/world from the app", () => {
     for (const [, v] of mapped) expect(packagePath(v)).not.toBeNull();
   });
 
+  test("Bun's half of the import map (tsconfig.json paths) maps every public entry to the file the package exports", () => {
+    const text = readFileSync(join(ROOT, "tsconfig.json"), "utf8").replace(/^\s*\/\/.*$/gm, "");
+    const paths: Record<string, string[]> = JSON.parse(text).compilerOptions.paths;
+    const mapped = Object.fromEntries(Object.entries(paths).filter(([k]) => k === pkg.name || k.startsWith(`${pkg.name}/`)));
+    expect(mapped).toEqual(Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, [`.${v}`]])));
+  });
+
   test("the server serves the package's browser modules only", () => {
     expect(packagePath("/packages/world/src/index.js")).toBe(join(ROOT, "packages/world/src/index.js"));
     expect(packagePath("/packages/world/packs/starter/chair.js")).not.toBeNull();
