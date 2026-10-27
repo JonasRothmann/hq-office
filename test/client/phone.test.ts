@@ -42,7 +42,7 @@ beforeAll(async () => {
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 390, height: 664, deviceScaleFactor: 3, mobile: true });
   await page.s("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector(".ask")`);
 }, 30_000);
 

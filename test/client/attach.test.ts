@@ -52,7 +52,7 @@ beforeAll(async () => {
   askId = await seed(server.post);
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector(".ask")`);
   await page.evaluate(HELPERS);
 }, 30_000);

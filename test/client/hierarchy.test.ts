@@ -27,7 +27,7 @@ beforeAll(async () => {
   for (const [name] of TREE) await server.post("/api/lanes", { name, machine: "local" });
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.getElementById("card")?.innerHTML`);
 }, 30_000);
 

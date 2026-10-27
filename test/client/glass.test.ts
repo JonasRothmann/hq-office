@@ -59,7 +59,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     test.skipIf(!chromeFound)(`${width}x${height} ${scheme}: every question card is on top, nothing overlaps the column, no page scroll`, async () => {
       await page.s("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
       await page.s("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
-      await page.s("Page.navigate", { url: `${server.base}/` });
+      await page.s("Page.navigate", { url: `${server.base}/?world=off` });
       await until(`document.querySelectorAll("#hud .ask").length === 4 && !!document.getElementById("card").innerHTML`);
       expect(await page.evaluate(`document.documentElement.dataset.theme`)).toBe(scheme);
       expect(await page.evaluate(`[...document.querySelectorAll("#hud .tiergroup")].map((h) => h.textContent.trim())`)).toEqual(["BLOCKING 1", "NON-BLOCKING 3"]);
@@ -80,7 +80,7 @@ test.skipIf(!chromeFound)("the theme control cycles system, light and dark, keep
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   await page.evaluate(`localStorage.removeItem("hq-theme")`);
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector("#themeBtn svg")`);
   await page.evaluate(`(async () => { const { on } = await import("/src/client/core/bus.js"); window.__themes = []; on("theme", (t) => window.__themes.push(t)); })()`);
   const bg = `getComputedStyle(document.body).color`;
@@ -93,7 +93,7 @@ test.skipIf(!chromeFound)("the theme control cycles system, light and dark, keep
   expect(await page.evaluate(bg)).not.toBe(lightText);
   // the system's own change does not override a picked theme
   await page.s("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector("#themeBtn svg")`);
   expect(await page.evaluate(`document.documentElement.dataset.theme`)).toBe("dark");
   await page.evaluate(`(async () => { const { on } = await import("/src/client/core/bus.js"); window.__themes = []; on("theme", (t) => window.__themes.push(t)); })()`);
