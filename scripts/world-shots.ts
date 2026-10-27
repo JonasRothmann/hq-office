@@ -64,7 +64,7 @@ if (import.meta.main) {
       const png = Buffer.from((await s("Page.captureScreenshot", { format: "png" })).data, "base64");
       for (const ext of ["png", "jpg"]) { const f = join(out, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }
       let file = join(out, `${name}.png`), bytes: Buffer = png;
-      if (png.length > MAX_BYTES) {
+      if (png.length > MAX_BYTES || name.startsWith("outside-")) {
         bytes = Buffer.from((await s("Page.captureScreenshot", { format: "jpeg", quality: 85 })).data, "base64");
         file = join(out, `${name}.jpg`);
       }
