@@ -217,11 +217,11 @@ test.skipIf(!chromeFound)("the rail folds and opens, and this browser remembers 
   expect(await page.evaluate(`localStorage.getItem("hq-room-rail")`)).toBeNull();
 });
 
-test.skipIf(!chromeFound)("the seats name who is at the table: the owner at its head, then the room's lanes, each one selectable", async () => {
+test.skipIf(!chromeFound)("the seats name who is at the table: the owner at its head, then the owning lane and its members (by name when added together), each one selectable", async () => {
   await load("#room/ope-7");
   await until(inRoom("ope-7"));
   const seats = await page.evaluate(`[...document.querySelectorAll("#roomView .rvseats .rlane")].map((b) => [b.querySelector("b").textContent, b.dataset.select ?? null])`);
-  expect(seats).toEqual([["Tester", null], ["alpha", "alpha"], ["golf", "golf"], ["bravo", "bravo"]]);
+  expect(seats).toEqual([["Tester", null], ["alpha", "alpha"], ["bravo", "bravo"], ["golf", "golf"]]);
   await page.evaluate(`document.querySelector('#roomView .rvseats [data-select="golf"]').click()`);
   await until(`document.querySelector("#card h3")?.textContent === "golf"`);
 });
