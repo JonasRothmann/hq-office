@@ -23,11 +23,22 @@ export const SHOTS: [string, string][] = [
   ["light-close", "theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
   ["light-poses", "theme=light&lanes=3&statuses=hq_turn,done,stale&zoom=2&focus=0,1"],
   ["light-4-rot1", "theme=light&lanes=4&rot=1"],
+  // the land around the office (src/client/world/outside/): --only=outside- writes them to docs/design/outside/
+  ["outside-nature-light-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=0"],
+  ["outside-nature-light-mid", "scene=outside&mode=nature&seed=7&lot=24x14&theme=light&zoom=1&focus=22,14"],
+  ["outside-nature-dark-far", "scene=outside&mode=nature&seed=7&lot=24x14&theme=dark&zoom=0"],
+  ["outside-nature-light-big", "scene=outside&mode=nature&seed=3&lot=60x40&theme=light"],
+  ["outside-city-light-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=0"],
+  ["outside-city-light-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=light&zoom=1&focus=20,-14"],
+  ["outside-city-dark-far", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=0"],
+  ["outside-city-dark-mid", "scene=outside&mode=city&seed=7&lot=24x14&theme=dark&zoom=1&focus=20,-14"],
+  ["outside-city-light-big", "scene=outside&mode=city&seed=3&lot=60x40&theme=light"],
+  ["outside-city-light-rot1", "scene=outside&mode=city&seed=11&lot=24x14&theme=light&zoom=0&rot=1"],
 ];
 
 if (import.meta.main) {
   const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
-  const out = resolve(ROOT, process.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? "docs/design/shots");
+  const out = resolve(ROOT, process.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? (only?.startsWith("outside") ? "docs/design/outside" : "docs/design/shots"));
   mkdirSync(out, { recursive: true });
   const server = serveLab(freePort());
   const chrome = await startChrome({ webgl: true });
@@ -40,7 +51,8 @@ if (import.meta.main) {
       const t0 = Date.now();
       errors.length = 0;
       await s("Page.navigate", { url: "about:blank" });
-      await s("Page.navigate", { url: `http://127.0.0.1:${server.port}/docs/design/world-lab.html?${query}` });
+      const page = query.includes("scene=outside") ? "docs/design/outside/lab.html" : "docs/design/world-lab.html";
+      await s("Page.navigate", { url: `http://127.0.0.1:${server.port}/${page}?${query}` });
       let ready = false;
       for (let i = 0; i < 1200 && !ready; i++) {
         if (errors.some((e) => /Error/.test(e))) break; // a module or script error: the page will never be ready
@@ -52,12 +64,12 @@ if (import.meta.main) {
       const png = Buffer.from((await s("Page.captureScreenshot", { format: "png" })).data, "base64");
       for (const ext of ["png", "jpg"]) { const f = join(out, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }
       let file = join(out, `${name}.png`), bytes: Buffer = png;
-      if (png.length > MAX_BYTES) {
+      if (png.length > MAX_BYTES || name.startsWith("outside-")) {
         bytes = Buffer.from((await s("Page.captureScreenshot", { format: "jpeg", quality: 85 })).data, "base64");
         file = join(out, `${name}.jpg`);
       }
       writeFileSync(file, bytes);
-      const info = await evaluate("(() => { const r = world.renderer.info.render; return `${r.calls} draw calls, ${Math.round(r.triangles / 1000)}k triangles`; })()").catch(() => "");
+      const info = await evaluate("(() => { const r = window.__outsideCost ?? world.renderer.info.render; return `${window.__outsideCost ? 'outside: ' : ''}${r.calls} draw calls, ${Math.round(r.triangles / 1000)}k triangles`; })()").catch(() => "");
       console.log(`${name}: ${file.slice(ROOT.length + 1)} ${(bytes.length / 1024).toFixed(0)} KB in ${((Date.now() - t0) / 1000).toFixed(1)} s; ${info}${errors.length ? `; errors: ${errors.slice(0, 3).join(" | ")}` : ""}`);
     }
   } finally {
