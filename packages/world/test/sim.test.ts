@@ -51,6 +51,28 @@ describe("sim", () => {
     expect(sim.ecs.get("ada", "holding")).toEqual({ object: "chair-2", slot: "seat" });
   });
 
+  test("a visit: get up, walk to beside another room's chair, face it, wait, walk back and sit again", async () => {
+    const { sim, nav } = fresh();
+    sim.act("ada", { do: "sit", target: "chair-1", clip: "type" });
+    run(sim, 8);
+    let back = false;
+    sim.act("ada", { do: "visit", target: "chair-3", wait: 2, then: { do: "sit", target: "chair-1", clip: "type" } }).then(() => { back = true; });
+    expect(nav.holder("chair-1", "seat")).toBe("ada"); // her chair stays hers while she is away
+    const seen: string[] = [];
+    let waitedAt: any = null;
+    for (let t = 0; t < 16; t += STEP) {
+      sim.step(STEP);
+      const c = sim.character("ada");
+      if (c.step && seen.at(-1) !== c.step) seen.push(c.step);
+      if (c.step === "wait") waitedAt ??= round(c);
+    }
+    await Promise.resolve();
+    expect(seen).toEqual(["stand", "walk", "turn", "wait", "walk", "turn", "enter", "loop"]);
+    expect(waitedAt).toMatchObject({ x: 8.5, z: 5.5, ry: 3.14, clip: "idle" }); // south of chair-3 at (8, 4), facing north to it
+    expect(back).toBe(true);
+    expect(round(sim.character("ada"))).toMatchObject({ x: 3.5, z: 4.47, hips: 0.44, clip: "type", step: "loop" });
+  });
+
   test("acts that cannot be done reject with the fix", async () => {
     const { sim } = fresh();
     await expect(sim.act("bob", { do: "sit", target: "chair-1" })).rejects.toThrow(/no character 'bob'[\s\S]*use one of: ada/);
