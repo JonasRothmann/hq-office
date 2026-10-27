@@ -1,0 +1,22 @@
+{
+  "name": "@hq/world",
+  "version": "0.2.1",
+  "description": "An engine for Sims-like 3D lots in the browser: a pure model, a catalog of objects, nav, a Sims camera and a three.js renderer. No build step.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./model": "./src/model/index.js",
+    "./packs/starter": "./packs/starter/index.js"
+  },
+  "peerDependencies": {
+    "three": "0.186.x"
+  },
+  "scripts": {
+    "test": "bun test",
+    "lab": "bun tools/serve.ts",
+    "check": "bun tools/check.ts",
+    "shot": "bun tools/shot.ts",
+    "catalog": "bun tools/catalog.ts"
+  }
+}
