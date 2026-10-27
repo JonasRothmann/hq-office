@@ -6,14 +6,20 @@
 // it (GROUND), so that plane never covers a river or a road. Past FADE.to metres from the lot everything has faded
 // into the background colour, and the layout stops a little after that (PAD).
 
+import { city } from "./city.js";
+
+export { roundedLoop } from "./city.js";
+
 export const PAD = 64;
 export const FADE = { from: 34, to: 60 };
 export const GROUND = -0.115;
 export const CELL = 2;
-export const CAPS = { cars: 40, people: 60, trees: 1000, flowers: 420, rocks: 140, reeds: 280, tufts: 900 };
-// Sims scale (a person is 1.35 m): two lanes of 3 m, a 3 m pavement, a car 3.3 m long.
-export const ROAD = { w: 6, walk: 3, lane: 1.5 };
-export const LEVEL = { road: -0.11, walk: -0.05 };
+export const CAPS = { cars: 30, people: 60, cyclists: 60, boats: 8, trees: 1000, flowers: 420, rocks: 140, reeds: 280, tufts: 900 };
+// Sims scale (a person is 1.35 m): two lanes of 3 m, a bike track of 1.8 m each side, a 2.6 m pavement, a car 3.3 m.
+export const ROAD = { w: 6, walk: 2.6, bike: 1.8, lane: 1.5 };
+// The town's levels: the road, the bike track a kerb above it, the pavement a kerb above that, the canal's water
+// (still above GROUND, so the office's ground plane never covers it) and its quays an embankment above.
+export const LEVEL = { road: -0.11, bike: -0.08, walk: -0.05, canal: -0.1, quay: 0.42 };
 export const WATER = { level: 0.17, bed: 0.0, bank: 3 };
 export const STOREY = 2.95;
 // The lot used for generating grows and shrinks in steps of this many metres (see growLot).
@@ -435,221 +441,4 @@ function thin(items, cap, R) {
   const keep = cap / items.length;
   const out = items.filter(() => R() < keep);
   return out.slice(0, cap);
-}
-
-// ---- city ----------------------------------------------------------------------------------------------------------
-
-export const SHIRTS = 10, PANTS = 6, SKINS = 6, HAIRS = 7, CAR_PAINTS = 9;
-
-function city(R, s, lot, ext) {
-  const RW = ROAD.w, SW = ROAD.walk, half = RW / 2;
-  // Road centre lines: the ring round the lot's block, then blocks of varied size outward past the extent.
-  const xs = [lot.minX - SW - half, lot.maxX + SW + half];
-  while (xs[0] > ext.minX - 6) xs.unshift(r2(xs[0] - (RW + 2 * SW + 17 + R() * 14)));
-  while (xs.at(-1) < ext.maxX + 6) xs.push(r2(xs.at(-1) + (RW + 2 * SW + 17 + R() * 14)));
-  const zs = [lot.minZ - SW - half, lot.maxZ + SW + half];
-  while (zs[0] > ext.minZ - 6) zs.unshift(r2(zs[0] - (RW + 2 * SW + 15 + R() * 11)));
-  while (zs.at(-1) < ext.maxZ + 6) zs.push(r2(zs.at(-1) + (RW + 2 * SW + 15 + R() * 11)));
-  const nx = xs.length, nz = zs.length;
-
-  const roads = [], junctions = [], crossings = [], walks = [], blocks = [];
-  for (let i = 0; i < nx; i++) for (let j = 0; j < nz - 1; j++) roads.push({ ...rect(xs[i] - half, zs[j] + half, xs[i] + half, zs[j + 1] - half), dir: "z", line: i });
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx - 1; i++) roads.push({ ...rect(xs[i] + half, zs[j] - half, xs[i + 1] - half, zs[j] + half), dir: "x", line: j });
-  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
-    const x = xs[i], z = zs[j];
-    junctions.push({ ...rect(x - half, z - half, x + half, z + half), x, z });
-    // a zebra crossing on every arm, in line with the pavements either side of it
-    if (j > 0) crossings.push({ ...rect(x - half, z - half - SW, x + half, z - half), dir: "x" });
-    if (j < nz - 1) crossings.push({ ...rect(x - half, z + half, x + half, z + half + SW), dir: "x" });
-    if (i > 0) crossings.push({ ...rect(x - half - SW, z - half, x - half, z + half), dir: "z" });
-    if (i < nx - 1) crossings.push({ ...rect(x + half, z - half, x + half + SW, z + half), dir: "z" });
-  }
-
-  const dLotRect = (r) => rectGap(r, lot);
-  const buildings = [], trees = [], lamps = [];
-  for (let i = 0; i < nx - 1; i++) for (let j = 0; j < nz - 1; j++) {
-    const outer = rect(xs[i] + half, zs[j] + half, xs[i + 1] - half, zs[j + 1] - half);
-    const inner = rect(outer.minX + SW, outer.minZ + SW, outer.maxX - SW, outer.maxZ - SW);
-    walks.push(rect(outer.minX, outer.minZ, outer.maxX, outer.minZ + SW), rect(outer.minX, outer.maxZ - SW, outer.maxX, outer.maxZ));
-    walks.push(rect(outer.minX, outer.minZ + SW, outer.minX + SW, outer.maxZ - SW), rect(outer.maxX - SW, outer.minZ + SW, outer.maxX, outer.maxZ - SW));
-    const isLot = Math.abs(inner.minX - lot.minX) < 1e-6 && Math.abs(inner.minZ - lot.minZ) < 1e-6;
-    const dl = dLotRect(inner);
-    const visible = dl < FADE.to + 4;
-    const kind = isLot ? "lot" : !visible ? "far" : R() < 0.13 ? "park" : "built";
-    const block = { i, j, outer, inner, kind, ground: kind === "park" ? "grass" : R() < 0.45 ? "gravel" : "grass" };
-    blocks.push(block);
-    if (kind === "built") parcels(R, block, buildings, trees, lot);
-    if (kind === "park") park(R, block, trees);
-    if (!visible) continue;
-    streetside(R, outer, lamps, trees, lot);
-  }
-
-  // Cars: loops round rectangles of blocks, on the right-hand lane, turning at the junctions.
-  const vis = (r) => dLotRect(r) < 42;
-  const cars = [];
-  const roadLen = roads.filter(vis).reduce((a, r) => a + Math.max(r.maxX - r.minX, r.maxZ - r.minZ), 0);
-  const nCars = Math.min(CAPS.cars, Math.max(8, Math.round(roadLen / 30)));
-  for (let tries = 0; cars.length < nCars && tries < 400; tries++) {
-    const i0 = Math.floor(R() * (nx - 1)), j0 = Math.floor(R() * (nz - 1));
-    const i1 = Math.min(nx - 1, i0 + 1 + Math.floor(R() * 3)), j1 = Math.min(nz - 1, j0 + 1 + Math.floor(R() * 2));
-    const box = rect(xs[i0], zs[j0], xs[i1], zs[j1]);
-    if (!vis(box)) continue;
-    const cw = R() < 0.5;
-    const path = roundedLoop(box, cw ? -ROAD.lane : ROAD.lane, cw ? 1.6 : 2.8, cw);
-    cars.push({ path, speed: r2(3.4 + R() * 1.6), offset: r2(R() * lineLength(path, true)), paint: Math.floor(R() * CAR_PAINTS), kind: R() < 0.3 ? "kei" : "car" });
-  }
-
-  // People: loops on the middle of the pavements round one or two blocks (the lot's too), over the zebras.
-  const people = [];
-  const nPeople = Math.min(CAPS.people, 30 + Math.floor(R() * 20));
-  for (let tries = 0; people.length < nPeople && tries < 600; tries++) {
-    const bi0 = Math.floor(R() * (nx - 1)), bj0 = Math.floor(R() * (nz - 1));
-    const wide = R() < 0.35, tall = !wide && R() < 0.3;
-    const bi1 = Math.min(nx - 2, bi0 + (wide ? 1 : 0)), bj1 = Math.min(nz - 2, bj0 + (tall ? 1 : 0));
-    const outer = rect(xs[bi0] + half, zs[bj0] + half, xs[bi1 + 1] - half, zs[bj1 + 1] - half);
-    if (dLotRect(outer) > 36) continue;
-    const off = SW / 2 + (R() - 0.5) * 1.2;
-    const box = rect(outer.minX + off, outer.minZ + off, outer.maxX - off, outer.maxZ - off);
-    const cw = R() < 0.5;
-    const path = roundedLoop(box, 0, 0.5, cw);
-    people.push({ path, speed: r2(0.85 + R() * 0.5), offset: r2(R() * lineLength(path, true)), shirt: Math.floor(R() * SHIRTS), pants: Math.floor(R() * PANTS), skin: Math.floor(R() * SKINS), hair: Math.floor(R() * HAIRS) });
-  }
-
-  return { grid: { xs, zs, road: RW, walk: SW }, roads, junctions, crossings, walks, blocks, buildings, trees, lamps, cars, people };
-}
-
-// A closed loop round a rect grown by `grow` metres (negative shrinks it), corners rounded with radius r, as points.
-// cw: clockwise seen from above with north up (east along the north side first). Traffic keeps right, so a clockwise
-// car is on the inside of its loop and an anticlockwise one on the outside.
-export function roundedLoop(b, grow, r, cw) {
-  const minX = b.minX - grow, minZ = b.minZ - grow, maxX = b.maxX + grow, maxZ = b.maxZ + grow;
-  // corners in clockwise order: NE, SE, SW, NW, each with the angle range of its arc (angles in x-z, 0 = +x)
-  const C = [
-    { x: maxX - r, z: minZ + r, a0: -Math.PI / 2, a1: 0 },
-    { x: maxX - r, z: maxZ - r, a0: 0, a1: Math.PI / 2 },
-    { x: minX + r, z: maxZ - r, a0: Math.PI / 2, a1: Math.PI },
-    { x: minX + r, z: minZ + r, a0: Math.PI, a1: Math.PI * 1.5 },
-  ];
-  const pts = [];
-  for (const c of C) for (let k = 0; k <= 5; k++) {
-    const a = c.a0 + ((c.a1 - c.a0) * k) / 5;
-    pts.push({ x: r2(c.x + Math.cos(a) * r), z: r2(c.z + Math.sin(a) * r) });
-  }
-  return cw ? pts : pts.reverse();
-}
-
-// Buildings round the edge of a block, facing its streets, with a yard in the middle. Near the office they stay low
-// so they never hide it: a building d metres from the lot is at most about d / 1.75 tall.
-function parcels(R, block, buildings, trees, lot) {
-  const I = block.inner, W = I.maxX - I.minX, D = I.maxZ - I.minZ;
-  const rowD = D < 20 ? D / 2 : clamp(D * 0.36, 8, 13);
-  const colW = clamp(W * 0.28, 6, 11);
-  const rows = [
-    { r: rect(I.minX, I.minZ, I.maxX, I.minZ + rowD), front: "n", along: "x" },
-    { r: rect(I.minX, I.maxZ - rowD, I.maxX, I.maxZ), front: "s", along: "x" },
-  ];
-  if (D - 2 * rowD >= 6 && W > 2 * colW + 4) {
-    rows.push({ r: rect(I.minX, I.minZ + rowD, I.minX + colW, I.maxZ - rowD), front: "w", along: "z" });
-    rows.push({ r: rect(I.maxX - colW, I.minZ + rowD, I.maxX, I.maxZ - rowD), front: "e", along: "z" });
-  }
-  const mood = R(); // a block of houses, of flats, or a mix
-  for (const row of rows) {
-    const len = row.along === "x" ? row.r.maxX - row.r.minX : row.r.maxZ - row.r.minZ;
-    const cuts = [0];
-    while (len - cuts.at(-1) > 13) cuts.push(cuts.at(-1) + 6.5 + R() * 6);
-    cuts.push(len);
-    if (cuts.length > 2 && cuts.at(-1) - cuts.at(-2) < 5) cuts.splice(cuts.length - 2, 1);
-    for (let k = 0; k < cuts.length - 1; k++) {
-      const a = cuts[k], b = cuts[k + 1];
-      const p = row.along === "x" ? rect(row.r.minX + a, row.r.minZ, row.r.minX + b, row.r.maxZ) : rect(row.r.minX, row.r.minZ + a, row.r.maxX, row.r.minZ + b);
-      const corner = k === 0 || k === cuts.length - 2;
-      const b0 = building(R, p, row.front, corner && row.along === "x", mood, lot);
-      if (b0) buildings.push(b0);
-      else if (R() < 0.5) trees.push({ kind: "round", x: r2((p.minX + p.maxX) / 2), z: r2((p.minZ + p.maxZ) / 2), y: LEVEL.walk, s: 0.8, ry: r2(R() * 6.28), tone: 1 });
-    }
-  }
-  // the yard in the middle: a tree or two, and a hedge along it
-  const yard = rect(I.minX + (rows.length > 2 ? colW : 0), I.minZ + rowD, I.maxX - (rows.length > 2 ? colW : 0), I.maxZ - rowD);
-  if (yard.maxX - yard.minX > 4 && yard.maxZ - yard.minZ > 3) {
-    const n = 1 + Math.floor(R() * 3);
-    for (let k = 0; k < n; k++) {
-      const x = yard.minX + 1.5 + R() * Math.max(0.1, yard.maxX - yard.minX - 3), z = yard.minZ + 1.2 + R() * Math.max(0.1, yard.maxZ - yard.minZ - 2.4);
-      const tall = sight(rectGap(rect(x - 1.3, z - 1.3, x + 1.3, z + 1.3), lot)) / 4.2;
-      trees.push({ kind: R() < 0.15 ? "maple-red" : "round", x: r2(x), z: r2(z), y: LEVEL.walk, s: down2(Math.min(tall, 0.75 + R() * 0.4)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
-    }
-  }
-}
-
-function building(R, p, front, corner, mood, lot) {
-  const side = 0.3 + R() * 0.5, setback = R() < 0.45 ? 0.2 : 0.6 + R() * 1.6, rear = 0.8 + R() * 1.5;
-  let f = { ...p };
-  const along = front === "n" || front === "s" ? "x" : "z";
-  if (along === "x") { f.minX += side; f.maxX -= side; } else { f.minZ += side; f.maxZ -= side; }
-  if (front === "n") { f.minZ += setback; f.maxZ -= rear; }
-  if (front === "s") { f.maxZ -= setback; f.minZ += rear; }
-  if (front === "w") { f.minX += setback; f.maxX -= rear; }
-  if (front === "e") { f.maxX -= setback; f.minX += rear; }
-  const w = f.maxX - f.minX, d = f.maxZ - f.minZ;
-  if (w < 4 || d < 4) return null;
-  const dl = rectGap(f, lot);
-  const maxH = Math.max(3.2, sight(dl));
-  const roll = R();
-  let style;
-  if (corner && roll < 0.55) style = "shop";
-  else if (mood < 0.35) style = roll < 0.75 ? "house" : "shop";
-  else if (mood < 0.75) style = roll < 0.3 ? "house" : roll < 0.8 ? "flats" : "shop";
-  else style = roll < 0.5 ? "office" : roll < 0.85 ? "flats" : "shop";
-  const want = { house: 1 + (R() < 0.8 ? 1 : 0), shop: 2 + (R() < 0.4 ? 1 : 0), flats: 3 + Math.floor(R() * 3), office: 4 + Math.floor(R() * 3) }[style];
-  const roof = style === "house" ? (R() < 0.55 ? "hip" : "gable") : style === "office" ? "flat" : R() < 0.35 ? "gable" : "flat";
-  const roofH = roof === "flat" ? 0.3 : Math.min(w, d) * (roof === "hip" ? 0.32 : 0.42);
-  const floors = clamp(Math.min(want, Math.floor((maxH - roofH) / STOREY)), 1, 6);
-  const wall = { house: R() < 0.6 ? "timber" : "plaster", shop: R() < 0.4 ? "timber" : "plaster", flats: R() < 0.8 ? "plaster" : "concrete", office: R() < 0.6 ? "concrete" : "plaster" }[style];
-  return {
-    x: r2((f.minX + f.maxX) / 2), z: r2((f.minZ + f.maxZ) / 2), w: r2(w), d: r2(d), y: LEVEL.walk,
-    floors, h: r2(floors * STOREY), roof, roofH: r2(roof === "flat" ? 0.3 : roofH), ridge: w >= d ? "x" : "z",
-    style, wall, tint: Math.floor(R() * 6), roofTint: Math.floor(R() * 4), front, shop: style === "shop",
-    awning: style === "shop" && R() < 0.8 ? Math.floor(R() * 5) : null, seed: Math.floor(R() * 1e9),
-    top: roof === "flat" && floors >= 3 ? Math.floor(R() * 3) : 0,
-  };
-}
-
-function park(R, block, trees) {
-  const I = block.inner;
-  for (let k = 0; k < 40; k++) {
-    const x = I.minX + 1.5 + R() * (I.maxX - I.minX - 3), z = I.minZ + 1.5 + R() * (I.maxZ - I.minZ - 3), c = R();
-    // a cross of gravel paths through the middle stays clear
-    if (Math.abs(x - (I.minX + I.maxX) / 2) < 1.6 || Math.abs(z - (I.minZ + I.maxZ) / 2) < 1.6) continue;
-    if (R() < 0.55) trees.push({ kind: c < 0.12 ? "maple-red" : c < 0.75 ? "round" : c < 0.9 ? "conifer" : "shrub", x: r2(x), z: r2(z), y: LEVEL.walk, s: r2(0.7 + R() * 0.45), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
-  }
-}
-
-// Lamps and street trees along a block's pavements, on the kerb side, clear of the corners (and so of the zebras).
-function streetside(R, outer, lamps, trees, lot) {
-  const SW = ROAD.walk, kerb = 0.45;
-  const edges = [
-    { a: { x: outer.minX, z: outer.minZ + kerb }, b: { x: outer.maxX, z: outer.minZ + kerb }, face: Math.PI },
-    { a: { x: outer.minX, z: outer.maxZ - kerb }, b: { x: outer.maxX, z: outer.maxZ - kerb }, face: 0 },
-    { a: { x: outer.minX + kerb, z: outer.minZ }, b: { x: outer.minX + kerb, z: outer.maxZ }, face: -Math.PI / 2 },
-    { a: { x: outer.maxX - kerb, z: outer.minZ }, b: { x: outer.maxX - kerb, z: outer.maxZ }, face: Math.PI / 2 },
-  ];
-  for (const e of edges) {
-    const len = Math.hypot(e.b.x - e.a.x, e.b.z - e.a.z);
-    const ux = (e.b.x - e.a.x) / len, uz = (e.b.z - e.a.z) / len;
-    const leafy = R() < 0.55;
-    const n = Math.max(1, Math.round((len - 2 * SW) / 15));
-    for (let k = 0; k < n; k++) {
-      const t = SW + 1 + ((len - 2 * SW - 2) * (k + 0.5)) / n;
-      lamps.push({ x: r2(e.a.x + ux * t), z: r2(e.a.z + uz * t), ry: r3(e.face) });
-      if (!leafy) continue;
-      for (const dt of [-3.8, 3.8]) {
-        const tt = t + dt;
-        if (tt < SW + 1 || tt > len - SW - 1) continue;
-        const x = e.a.x + ux * tt, z = e.a.z + uz * tt;
-        const nx = e.face === Math.PI / 2 ? -0.25 : e.face === -Math.PI / 2 ? 0.25 : 0, nz = e.face === Math.PI ? 0.25 : e.face === 0 ? -0.25 : 0;
-        const px = x + nx, pz = z + nz;
-        const tall = sight(rectGap(rect(px - 1.3, pz - 1.3, px + 1.3, pz + 1.3), lot)) / 4.2;
-        trees.push({ kind: "street", x: r2(px), z: r2(pz), y: LEVEL.walk, s: down2(Math.min(tall, 0.62 + R() * 0.2)), ry: r2(R() * 6.28), tone: r2(0.9 + R() * 0.15) });
-      }
-    }
-  }
 }
