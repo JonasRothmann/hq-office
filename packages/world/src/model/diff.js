@@ -6,7 +6,8 @@
  * @property {boolean} same        nothing changed
  * @property {boolean} lot         the lot's size, floors, walls, openings or room labels changed
  * @property {boolean} packs       the doc names other packs
- * @property {{ added: string[], removed: string[], changed: string[] }} objects      changed: type, at or facing
+ * @property {{ added: string[], removed: string[], changed: string[] }} objects      changed: type, at or facing (an
+ *   edit at run time also names objects whose height moved with a floor under them; this pure diff cannot see that)
  * @property {{ added: string[], removed: string[], changed: string[] }} characters   changed: look (a character's
  *   `at` is where it first appears; after that the sim owns where it is)
  * @property {object[]} acts       acts in the new doc that the old one did not have

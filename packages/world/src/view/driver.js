@@ -130,7 +130,8 @@ export function createDriver(world, opts = {}) {
 
     /**
      * Change the world without a restart: next is a World (defineWorld) or a doc (the packs stay). It is validated
-     * whole first (a WorldError leaves everything as it was), then diffed against the current doc. The sim keeps
+     * whole first (a WorldError leaves everything as it was), then diffed against the current doc; the diff also names
+     * objects whose built place changed with the lot (a floor laid or lifted under them). The sim keeps
      * running (see sim.apply); the caller rebuilds only what the diff names. The same doc again is a no-op: null.
      * @returns {import("../model/diff.js").WorldDiff | null}
      */
@@ -143,6 +144,11 @@ export function createDriver(world, opts = {}) {
       if (errorsOf(r.problems).length) throw new WorldError(r.problems, `world '${nextWorld.doc.id}'`);
       const diff = diffWorld(current.doc, nextWorld.doc);
       if (!samePacks) diff.packs = true;
+      // an object's height comes from the floor under it, so a lot edit can move an object its doc entry never named
+      if (diff.lot) for (const o of r.lot.objects) {
+        const was = lot.objects.find((x) => x.id === o.id);
+        if (was && !diff.objects.changed.includes(o.id) && placed(was) !== placed(o)) diff.objects.changed.push(o.id);
+      }
       lot = r.lot; catalog = r.catalog; nav = createNav(lot);
       sim.apply(lot, nav, diff);
       if (diff.lot) {
@@ -179,6 +185,7 @@ export function createDriver(world, opts = {}) {
   return driver;
 }
 
+const placed = (o) => JSON.stringify([o.pos, o.anchors, o.slots]);
 const lotBounds = (lot) => ({ minX: 0, minZ: 0, maxX: lot.w, maxZ: lot.d });
 
 // The floored part of the lot (what the view fits), or the whole lot when nothing is floored.
