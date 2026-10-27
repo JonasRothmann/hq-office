@@ -1,98 +1,36 @@
 // The package's boundary: it imports nothing from outside itself but `three` (and node:/bun: builtins in tools and
-// tests), statically or with import(); src/ reaches its own files only by relative paths; packs and examples use the
-// public entries; nothing changes three.js's shared state or writes globals; tests never read the agents' sandbox
-// (examples/); the package names no host concept; every file opens with a comment; every import links.
+// tests), statically, with import() or with require; src/ reaches its own files only by relative paths; packs and
+// examples use the public entries; nothing changes three.js's shared state, the page's globals or the page itself;
+// tests never read the agents' sandbox (examples/); the package names no host concept; every file opens with a
+// comment; every import links. The rules live in source.ts; the probes below are ways past them that once worked.
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, relative, resolve } from "node:path";
-import { PKG, walk, specifiers, exportTarget, exportNames, codeOf, dynamicImports, withoutStrings } from "./source.ts";
+import { dirname, relative, resolve } from "node:path";
+import { PKG, CODE, walk, loads, exportTarget, exportNames, codeOf, boundaryProblems } from "./source.ts";
 
-const files = walk(PKG).filter((f) => [".js", ".ts", ".html"].includes(extname(f)));
+const files = walk(PKG).filter((f) => CODE.test(f));
 const rel = (f: string) => relative(PKG, f);
-const code = new Map(files.map((f) => [f, codeOf(f, readFileSync(f, "utf8"))]));
 // The files that state these rules name what they look for; every other file is checked.
 const RULES = new Set(["test/boundary.test.ts", "test/source.ts"]);
 const checked = files.filter((f) => !RULES.has(rel(f)));
 
-// Where a specifier may point from file f (static or dynamic): inside the package, three, builtins outside the runtime
-// code, public entries outside src.
-function allowed(f: string, spec: string) {
-  const inSrc = rel(f).startsWith("src/");
-  if (spec.startsWith(".")) return resolve(dirname(f), spec).startsWith(PKG + "/");
-  if (spec === "three") return true;
-  if (/^(node|bun):/.test(spec) || spec === "bun") return !inSrc && !rel(f).startsWith("packs/");
-  if (exportTarget(spec)) return !inSrc; // src uses relative paths, so a public entry never imports itself
-  return false; // a deep "@hq/world/..." path, an absolute path, another package
-}
-
-// import() of something that is not a plain string: allowed only where loading a file the user names is the point.
-const LOADS_USER_FILES: Record<string, string> = {
-  "tools/check.ts": "checks the world or pack file named on its command line",
-  "tools/catalog.ts": "lists the packs named on its command line",
-  "lab/index.html": "loads the world named in ?world=",
-};
-
-// three.js state every three.js user on the page shares: only ever read a member, never assign, alias or pass it.
-const SHARED_THREE = /\b(ShaderChunk|ShaderLib|UniformsLib|ColorManagement)\b/g;
-const ASSIGN = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?!=)|^\s*(?:\+\+|--)/;
-const lineAt = (text: string, i: number) => text.slice(text.lastIndexOf("\n", i) + 1, (text.indexOf("\n", i) + 1 || text.length + 1) - 1).trim();
-function sharedStateWrites(text: string): string[] {
-  const bad: string[] = [];
-  for (const m of text.matchAll(SHARED_THREE)) {
-    const after = text.slice(m.index! + m[0].length), before = text.slice(Math.max(0, m.index! - 14), m.index!);
-    const member = /^(?:\.\w+|\[\s*["'`]\w+["'`]\s*\])/.exec(after);
-    if (!member || ASSIGN.test(after.slice(member[0].length)) || /(?:\bdelete|\+\+|--)\s*(?:THREE\.)?$/.test(before)) bad.push(lineAt(text, m.index!));
-  }
-  return bad;
-}
-
-// The page's globals: runtime code (src, packs, examples) never writes them, aliases them or passes them whole.
-function globalWrites(text: string): string[] {
-  const bad: string[] = [];
-  // a file that binds the name itself (the starter pack imports its window object as `window`)
-  const local = (name: string) => new RegExp(`\\b(?:import|const|let|var)\\s+${name}\\b`).test(text);
-  for (const m of text.matchAll(/\b(globalThis|window|self|global)\b/g)) {
-    if (text[m.index! - 1] === "." || (m[1] !== "globalThis" && local(m[1]))) continue;
-    const after = text.slice(m.index! + m[0].length);
-    const member = /^(?:\.\w+|\[[^\]]+\])/.exec(after);
-    if (m[1] === "globalThis" || !member || ASSIGN.test(after.slice(member[0].length))) bad.push(lineAt(text, m.index!));
-  }
-  return bad;
-}
-
 describe("package boundary", () => {
-  test("there are files to check", () => expect(files.length).toBeGreaterThan(20));
+  test("there are files to check", () => expect(checked.length).toBeGreaterThan(20));
 
-  for (const f of files) {
-    test(`${rel(f)} imports only inside the package, or three, statically and with import()`, () => {
-      for (const spec of specifiers(readFileSync(f, "utf8"))) expect({ file: rel(f), spec, ok: allowed(f, spec) }).toEqual({ file: rel(f), spec, ok: true });
-      for (const spec of RULES.has(rel(f)) ? [] : dynamicImports(code.get(f)!)) {
-        if (spec === null) expect({ file: rel(f), "import(non-literal)": LOADS_USER_FILES[rel(f)] ?? "not allowed: import a literal path inside the package" }).toEqual({ file: rel(f), "import(non-literal)": LOADS_USER_FILES[rel(f)] ?? "allowed" });
-        else expect({ file: rel(f), spec, ok: allowed(f, spec) }).toEqual({ file: rel(f), spec, ok: true });
-      }
+  for (const f of checked) {
+    test(`${rel(f)} stays inside the package and leaves shared state alone`, () => {
+      expect({ file: rel(f), problems: boundaryProblems(rel(f), readFileSync(f, "utf8")) }).toEqual({ file: rel(f), problems: [] });
     });
   }
 
   test("the pure half (everything @hq/world/model reaches, and the view's driver) never imports three", () => {
     const pure = /^src\/(model|catalog|nav|lot|anim|camera|arch|lint|sim|view)\//;
-    const bad = files.filter((f) => pure.test(rel(f)) && specifiers(readFileSync(f, "utf8")).includes("three")).map(rel);
-    expect(bad).toEqual([]);
-  });
-
-  test("nothing changes three.js's shared state (ShaderChunk, ShaderLib, UniformsLib, ColorManagement): members are only read", () => {
-    const bad = checked.flatMap((f) => sharedStateWrites(withoutStrings(code.get(f)!)).map((l) => `${rel(f)}: ${l}`));
-    expect(bad).toEqual([]);
-  });
-
-  test("runtime code (src, packs, examples) never writes the page's globals (globalThis, window, self)", () => {
-    const runtime = files.filter((f) => /^(src|packs|examples)\//.test(rel(f)));
-    expect(runtime.length).toBeGreaterThan(20);
-    const bad = runtime.flatMap((f) => globalWrites(withoutStrings(code.get(f)!)).map((l) => `${rel(f)}: ${l}`));
+    const bad = files.filter((f) => pure.test(rel(f)) && loads(f, readFileSync(f, "utf8")).specs.includes("three")).map(rel);
     expect(bad).toEqual([]);
   });
 
   test("tests and the proof never read examples/ (agents edit it freely): they use test/fixtures", () => {
-    const bad = checked.filter((f) => (rel(f).startsWith("test/") || rel(f) === "tools/proof.ts") && /examples\//.test(code.get(f)!)).map(rel);
+    const bad = checked.filter((f) => (rel(f).startsWith("test/") || rel(f) === "tools/proof.ts") && /examples\//.test(codeOf(f, readFileSync(f, "utf8")))).map(rel);
     expect(bad).toEqual([]);
   });
 
@@ -126,5 +64,56 @@ describe("package boundary", () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+});
+
+// Each probe is a file the boundary must refuse: [path in the package, its text, what the refusal names].
+const OUT = "../../../src/client/core/net.js";
+const PROBES: [string, string, RegExp][] = [
+  ["src/x.js", `import { post } from "${OUT}";`, /imports/],
+  ["src/x.js", `import{post}from"${OUT}";`, /imports/],
+  ["src/x.js", `export*from"${OUT}";`, /imports/],
+  ["src/x.js", `export { post } from "${OUT}";`, /imports/],
+  ["src/x.js", `import "${OUT}";`, /imports/],
+  ["src/x.js", `const m = await import("${OUT}");`, /imports/],
+  ["src/x.js", "const m = await import(`" + OUT + "`);", /imports/],
+  ["src/x.js", "const base = '../../..'; const m = await import(`${base}/src/server/db.ts`);", /non-literal/],
+  ["src/x.js", "const name = './y.js'; const m = await import(name);", /non-literal/],
+  ["src/x.mts", `import { post } from "${OUT}";`, /imports/],
+  ["src/x.cjs", `const db = require("../../../src/server/db.ts");`, /require/],
+  ["tools/x.ts", `const db = require("../../../src/server/db.ts");`, /require/],
+  ["test/x.test.ts", `const db = import.meta.require("../../../src/server/db.ts");`, /require/],
+  ["tools/x.ts", `import { createRequire } from "node:module"; const r = createRequire(import.meta.url); r("x");`, /require/],
+  ["src/x.js", `import { x } from "@hq/world/src/lot/lot.js";`, /imports/],
+  ["src/x.js", `import fs from "node:fs";`, /imports/],
+  ["lab/x.html", `<!doctype html>\n<!-- x -->\n<script type="module">import { post } from "../${OUT}";</script>`, /imports/],
+  ["src/render/x.js", `import * as THREE from "three"; THREE.ShaderChunk.common = "";`, /three\.js state/],
+  ["src/render/x.js", `import * as THREE from "three"; const s = THREE.ShaderLib.standard; s.fragmentShader = "";`, /three\.js state/],
+  ["src/render/x.js", `import { ShaderLib } from "three"; const s = ShaderLib.standard; s.fragmentShader = "";`, /three\.js state/],
+  ["src/render/x.js", `import * as THREE from "three"; THREE.Object3D.DEFAULT_UP.set(0, 0, 1);`, /three\.js state/],
+  ["src/render/x.js", `import * as THREE from "three"; THREE.Cache.enabled = true;`, /three\.js state/],
+  ["src/render/x.js", `import * as THREE from "three"; THREE["Cache"].enabled = true;`, /three\.js state/],
+  ["src/render/x.js", `import * as THREE from "three"; THREE.ColorManagement.enabled = false;`, /three\.js state/],
+  ["src/render/materials.js", `import * as THREE from "three"; THREE.ShaderChunk.shadowmap_pars_fragment = "";`, /three\.js state/],
+  ["src/x.js", `globalThis.world = 1;`, /global/],
+  ["src/x.js", `window.world = 1;`, /global/],
+  ["src/x.js", `document.title = "x";`, /page/],
+  ["src/x.js", `localStorage.setItem("k", "v");`, /page/],
+  ["src/x.js", `const d = document; d.title = "x";`, /page/],
+  ["src/x.js", `history.pushState(null, "", "/x");`, /page/],
+];
+
+describe("boundary probes: each is refused", () => {
+  for (const [path, text, why] of PROBES) {
+    test(`${path}: ${text.split("\n").pop()}`, () => {
+      const problems = boundaryProblems(path, text);
+      expect(problems.length).toBeGreaterThan(0);
+      expect(problems.join("\n")).toMatch(why);
+    });
+  }
+  test("the clean reads stay allowed: a literal import inside the package, three, and the listed shared read", () => {
+    expect(boundaryProblems("src/x.js", `import { a } from "./y.js"; import * as THREE from "three"; const m = await import("./z.js");`)).toEqual([]);
+    expect(boundaryProblems("src/render/materials.js", `import * as THREE from "three"; const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;`)).toEqual([]);
+    expect(boundaryProblems("src/render/x.js", `const c = document.createElement("canvas");`)).toEqual([]);
   });
 });
