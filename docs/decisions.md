@@ -370,3 +370,61 @@ The open questions, answered:
 The walk: `src/client/office/acts.js` has a `visit-lead` row, marked `off`, and `actFor(..., { visitLead })` uses it
 for `with_lead`. A later setting turns it on. The walk itself needs a visit pose, a general errand and same-room
 routing first (the proposal lists them). The owner decided on 2026-10-27 that the walk stays optional: routing works without it, and a setting turns it on.
+
+## D22. Fixes from the final review of the HUD half, and the limits left
+
+An independent review of the server and panel half of this branch (everything but the 3D office) found two must-fix
+problems and several should-fix ones. Each fix below has a test ported from the review's probe that failed before it.
+
+- **No agent value reaches the page's markup raw.** An ask's `due` and `created_at` were stored as sent and put into
+  HTML attributes, so any local agent could add an attribute (and a script) to the page where the owner pastes
+  secrets. The server now parses `due` at the boundary (`asks.ts`): ms, digits, `HH:MM` today, or an ISO date or
+  date-time, stored as a number; anything else is a 400. `created_at` is always the server's clock. On the page, every
+  data value put into an attribute or `innerHTML` goes through `esc()`; a sweep of the panels fixed every hit it found,
+  not only the two named. `hud ask --due` refuses a malformed time instead of sending nothing.
+- **A thread follows its item** (amends D19). Before every post into a thread, its room is set to the item's current
+  lane (HQ for none), with no other member, and opened again if HQ archived it. A reply and a reopen after
+  `hud update --lane` reach the new lane; the old lane is no longer in the thread.
+- **Reopen is all or nothing.** It checks first, writes the reopen and the thread's message in one transaction, and
+  types into the lane and tells HQ only after the commit. The old answer is cut to 500 characters in that message, so
+  a long one cannot stop a reopen; the event log keeps it whole. A lead's old answer is quoted. A checklist question
+  that closed itself (every item done) cannot be reopened: the ledger can only add to an open question, so the owner
+  replies in its thread and HQ asks a new one.
+- **An answer's delivery belongs to that answer** (amends D20). A send into the asking lane checks, when it finishes,
+  that the ask still holds the answer it typed (same `answered_at`, text and author); only then does it mark it sent
+  and tell HQ. A newer answer, given while an older one was being typed in, goes in after it, one text at a time. HQ
+  hears that the superseded answer reached the lane and no longer stands, and then the current answer, so its last
+  word is the current one. No table changed.
+- **Other agents' text reaches HQ quoted.** A lead's answer and its escalation reason go to HQ through
+  `quoteAgentText`, as they go to the asking lane; lane names and titles in HQ's lines and in text typed into lanes
+  (the drop line, the thread prompt, room titles) go through `oneLine`.
+- **A new tier recomputes a held question's timer**: from the hop's start with the new tier and priority, never later
+  than the time already typed into the lead.
+- **Tokens never reach an excerpt.** `prompt.ts` hides `--token VALUE`, `--token=VALUE` and any bare 32-hex run in a
+  pane's tail before the excerpt is made, across ANSI codes, box edges and wraps.
+- **Lane names.** A new lane's name is letters, digits, dot, underscore or hyphen, a letter or digit first, at most 64;
+  anything else is a 400. A lane registered before keeps its name.
+- **Pictures from this HUD only.** A room's shelf image and a link card's picture are fetched only from this page's
+  origin (`/uploads/`, `/room-files/`); any other host is a link card.
+- The stack opens a room through the bus (`room:go`) instead of importing the rooms panel.
+
+**The re-parent limit.** There is no authentication between local agents, and this does not add one (D20 says the
+same of HQ). Any local agent that can call the API can change any lane's parent, and with `askRoute=lead` (or
+`hud ask --to lead`) that makes it the lane's lead: the lane's next question goes to it, with a valid token, and its
+answer is typed into the lane as its lead's. What limits it: a change of an existing lane's parent is an event in the
+log ("now reports to X (was Y)") and one line to HQ, which ends "If you did not move it, check who did"; and a
+re-parent never moves a question a lead already holds: it stays with that hop until answered or escalated, and
+escalation goes to the owner, never up the new tree. With `askRoute=owner`, the default, only a question asked with
+`--to lead` goes to a lead at all.
+
+**Known and left:**
+- A room named `thread-qN` that HQ made before this branch is taken over as question N's thread after the upgrade
+  (review nit 9).
+- Thread rooms are never archived; once their item is gone they stay listed under Rooms (review nit 10).
+- `inbox/` and `reader/` still import each other as folders (the stack reads the reader's state; the reader imports
+  `inbox/drafts.js` and `inbox/clock.js`). Breaking it means moving those two files to a neutral folder.
+  `renderSecrets` and `renderSecretTimes` are still called from other folders, as on main.
+- The screenshot tools (`scripts/room-hash.ts`) seed asks with `created_at`, which the server now ignores: seeded
+  questions' ages count from the real time.
+- Reopening a secrets question tells HQ the old answer no longer stands, but the first value stays readable until it
+  expires.
