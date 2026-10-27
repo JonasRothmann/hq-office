@@ -2,7 +2,7 @@
 
 An engine for Sims-like 3D lots in the browser. You describe a lot as data: tiles, floors, walls on tile edges, doors and
 windows, objects from a catalog, characters, and what they do. The engine checks it, finds the rooms, plans walks
-through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, a ladder of 13 zoom
+through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, a ladder of 15 zoom
 stops, and walls up, cut away or down.
 
 There is no build step. The modules are plain ES modules. three.js is a peer: the host's import map maps `three` to
@@ -122,7 +122,7 @@ GPU is needed. The tools find three.js through `--three`, `HQ_WORLD_THREE`, a `n
 ## Promises
 
 - The camera's height is constant during a turn, and the focus stays on the same screen point; turns never refit or zoom.
-- Zoom moves between the stops of `ZOOMS`, 16 to 128 px per metre, each about 19 % closer than the last. `ZOOM_STOPS`
+- Zoom moves between the stops of `ZOOMS`, 11.3 to 128 px per metre, each about 19 % closer than the last. `ZOOM_STOPS`
   names three (`far`, `mid`, `near`). A zoom toward the cursor keeps the ground under it within a device pixel, and a
   turn mid-zoom keeps the zoom's target.
 - The canvas's backing store is exactly its device-pixel box (ResizeObserver's `devicePixelContentBoxSize`, or a

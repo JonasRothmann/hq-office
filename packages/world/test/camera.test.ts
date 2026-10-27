@@ -106,19 +106,48 @@ describe("camera", () => {
     const box = [0, 0, 10, 8];
     const cam = createCamera({ w: 1280, h: 800 });
     const step = fitCamera(cam, { minX: 0, minZ: 0, maxX: 10, maxZ: 8 });
-    expect(step).toBe(8);                                       // 64 px/m; the old three steps would have taken 45.3
+    expect(ZOOMS[step]).toBe(64);                               // the old three steps would have taken 45.3
     expect(Object.values(ZOOM_STOPS)).not.toContain(step);
     expect(fits(1280, 800, box, step)).toBe(true);
     expect(fits(1280, 800, box, step + 1)).toBe(false);
   });
+
+  // The indoor box of the office with 12 lanes in three teams of four and HQ (src/client/office/plan.js officeDoc,
+  // floored tiles 2..28 × 2..14): about 430 px across at 16 px/m. Beside the host's reader at 1280×800, 364 px are
+  // free; at 1440×900, 436 px.
+  test("a wide office beside a panel fits on a stop below 16 px/m, and the next stop closer would not", () => {
+    const box = { minX: 2, minZ: 2, maxX: 28, maxZ: 14 };
+    for (const [w, h, free] of [[1280, 800, 364], [1440, 900, 436]]) {
+      const left = w - free;
+      const cam = createCamera({ w, h, insets: { left, top: 0, right: 0, bottom: 0 } });
+      const step = fitCamera(cam, box);
+      expect(ZOOMS[step]).toBeLessThan(16);
+      const inside = (s: number) => {
+        const c = createCamera({ w, h, zoom: s, insets: { left, top: 0, right: 0, bottom: 0 }, focus: [15, 8] });
+        for (let r = 0; r < 4; r++, rotateCamera(c, 1), settle(c)) for (const x of [box.minX, box.maxX]) for (const z of [box.minZ, box.maxZ]) for (const y of [0, 3.01]) {
+          const p = project(cameraPose(c), [x, y, z]);
+          if (p.x < left + 24 - 1e-6 || p.x > w - 24 + 1e-6 || p.y < 24 - 1e-6 || p.y > h - 24 + 1e-6) return false;
+        }
+        return true;
+      };
+      expect(inside(step)).toBe(true);
+      expect(inside(step + 1)).toBe(false);
+    }
+  });
+
+  test("a box too big for every stop falls back to the furthest stop", () => {
+    const cam = createCamera({ w: 400, h: 300 });
+    expect(fitCamera(cam, { minX: 0, minZ: 0, maxX: 200, maxZ: 200 })).toBe(0);
+    expect(cam.ppm).toBe(ZOOMS[0]);
+  });
 });
 
 describe("the zoom ladder", () => {
-  test("a geometric ladder from 16 to 128 px/m at about 2^(1/4); the named stops are the old three steps", () => {
-    expect(ZOOMS.length).toBe(13);
-    expect(ZOOMS[0]).toBe(16);
+  test("a geometric ladder, 16·2^(k/4) rounded to 0.1, from below 16 up to 128 px/m; the named stops are the old three steps", () => {
+    const k0 = ZOOMS.indexOf(16);
+    expect(k0).toBeGreaterThan(0);
+    ZOOMS.forEach((ppm, i) => expect(ppm).toBe(Math.round(160 * 2 ** ((i - k0) / 4)) / 10));
     expect(ZOOMS.at(-1)).toBe(128);
-    for (let k = 1; k < ZOOMS.length; k++) expect(Math.abs(ZOOMS[k] / ZOOMS[k - 1] - 2 ** 0.25)).toBeLessThan(0.005);
     expect([ZOOMS[far], ZOOMS[mid], ZOOMS[near]]).toEqual([22.6, 45.3, 90.5]);
   });
 

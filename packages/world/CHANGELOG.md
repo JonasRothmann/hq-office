@@ -6,11 +6,13 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ### Changed (breaking: the next release is 0.3.0)
 
-- Zoom has 13 stops instead of three. `ZOOMS` is a geometric ladder from 16 to 128 px per metre, each stop about
-  2^(1/4) (19 %) closer than the last, and `cam.zoom` (and `camera.state.zoom`, `inspect().zoom`, the `zoom` option of
-  `createWorld` and the driver) is an index into it. The old three steps are stops 2, 6 and 10, at the same px per
-  metre. The new export `ZOOM_STOPS` names them: `{ far: 2, mid: 6, near: 10 }`. A caller that passed 0, 1 or 2
-  passes `ZOOM_STOPS.far`, `.mid` or `.near`. The default zoom of `createCamera` is `mid`.
+- Zoom has 15 stops instead of three. `ZOOMS` is a geometric ladder from 11.3 to 128 px per metre (16·2^(k/4) for
+  k = -2..12, rounded to 0.1), each stop about 2^(1/4) (19 %) closer than the last, and `cam.zoom` (and
+  `camera.state.zoom`, `inspect().zoom`, the `zoom` option of `createWorld` and the driver) is an index into it. The
+  two stops below 16 let a wide lot fit beside a host's panel. The old three steps are stops 4, 8 and 12, at the same
+  px per metre. The new export `ZOOM_STOPS` names them: `{ far: 4, mid: 8, near: 12 }`; use the names, not the
+  numbers. A caller that passed 0, 1 or 2 passes `ZOOM_STOPS.far`, `.mid` or `.near`. The default zoom of
+  `createCamera` is `mid`. When no stop fits, `fitCamera` and `camera.fitBox` take the furthest stop, now 11.3 px/m.
 - `fitCamera` and `camera.fitBox` pick the closest stop of the whole ladder that fits at every rotation, so fits are
   tighter.
 - `zoomCamera(cam, step, at)` and `camera.zoom(step, at)` take an optional viewport point in CSS px: the ground

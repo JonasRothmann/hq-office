@@ -11,10 +11,11 @@
 //     whole pixels, and a still scene renders identically, shifted.
 
 export const PITCH = Math.PI / 6;              // 30°: a tile projects to an exact 2:1 diamond
-// px per metre: 16·2^(k/4) for k = 0..12, rounded to 0.1, so each stop is about 19 % closer than the last. The
-// named stops are the old three steps (22.6, 45.3, 90.5).
-export const ZOOMS = [16, 19, 22.6, 26.9, 32, 38.1, 45.3, 53.8, 64, 76.1, 90.5, 107.6, 128];
-export const ZOOM_STOPS = Object.freeze({ far: 2, mid: 6, near: 10 });
+// px per metre: 16·2^(k/4) for k = -2..12, rounded to 0.1, so each stop is about 19 % closer than the last. The two
+// stops below 16 let a wide office fit beside a host's panel (12 lanes right of the reader at 1280×800). The named
+// stops are the old three steps (22.6, 45.3, 90.5); look them up by name, never by index.
+export const ZOOMS = [11.3, 13.5, 16, 19, 22.6, 26.9, 32, 38.1, 45.3, 53.8, 64, 76.1, 90.5, 107.6, 128];
+export const ZOOM_STOPS = Object.freeze({ far: ZOOMS.indexOf(22.6), mid: ZOOMS.indexOf(45.3), near: ZOOMS.indexOf(90.5) });
 export const TURN_MS = 380;
 export const ZOOM_MS = 260;
 export const FOCUS_MS = 420;
@@ -142,7 +143,8 @@ export function focusCamera(cam, [x, z], { zoom } = {}) {
 }
 
 // Centre on a box (the lot, a room) and pick the closest zoom stop at which it fits at EVERY rotation, so a turn
-// never needs a refit. `height` is how tall the box's contents stand (walls). ease: glide there (focusCamera).
+// never needs a refit; when none fits, the furthest stop (0). `height` is how tall the box's contents stand (walls).
+// ease: glide there (focusCamera).
 /** @stability stable */
 export function fitCamera(cam, b, { height = 3.01, margin = 24, ease = false } = {}) {
   const focus = [(b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2];
