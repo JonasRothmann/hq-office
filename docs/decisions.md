@@ -69,3 +69,19 @@ The owner pointed at FreeSims and suggested downloading sprites from the game. T
 textures are EA's and cannot ship in an MIT repo, and D1 forbids copied art. The research reads how Sims 1 builds its
 look (camera, projection, wall modes, proportions, palette, lighting, how people and objects are drawn) and records
 measurable values in `docs/research/sims1-look.md`. The office is then built to those values with our own models.
+
+## D10. Look B, Nordic-Japanese, over look A, Sims-faithful
+
+The design round built both looks on the same camera, scale and cutaway, in day and night
+(`docs/design/shots/`). B was chosen: pale oak, white walls, shoji, andon lanterns and tatami read as the small
+Scandinavian and Japanese startup the brief asks for, while A's checker floors, red rugs and brick read as a
+suburban house from 2000. B's calm palette also lets the status colours and the glass panels stand out. What makes
+it read as Sims 1 (the 30° 2:1 view, tall back walls over small people, low capped front walls, per-room light) is
+shared by both.
+
+## D11. The pixel room's extras go with it
+
+The hero, the hero's hat, the seasons and event rooms, the weather and the Office and Arena level themes were all
+drawn by the pixel room. They are retired with it rather than ported, so the first 3D version is about the brief
+(offices per lane, desk HUDs, subagents, waiting versus working). Their saved settings stay in the settings table,
+untouched, so they can come back as 3D features without a migration.
