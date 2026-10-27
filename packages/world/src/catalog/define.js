@@ -6,7 +6,7 @@ import { Kit, bounds } from "./kit.js";
 import { PALETTES, isHex } from "./palette.js";
 import { problem, closest } from "../model/problems.js";
 import { CLIPS, clipProblem } from "../anim/clips.js";
-import { lintCoplanar, describePair } from "../lint/coplanar.js";
+import { lintCoplanar, describePairs } from "../lint/coplanar.js";
 import { WALL_H, WALL_T, SIDES } from "../model/grid.js";
 
 const KINDS = ["object", "opening", "floor", "wall"];
@@ -180,7 +180,7 @@ function packProblems(pack) {
     }
     if (o.kind === "object") checkObject(o, prims, at, out);
     else checkOpening(o, prims, at, out);
-    for (const pair of lintCoplanar(prims)) out.push(problem("prim.coplanar", at, describePair(pair), "they will z-fight (flicker); move one by at least 2 mm along the normal, or make a flat part a box at least 1 cm thick that stands on the other"));
+    for (const line of describePairs(lintCoplanar(prims))) out.push(problem("prim.coplanar", at, line, "they will z-fight (flicker); move one by at least 2 mm along the normal, or make a flat part a box at least 1 cm thick that stands on the other"));
   });
   return out;
 }

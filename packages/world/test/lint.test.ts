@@ -2,7 +2,7 @@
 // crossing wall's face; walls squashed into their kerbs during a turn) and finds none in the tiny house, in any
 // rotation, wall mode or turn (the union of two rotations' cuts).
 import { describe, expect, test } from "bun:test";
-import { buildLot, lotPrims, cutaway, lintCoplanar, WALL_MODES } from "@hq/world/model";
+import { buildLot, lotPrims, cutaway, lintCoplanar, checkPack, definePack, defineObject, WALL_MODES } from "@hq/world/model";
 import { Kit } from "../src/catalog/kit.js";
 import tiny from "./fixtures/house.world.js";
 
@@ -51,6 +51,13 @@ describe("coplanar lint", () => {
       expect({ mode, rot, turning: true, pairs: lintCoplanar(lotPrims(lot, catalog, turning)) }).toEqual({ mode, rot, turning: true, pairs: [] });
     }
   }, 30_000); // 24 lints of the whole lot; slow on a loaded machine
+
+  test("parts that share a name are told apart (#n, in build order), with one line per two parts however many planes they share", () => {
+    const shelf = defineObject({ id: "shelf", footprint: [1, 1], build(k: any) { for (const y of [0, 0.4, 0.4]) k.box("board", [0.8, 0.02, 0.3], [0, y, 0], "oak"); } });
+    const lines = checkPack(definePack({ id: "p", objects: [shelf] })).filter((p: any) => p.code === "prim.coplanar").map((p: any) => p.message);
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toMatch(/^'board' #2 and 'board' #3 share a plane .* and \d+ more planes$/);
+  });
 
   test("cutaway drops the near walls and keeps the far ones", () => {
     const { lot } = buildLot(tiny);

@@ -1,7 +1,7 @@
 // Model validation: a good world has no problems; each kind of mistake gives one problem with its code, path and a fix
 // that names coordinates or ids. JSON round-trips.
 import { describe, expect, test } from "bun:test";
-import { defineWorld, validateWorld, buildLot, toJSON, fromJSON, rect, WorldError } from "@hq/world/model";
+import { defineWorld, validateWorld, analyse, buildLot, toJSON, fromJSON, rect, WorldError } from "@hq/world/model";
 import starter from "@hq/world/packs/starter";
 import tiny from "./fixtures/house.world.js";
 
@@ -41,6 +41,16 @@ describe("validation", () => {
     expect(p.message).toContain("(3,2)");
     expect(p.message).toContain("'desk'");
     expect(p.fix).toMatch(/at: \[\d+,\d+\]/);
+  });
+
+  test("an overlap names both objects neutrally, and in an edit names the one that moved, even when it is listed first", () => {
+    const w = house((s) => { s.acts = []; s.objects.push({ id: "plant", type: "starter/plant", at: [6, 2], facing: "s" }); });
+    expect(only(house((s) => { s.objects[1].at = [3, 2]; s.acts = []; })).message).toBe("starter/desk 'desk' and starter/chair 'chair' both cover tile (3,2)");
+    // the desk (listed first) moves onto the plant: the desk is the one to move, and the fix places the desk
+    const moved = defineWorld({ ...w.doc, packs: w.packs, objects: w.doc.objects.map((o: any) => (o.id === "desk" ? { ...o, at: [5, 2] } : o)) });
+    const [p] = analyse(moved, { moved: new Set(["desk"]) }).problems.filter((x: any) => x.severity === "error");
+    expect(p.message).toBe("starter/desk 'desk', which this edit moved or added, covers tile (6,2), already used by starter/plant 'plant'");
+    expect(p.fix).toMatch(/^move 'desk' where its 2×1 footprint is free: at: \[\d+,\d+\]/);
   });
 
   test("the place an overlap fix suggests fits the whole footprint, and taking it is valid", () => {

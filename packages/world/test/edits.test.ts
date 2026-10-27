@@ -24,6 +24,11 @@ test("a floor change under an unchanged object changes its height, and the diff 
   expect(diff.objects.changed).not.toContain("desk-1"); // still on the floor: nothing to rebuild
 });
 
+test("an edit that moves an object onto another names the one it moved, though it is listed first", () => {
+  const d = mk();
+  expect(() => d.apply(edit(two, (doc) => { doc.objects.find((o: any) => o.id === "desk-1").at = [9, 4]; }))).toThrow(/starter\/desk 'desk-1', which this edit moved or added, covers tile \(10,4\), already used by starter\/chair 'chair-2'/);
+});
+
 test("seated, her chair becomes a plant (same id): the replan fails and she steps off the plant", () => {
   const d = mk();
   d.sim.act("ada", { do: "sit", target: "chair-1" }).catch(() => {});

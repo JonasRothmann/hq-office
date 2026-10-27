@@ -38,12 +38,13 @@ const tileText = ([x, z]) => `(${x},${z})`;
  */
 
 /**
- * @param {{ live?: Set<string> }} [opts]   live: characters that already exist at run time (an edit): their `at` is
- *   only a spawn tile, so it is not checked, and their acts are checked without a position or holds (checkAct); the
- *   sim plans them from where they are and reports a refusal as a `cancel` event
+ * @param {{ live?: Set<string>, moved?: Set<string> }} [opts]   for an edit at run time. live: characters that
+ *   already exist: their `at` is only a spawn tile, so it is not checked, and their acts are checked without a position
+ *   or holds (checkAct); the sim plans them from where they are and reports a refusal as a `cancel` event. moved:
+ *   objects the edit added or changed, so an overlap names the one that moved
  * @returns {{ lot: Lot|null, problems: import("../model/problems.js").Problem[], catalog: object }}
  */
-export function analyse(world, { live = new Set() } = {}) {
+export function analyse(world, { live = new Set(), moved = new Set() } = {}) {
   const { doc } = world;
   const catalog = createCatalog(world.packs ?? []);
   const P = [...catalog.problems];
@@ -118,8 +119,19 @@ export function analyse(world, { live = new Set() } = {}) {
     else if (id !== r.id) P.push(problem("room.twice", `rooms[${i}]`, `tile ${tileText(r.at)} is in room '${id}', which another label already names`, "label each room once"));
   });
 
+  // Two objects on one tile: blame the one that moved when an edit says which, else name both. The fix places the one
+  // to move (the one that moved, or the later-listed one) where its whole footprint is free.
+  function overlap(o, box, otherId, hit, at) {
+    const other = doc.objects.find((x) => x.id === otherId);
+    const [mover, still, b] = moved.has(otherId) && !moved.has(o.id) ? [other, o, boxes.get(otherId)] : [o, other, box];
+    const free = freeNear(b.at, b.size, occupied, inLot, walls).map((t) => `at: [${t}]`).join(" or ");
+    const where = free ? `where its ${b.size[0]}×${b.size[1]} footprint is free: ${free}` : "to free tiles";
+    if (moved.has(mover.id) && !moved.has(still.id)) return problem("object.overlap", at, `${mover.type} '${mover.id}', which this edit moved or added, covers tile ${tileText(hit)}, already used by ${still.type} '${still.id}'`, `move '${mover.id}' ${where}`);
+    return problem("object.overlap", at, `${still.type} '${still.id}' and ${mover.type} '${mover.id}' both cover tile ${tileText(hit)}`, `move one of them; '${mover.id}' fits ${where}`);
+  }
+
   // objects
-  const occupied = new Map(), blocked = new Set(), objects = [], ids = new Set();
+  const occupied = new Map(), blocked = new Set(), objects = [], ids = new Set(), boxes = new Map();
   doc.objects.forEach((o, i) => {
     const at = `objects[${i}]`;
     const def = catalog.get(o.type);
@@ -140,10 +152,8 @@ export function analyse(world, { live = new Set() } = {}) {
     }
     if (def.blocks) {
       const hit = tiles.find((t) => occupied.has(tileKey(...t)));
-      if (hit) {
-        const free = freeNear([x, z], [W, D], occupied, inLot, walls).map((t) => `at: [${t}]`).join(" or ");
-        P.push(problem("object.overlap", at, `${o.type} '${o.id}' covers tile ${tileText(hit)}, already used by '${occupied.get(tileKey(...hit))}'`, free ? `move it where its ${W}×${D} footprint is free: ${free}` : "move it to free tiles"));
-      } else for (const t of tiles) occupied.set(tileKey(...t), o.id);
+      if (hit) P.push(overlap(o, { at: [x, z], size: [W, D] }, occupied.get(tileKey(...hit)), hit, at));
+      else { for (const t of tiles) occupied.set(tileKey(...t), o.id); boxes.set(o.id, { at: [x, z], size: [W, D] }); }
       for (const t of tiles) blocked.add(tileKey(...t));
     }
     const y = tiles.some(([tx, tz]) => floor.has(tileKey(tx, tz))) ? FLOOR_Y : 0;

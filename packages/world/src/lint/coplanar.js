@@ -75,13 +75,20 @@ function clipPoly(subject, clip) {
   return out;
 }
 
-/** @typedef {{ a: { owner?: string, part: string }, b: { owner?: string, part: string }, normal: number[], offset: number, area: number }} CoplanarPair */
+/**
+ * n: which part of that name it is, in build order (1, 2, ...), when the owner has more than one part of that name.
+ * @typedef {{ owner?: string, part: string, n?: number }} CoplanarPart
+ * @typedef {{ a: CoplanarPart, b: CoplanarPart, normal: number[], offset: number, area: number }} CoplanarPair
+ */
 
 // Pairs of same-facing faces closer than COPLANAR_EPS that overlap by more than MIN_AREA.
 // Faces facing opposite ways (two boxes touching) are fine: one is always culled.
 /** @returns {CoplanarPair[]} */
 export function lintCoplanar(prims) {
   const faces = [];
+  const named = new Map(), nth = [];
+  for (const p of prims) { const k = `${p.owner ?? ""}|${p.part}`; named.set(k, (named.get(k) ?? 0) + 1); nth.push(named.get(k)); }
+  const part = (i) => { const p = prims[i]; return { owner: p.owner, part: p.part, ...(named.get(`${p.owner ?? ""}|${p.part}`) > 1 ? { n: nth[i] } : {}) }; };
   prims.forEach((p, i) => { for (const f of facesOf(p)) faces.push({ ...f, i, key: f.n.map((x) => Math.round(x * 1e4)).join(",") }); });
   const groups = new Map();
   for (const f of faces) { if (!groups.has(f.key)) groups.set(f.key, []); groups.get(f.key).push(f); }
@@ -96,8 +103,7 @@ export function lintCoplanar(prims) {
         const o = clipPoly(ccw(pa), ccw(pb));
         const ar = o.length >= 3 ? area(o) : 0;
         if (ar > MIN_AREA) {
-          const pa_ = prims[A.i], pb_ = prims[B.i];
-          pairs.push({ a: { owner: pa_.owner, part: pa_.part }, b: { owner: pb_.owner, part: pb_.part }, normal: A.n.map((x) => +x.toFixed(3)), offset: +A.d.toFixed(4), area: +ar.toFixed(5) });
+          pairs.push({ a: part(A.i), b: part(B.i), normal: A.n.map((x) => +x.toFixed(3)), offset: +A.d.toFixed(4), area: +ar.toFixed(5) });
         }
       }
     }
@@ -111,7 +117,15 @@ function ccw(poly) {
   return s < 0 ? [...poly].reverse() : poly;
 }
 
+const who = (x) => `${x.owner ? `${x.owner} ` : ""}'${x.part}'${x.n ? ` #${x.n}` : ""}`;
+
 export function describePair(p) {
-  const who = (x) => `${x.owner ? `${x.owner} ` : ""}'${x.part}'`;
   return `${who(p.a)} and ${who(p.b)} share a plane (normal ${p.normal.join(",")}, offset ${p.offset}) over ${p.area} m²`;
+}
+
+/** One line per two parts that clash, however many planes they share (#n names a part whose name repeats). */
+export function describePairs(pairs) {
+  const by = new Map();
+  for (const p of pairs) { const k = `${who(p.a)}|${who(p.b)}`; if (by.has(k)) by.get(k).more++; else by.set(k, { p, more: 0 }); }
+  return [...by.values()].map(({ p, more }) => describePair(p) + (more ? `, and ${more} more plane${more > 1 ? "s" : ""}` : ""));
 }

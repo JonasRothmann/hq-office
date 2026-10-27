@@ -31,6 +31,7 @@
 @hq/world definePack
 @hq/world defineWorld
 @hq/world describePair
+@hq/world describePairs
 @hq/world detectRooms
 @hq/world diffWorld
 @hq/world fitCamera
@@ -88,6 +89,7 @@
 @hq/world/model definePack
 @hq/world/model defineWorld
 @hq/world/model describePair
+@hq/world/model describePairs
 @hq/world/model detectRooms
 @hq/world/model diffWorld
 @hq/world/model fitCamera

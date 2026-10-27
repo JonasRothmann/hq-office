@@ -9,7 +9,7 @@
 // Paths are relative to the current directory, from anywhere (tools/paths.ts).
 import "./resolve.ts";
 import { dirname } from "node:path";
-import { validateWorld, checkPack, buildLot, cutaway, lotPrims, lintCoplanar, describePair, formatProblems, lotMap, WALL_MODES } from "../src/model/index.js";
+import { validateWorld, checkPack, buildLot, cutaway, lotPrims, lintCoplanar, describePairs, formatProblems, lotMap, WALL_MODES } from "../src/model/index.js";
 import { packFileProblems } from "./pack-files.ts";
 import { fileArg, shown } from "./paths.ts";
 
@@ -41,7 +41,7 @@ for (const f of files) {
     const cut = cutaway(lot, { mode, rot });
     const turning = new Set([...cut, ...cutaway(lot, { mode, rot: rot + 1 })]);
     for (const [label, set] of [[`${mode} rot ${rot}`, cut], [`${mode} turning ${rot}→${(rot + 1) % 4}`, turning]] as const) {
-      for (const pair of lintCoplanar(lotPrims(lot, catalog, set as Set<string>))) lint.push({ code: "world.coplanar", severity: "error", path: label, message: describePair(pair), fix: "these faces z-fight; if one is an object part, fix the object (check its pack); if both are walls, report an engine bug" });
+      for (const line of describePairs(lintCoplanar(lotPrims(lot, catalog, set as Set<string>)))) lint.push({ code: "world.coplanar", severity: "error", path: label, message: line, fix: "these faces z-fight; if one is an object part, fix the object (check its pack); if both are walls, report an engine bug" });
     }
   }
   const seen = new Set<string>();

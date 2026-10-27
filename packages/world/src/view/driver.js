@@ -141,9 +141,9 @@ export function createDriver(world, opts = {}) {
       const samePacks = nextWorld.packs.length === current.packs.length && nextWorld.packs.every((p, i) => p === current.packs[i]);
       if (k === key && samePacks) return null;
       // characters that exist already are where the sim has them: their doc `at` and acts are not checked by position
-      const r = analyse(nextWorld, { live: new Set(sim.characters()) });
-      if (errorsOf(r.problems).length) throw new WorldError(r.problems, `world '${nextWorld.doc.id}'`);
       const diff = diffWorld(current.doc, nextWorld.doc);
+      const r = analyse(nextWorld, { live: new Set(sim.characters()), moved: new Set([...diff.objects.added, ...diff.objects.changed]) });
+      if (errorsOf(r.problems).length) throw new WorldError(r.problems, `world '${nextWorld.doc.id}'`);
       if (!samePacks) diff.packs = true;
       // an object's height comes from the floor under it, so a lot edit can move an object its doc entry never named
       if (diff.lot) for (const o of r.lot.objects) {
