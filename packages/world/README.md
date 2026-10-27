@@ -67,6 +67,9 @@ GPU is needed. The tools find three.js through `--three`, `HQ_WORLD_THREE`, a `n
 - The camera's height is constant during a turn, and the focus stays on the same screen point; turns never refit or zoom.
 - The canvas's backing store is exactly its device-pixel box (ResizeObserver's `devicePixelContentBoxSize`, or a
   size rounded to device pixels where the browser has none), at DPR 1, 1.5 and 2 and at fractional sizes.
+  Where the browser has no device-pixel box (Safari), only the size is rounded, not the canvas's place on the page.
+  A canvas whose left or top edge falls between device pixels is then resampled by the browser. There, put the
+  canvas on whole device pixels: full size, or at a whole-pixel offset inside its parent.
 - At rest, the picture sits on whole device pixels, so panning moves it by whole pixels and nothing shimmers.
 - Shadow filtering is fixed to the world, never to the screen.
 - No two same-facing faces overlap in a plane, in any rotation, wall mode or turn; `check.ts` fails if a pack adds one.

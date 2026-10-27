@@ -327,7 +327,7 @@ export function createWorld(canvas, world, opts = {}) {
       return c ? [c.x, floorAt(c.x, c.z) + c.hips + 0.95, c.z] : null;
     },
     /** Parent an app object to an object's or character's group; it stays through edits that rebuild that entity. */
-    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); driver.invalidate(); return true; },
+    attach(obj, id) { const g = objectGroups.get(id) ?? meshes.get(id)?.root; if (!g) return false; g.add(obj); driver.invalidate({ shadows: true }); return true; },
     on(name, fn) { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(fn); return () => events.get(name).delete(fn); },
     /** With clock "manual": step by ms, then draw once. */
     advance(ms) {

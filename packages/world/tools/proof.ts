@@ -7,7 +7,7 @@
 //   6. sizing: at DPR 1, 1.5 and 2, full size and a fractional box at a fractional place, the backing store against
 //      the device-pixel box, and two screenshots (what the screen shows, after the browser composites the canvas)
 //      compared across a pan after undoing its whole-pixel shift; the old sizing (clientWidth) for contrast;
-//   7. idle: on the real clock, renders and shadow-map redraws while still, while walking, and still again.
+//   7. idle: on the real clock, renders and shadow-map redraws while still, while walking, still again, and on attach().
 //
 //   bun packages/world/tools/proof.ts [--world path] [--root DIR] [--out DIR] [--only turn,pan,walls,walk,night,sizing,idle]
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -149,7 +149,9 @@ try {
       const still = await span(3000);
       const walk = await span(0, () => w.act("ada", { do: "sit", target: "chair-2" }));
       const after = await span(3000);
-      return { still, walk, after };
+      // an attached object casts a shadow at once: one render, one shadow redraw
+      const attach = await span(0, async () => { const m = w.three.scene.getObjectByName("object:plant-1").children[0].clone(); m.userData = {}; w.attach(m, "chair-1"); await wait(500); });
+      return { still, walk, after, attach };
     })()`);
     console.log(JSON.stringify(report.idle));
   }
