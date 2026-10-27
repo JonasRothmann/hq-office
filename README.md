@@ -1,6 +1,6 @@
 # HQ Office
 
-HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a pixel-art office in the style of a handheld RPG: every lane (one agent working one task) is a worker at a desk, and you can see at a glance who is busy, who is blocked and who is done. Next to the room is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
+HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, with a light Nordic-Japanese look: every lane (one agent working one task) is a worker in its own office, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
 
 ## Requirements
 
@@ -123,22 +123,13 @@ A crash, a kill or a stop and start loses the values. The server keeps each secr
 
 ## Lanes in levels
 
-Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them. The worker card shows a lane's level and its chain up to HQ.
+Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name). The worker card shows a lane's level and its chain up to HQ.
 
-A theme dresses every figure in the room, whatever the levels:
+Every lane has its own office, and HQ has a suite. The office grows with the number of lanes: a studio for 1 to 3, a floor with a break area for 4 to 8, wings for 9 to 16 and a campus beyond that. From 9 lanes on, the offices of a top-level team share a wing. A new lane's office rises and a removed lane's office folds away.
 
-| | Office (default) | Arena |
-| --- | --- | --- |
-| Level 1 | dark suit, tie in its own colour | masked guard, square mark, black belt |
-| Level 2 | light cardigan | masked guard, triangle mark |
-| Level 3 and deeper | everyday clothes | numbered player in a matching tracksuit |
-| No tree (every lane under HQ) | everyday clothes | numbered players |
-| Your hero | as picked in HERO | the game master: black coat, black mask with gold eyes, your hero's own hair (standing, dancing and asleep) |
-| HQ | its usual look | the senior guard, a gold crown on the hood |
+Workers show their status by pose: seated and typing when working, standing beside the desk with a raised hand and a red badge when waiting on you, arms folded with an amber badge when HQ is up, leaning back with a blue badge when waiting on CI, walking to the break area with a mug when done, asleep at the desk when stale. A lane with an empty chair is parked or gone. Running subagents are small balls hopping round the desk, coloured by model family (Opus violet, Sonnet teal, Haiku amber).
 
-In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HAT has no effect there), and players
-leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
-our own, not any show's.
+Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit offices glow.
 
 ## The work board
 
@@ -161,7 +152,7 @@ hud room list [--all] [--json]
 hud room archive SLUG
 ```
 
-The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them a small pixel conference room seats the room's lanes at a table with you at its head. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
+The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them, AT THE TABLE shows you at the head and the room's lanes as chips with their status. While a room is open, the 3D office does not draw. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
 
 What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
 
@@ -181,7 +172,7 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 ## Settings
 
-SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
+SETTINGS in the top bar has two choices. PERFORMANCE sets how often the office draws: SMOOTH (30 frames a second), BALANCED (15) or POWER SAVER (only when something changes or moves). LEVEL NAMES names the levels of the lane tree. The THEME button in the status pill picks system, light or dark, and the SOUND button turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
 ## Images
 
@@ -201,7 +192,7 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
 | `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
-| `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
+| `HUD_OWNER` | empty | Your name, used in the notes and answers HQ is sent. Empty means "the owner". |
 | `HUD_PORT` | `4747` | Port the server listens on. |
 | `HUD_HOST` | `127.0.0.1` | Address the server binds to. |
 | `HUD_TRUSTED_ORIGINS` | empty | Extra page addresses that may use the page, comma-separated and exact, such as a phone reaching it through `tailscale serve` (`https://name.tailnet.ts.net:4747`). Every other site is refused, and secrets stay this machine's own page only. |

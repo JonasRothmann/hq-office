@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <!-- styles: every .css under src/client, linked by the server (core/ first, then by path) -->
 <!-- styles -->
+<!-- three.js, vendored (src/client/vendor/three): the bare "three" its addons import resolves here -->
+<script type="importmap">{ "imports": { "three": "/src/client/vendor/three/three.module.min.js" } }</script>
 </head>
 <body>
 <!-- The 3D office (src/client/world/) draws here, behind every panel. -->
@@ -67,18 +69,6 @@
       </div>
     </section>
     <section class="stage">
-      <!-- The old pixel room, kept unseen so its modules still find their canvas until the world replaces them. -->
-      <div class="room" hidden>
-        <canvas id="room"></canvas>
-        <div class="legend">
-          <span><i>!</i>WAITING ON YOU</span>
-          <span><i>?</i>WAITING ON HQ</span>
-          <span><i>…</i>WAITING ON CI/OTHER</span>
-          <span><i>z</i>PARKED</span>
-          <span><i>✓</i>DONE</span>
-          <span>AT DESK = WORKING</span>
-        </div>
-      </div>
       <div class="under">
         <div class="box card glass" id="card"></div>
         <section class="box feed glass" id="feed">

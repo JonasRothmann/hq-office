@@ -32,46 +32,25 @@ export function localSize(room) {
   return room.back === "w" || room.back === "e" ? { w: room.d, d: room.w } : { w: room.w, d: room.d };
 }
 
+// A thin oak top on black steel sled legs.
 function desk(kit, L, x, z, w = 1.7, d = 0.72) {
-  if (L.id === "a") {
-    // a chunky pedestal desk: a thick top on a drawer block and a panel leg
-    kit.rbox(w, 0.07, d, L.wood, x, DESK_H - 0.07, z, 0.02);
-    kit.rbox(0.48, DESK_H - 0.07, d - 0.08, L.woodEdge, x - w / 2 + 0.3, 0, z, 0.02);
-    for (let i = 0; i < 3; i++) kit.box(0.4, 0.13, 0.02, L.wood, x - w / 2 + 0.3, 0.06 + i * 0.16, z + d / 2 - 0.03);
-    kit.rbox(0.06, DESK_H - 0.07, d - 0.12, L.woodEdge, x + w / 2 - 0.08, 0, z, 0.015);
-    kit.box(w - 0.6, 0.18, 0.03, L.woodEdge, x + 0.15, DESK_H - 0.25, z - d / 2 + 0.08);
-  } else {
-    // a thin oak top on black steel sled legs
-    kit.rbox(w, 0.04, d, L.wood, x, DESK_H - 0.04, z, 0.012);
-    for (const sx of [-1, 1]) {
-      const lx = x + sx * (w / 2 - 0.1);
-      for (const sz of [-1, 1]) kit.box(0.03, DESK_H - 0.04, 0.03, L.steel, lx, 0, z + sz * (d / 2 - 0.06));
-      kit.box(0.03, 0.03, d - 0.1, L.steel, lx, DESK_H - 0.07, z);
-      kit.box(0.03, 0.02, d - 0.1, L.steel, lx, 0, z);
-    }
-    kit.box(w - 0.2, 0.03, 0.03, L.steel, x, DESK_H - 0.07, z - d / 2 + 0.06);
+  kit.rbox(w, 0.04, d, L.wood, x, DESK_H - 0.04, z, 0.012);
+  for (const sx of [-1, 1]) {
+    const lx = x + sx * (w / 2 - 0.1);
+    for (const sz of [-1, 1]) kit.box(0.03, DESK_H - 0.04, 0.03, L.steel, lx, 0, z + sz * (d / 2 - 0.06));
+    kit.box(0.03, 0.03, d - 0.1, L.steel, lx, DESK_H - 0.07, z);
+    kit.box(0.03, 0.02, d - 0.1, L.steel, lx, 0, z);
   }
+  kit.box(w - 0.2, 0.03, 0.03, L.steel, x, DESK_H - 0.07, z - d / 2 + 0.06);
 }
 
+// An oak shell on thin black legs.
 function chair(kit, L, x, z, ry = 0) {
   kit.at(x, 0, z, ry, () => {
-    if (L.id === "a") {
-      // a fabric office chair on a five-arm base
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        kit.box(0.04, 0.04, 0.24, L.chair.frame, Math.sin(a) * 0.11, 0.03, Math.cos(a) * 0.11, { ry: a });
-      }
-      kit.cyl(0.025, SEAT_H - 0.08, L.chair.frame, 0, 0.04, 0);
-      kit.rbox(0.44, 0.08, 0.42, L.chair.seat, 0, SEAT_H - 0.06, 0, 0.03);
-      kit.rbox(0.42, 0.42, 0.08, L.chair.seat, 0, SEAT_H + 0.06, 0.2, 0.03, { rx: -0.12 });
-      kit.box(0.03, 0.2, 0.03, L.chair.frame, 0, SEAT_H, 0.21);
-    } else {
-      // an oak shell on thin black legs
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, SEAT_H - 0.03, 0.025, L.steel, sx * 0.17, 0, sz * 0.16, { rz: sx * 0.06, rx: -sz * 0.06 });
-      kit.rbox(0.42, 0.04, 0.4, L.wood, 0, SEAT_H - 0.04, 0, 0.015);
-      kit.rbox(0.4, 0.06, 0.36, L.chair.seat, 0, SEAT_H, 0.01, 0.025);
-      kit.rbox(0.42, 0.3, 0.035, L.wood, 0, SEAT_H + 0.12, 0.2, 0.012, { rx: -0.14 });
-    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, SEAT_H - 0.03, 0.025, L.steel, sx * 0.17, 0, sz * 0.16, { rz: sx * 0.06, rx: -sz * 0.06 });
+    kit.rbox(0.42, 0.04, 0.4, L.wood, 0, SEAT_H - 0.04, 0, 0.015);
+    kit.rbox(0.4, 0.06, 0.36, L.chair.seat, 0, SEAT_H, 0.01, 0.025);
+    kit.rbox(0.42, 0.3, 0.035, L.wood, 0, SEAT_H + 0.12, 0.2, 0.012, { rx: -0.14 });
   });
 }
 
@@ -121,21 +100,17 @@ function shelf(kit, L, x, z, len = 1.3, ry = 0, books = true) {
   });
 }
 
+// A floor lantern: a paper box in a thin wooden frame.
 function lantern(kit, L, x, z) {
-  if (L.lantern.kind === "andon") {
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, 0.95, 0.025, L.lantern.frame, x + sx * 0.13, 0, z + sz * 0.13);
-    kit.box(0.28, 0.02, 0.28, L.lantern.frame, x, 0.93, z);
-    kit.box(0.28, 0.02, 0.28, L.lantern.frame, x, 0.3, z);
-  } else {
-    kit.cyl(0.14, 0.03, L.steel, x, 0, z, { seg: 10 });
-    kit.cyl(0.015, 1.25, L.steel, x, 0.03, z);
-  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box(0.025, 0.95, 0.025, L.lantern.frame, x + sx * 0.13, 0, z + sz * 0.13);
+  kit.box(0.28, 0.02, 0.28, L.lantern.frame, x, 0.93, z);
+  kit.box(0.28, 0.02, 0.28, L.lantern.frame, x, 0.3, z);
 }
 
-// The paper or fabric that glows: separate so the world can light it at night.
+// The paper that glows: separate so the world can light it at night.
 function lanternGlowMesh(L, x, z) {
-  const geo = L.lantern.kind === "andon" ? new THREE.BoxGeometry(0.25, 0.6, 0.25) : new THREE.CylinderGeometry(0.13, 0.2, 0.26, 10, 1, false);
-  geo.translate(x, L.lantern.kind === "andon" ? 0.32 + 0.3 : 1.2 + 0.13, z);
+  const geo = new THREE.BoxGeometry(0.25, 0.6, 0.25);
+  geo.translate(x, 0.32 + 0.3, z);
   return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: L.lantern.paper }));
 }
 
@@ -229,15 +204,10 @@ export function buildOffice(room, L, light) {
     kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 2.55, DESK_H, 0.42, { seg: 8 });
   }
   plant(kit, L, 4.55, 0.48, true, seed % 7);
-  if (L.shoji) {
-    shoji(kit, L, 0.3, 0.75, Math.PI / 2);
-    shelf(kit, L, 0.27, 2.35, 1.2, Math.PI / 2);
-    plant(kit, L, 0.35, 3.45, false, seed % 5);
-  } else {
-    shelf(kit, L, 0.27, 1.25, 1.4, Math.PI / 2);
-    plant(kit, L, 0.35, 3.45, false, seed % 5);
-  }
-  const lx = L.shoji ? 4.5 : 4.45, lz = L.shoji ? 3.35 : 2.2;
+  shoji(kit, L, 0.3, 0.75, Math.PI / 2);
+  shelf(kit, L, 0.27, 2.35, 1.2, Math.PI / 2);
+  plant(kit, L, 0.35, 3.45, false, seed % 5);
+  const lx = 4.5, lz = 3.35;
   lantern(kit, L, lx, lz);
   const stat = kit.mesh(roomMaterial({ room: light }));
   group.add(stat);
@@ -296,8 +266,7 @@ export function buildSuite(room, L, light) {
   plant(kit, L, 6.5, 0.5, true, 3);
   plant(kit, L, 0.45, 0.45, true, 1);
   plant(kit, L, 6.45, 4.4, false, 2);
-  if (L.shoji) shoji(kit, L, 6.55, 2.6, -Math.PI / 2);
-  else shelf(kit, L, 6.7, 2.6, 1.4, -Math.PI / 2);
+  shoji(kit, L, 6.55, 2.6, -Math.PI / 2);
   lantern(kit, L, 0.5, 4.45);
   group.add(kit.mesh(roomMaterial({ room: light })));
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.34), new THREE.MeshBasicMaterial({ map: screenTexture("off", null) }));
@@ -377,10 +346,16 @@ export function buildBreak(room, L, light) {
   lightPool.scale.set(1.3, 1, 1.4);
   lightPool.position.set(sx, 0.012, sz - 0.8);
   group.add(lightPool);
-  return { group, lantern: glowM, pool: lightPool, wallPoster: p, leanPoster: null, sofa: new THREE.Vector3(sx, 0, sz) };
+  // where done workers stand with a mug, in this room's frame: by the counter, by the sofa, at the high table
+  const spots = [
+    { x: 0.75, z: 1.35, ry: 0.5 }, { x: 1.55, z: 1.45, ry: -0.3 }, { x: 2.4, z: 1.35, ry: 0.2 }, { x: w - 0.9, z: 1.5, ry: -0.6 },
+    { x: 0.7, z: sz - 0.9, ry: 1.2 }, { x: w - 0.7, z: sz - 1.1, ry: -1.2 },
+    ...(d > 7 ? [{ x: sx - 0.85, z: d - 2.0, ry: Math.PI / 2 }, { x: sx + 0.85, z: d - 2.0, ry: -Math.PI / 2 }] : []),
+  ];
+  return { group, lantern: glowM, pool: lightPool, wallPoster: p, leanPoster: null, spots };
 }
 
-// A court: gravel with a tree (a maple in look B), a few stones and stepping stones.
+// A court: raked gravel with a maple, a few stones, stepping stones and a bench.
 export function scatterCourt(kit, c, L, i) {
   const y = -0.12;
   const tx = c.x + c.w * (0.3 + ((i * 37) % 40) / 100), tz = c.z + c.d / 2;
@@ -395,20 +370,14 @@ export function scatterCourt(kit, c, L, i) {
   for (const t of [-1, 1]) kit.box(0.06, 0.38, 0.3, L.steel, tx + 3.2 + t * 0.5, y, tz + 0.2);
 }
 
-// The lot round the building: trees behind it and to its left (pines in look B, round trees in look A), kept off the
-// camera's side of the default view so nothing outdoors hides a room.
+// The lot round the building: pines behind it and to its left, kept off the camera's side of the default view so
+// nothing outdoors hides a room.
 export function scatterLot(kit, b, L) {
   const y = -0.12;
-  const pine = (x, z, s) => {
+  const tree = (x, z, s) => {
     kit.cyl(0.08 * s, 0.5 * s, L.tree.trunk, x, y, z, { seg: 6 });
     [[0.95, 0.9], [0.75, 1.45], [0.5, 1.95]].forEach(([r, h], i) => kit.cyl(r * s, 0.9 * s, i % 2 ? L.plant.leaf : L.plant.leaf2, x, y + (h - 0.55) * s, z, { top: 0.02, seg: 7 }));
   };
-  const round = (x, z, s) => {
-    kit.cyl(0.1 * s, 1.1 * s, L.tree.trunk, x, y, z, { top: 0.07 * s, seg: 6 });
-    [[0, 1.6, 0, 0.75], [0.45, 1.45, 0.25, 0.5], [-0.4, 1.5, -0.2, 0.55], [0.05, 2.05, -0.1, 0.5]].forEach(([dx, dy, dz, r], k) =>
-      kit.sphere(r * s, k % 2 ? L.plant.leaf : L.plant.leaf2, x + dx * s, y + dy * s, z + dz * s, { sy: 0.8, ry: k, detail: 0 }));
-  };
-  const tree = L.id === "b" ? pine : round;
   const jitter = (i) => (((i * 7919) % 100) / 100 - 0.5);
   let i = 0;
   for (let x = b.minX - 2; x <= b.maxX + 2; x += 4.5, i++) tree(x + jitter(i) * 1.5, b.minZ - 3.2 + jitter(i + 3), 1 + jitter(i + 5) * 0.4);

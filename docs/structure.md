@@ -6,8 +6,8 @@ two agents working at the same time edited the same files and overwrote each oth
 own file, keeps the contracts between them in a few small modules, and lets a new feature arrive as new files.
 
 The split was done by `scripts/restructure.ts`, mechanically: every statement kept its text, its comments and its
-order. Only `export`, the imports and a few setters were added. The page draws the same pixels and computes the same
-styles as before (see "How it was checked").
+order. Only `export`, the imports and a few setters were added. The page computed the same styles as before the split.
+Since then the pixel room has been replaced by a three.js office (`src/client/world/`).
 
 ## The map
 
@@ -20,9 +20,10 @@ public/index.html         the page shell: head, markup, <script type="module" sr
 src/client/               the page, plain ES modules and stylesheets, served as they are
   main.js                 loads every built-in area in the old order
   core/                   shared by every area: state, net, bus, formatting, rich text, base styles, layout
-  room/                   the canvas room
-    events/               one file per event room (christmas, halloween, ...)
-  topbar/ questions/ tell/ feed/ card/ messages/ images/ sound/ settings/
+  world/                  the 3D office (three.js): plan, rooms, furniture, people, camera, scene, api
+  theme/ glass/           light, dark or system theme; the glass shell's small behaviour
+  vendor/three/           three.js r186, vendored (the page's import map points "three" here)
+  topbar/ questions/ tell/ feed/ card/ messages/ images/ sound/ settings/ rooms/ desk-hud/
                           one folder per panel or feature: its module(s) and its stylesheet
   <feature>/index.js      a new feature: loaded by the page on its own
 src/server/               the server, one file per concern
@@ -33,8 +34,9 @@ src/server/               the server, one file per concern
   schema/                 one .sql file per table, applied at startup
   machine-stats.sh        the machine sampler (runs here or over ssh)
 test/                     the tests that were there, unchanged
-  server/ client/         new: the server starts and serves; modules link; the page works; pixels match
-scripts/                  restructure.ts (the split), room-hash.ts (the pixel and style check)
+  server/ client/         the server starts and serves; modules link; the page works; the office draws
+scripts/                  restructure.ts (the split), room-hash.ts (Chrome, test server and clock tools for browser tests),
+                          world-lab.ts, world-shots.ts, world-page-shots.ts, shell-shots.ts (the lab and screenshots)
 docs/                     this file
 ```
 
@@ -49,27 +51,23 @@ The contracts, the things several areas agree on, each live in one small module 
 | --- | --- | --- |
 | The state | `src/server/state.ts` builds it, `src/client/core/state.js` holds it (`S`, `CONFIG`) | the one object the page draws from |
 | Writes | `src/client/core/net.js` (`post`), `src/server/router.ts` | POST with `x-hud: 1`; the reply is JSON; every write bumps the version |
-| Events on the page | `src/client/core/bus.js` | `state`, `tick`, `room:draw`: where a feature hooks in |
+| Events on the page | `src/client/core/bus.js` | `state`, `tick`, `theme`, `world:ready`, `world:select`, ...: where a feature hooks in |
 | Status words and colours | `src/client/core/status.js`, `src/server/lanes.ts` (`laneStatus`) | `needs_you`, `hq_turn`, `moving`, ... |
-| The room's pixel grid | `src/client/room/canvas.js` | `TS`, `SC`, `W`, `H`, `ctx`, `px`, the art cache |
-| Sprites and palettes | `src/client/room/sprites.js`, `palette.js` | 16x16 frames and colour letters |
-| Accessories | `src/client/room/accessory-table.js` | data only; order decides who wears what |
-| Seasons | `src/client/room/seasons.js` | the season or event id everything else keys on |
+| The office's door | `src/client/world/api.js` | `THREE`, `onFrame`, `deskAnchor`, `project`, `addToWorld`; the `world:*` events |
+| The office's layout | `src/client/world/plan.js` | pure: rooms, walls, cutaway, growth stages by lane count |
+| The office's colours and poses | `src/client/world/look.js` | colour tokens per theme, status colours, poses |
 
-Mutable state that another module changes has a setter in the module that owns it (`setSeason`, `setCtx`,
-`setS`, ...): an imported binding is read-only, and a setter makes every outside write visible in a search.
+Mutable state that another module changes has a setter in the module that owns it (`setS`, ...): an imported binding is read-only, and a setter makes every outside write visible in a search.
 
 ## How a feature arrives as new files
 
 - Page: a folder `src/client/<name>/` with `index.js` (and any `.css`). The server links every stylesheet under
   `src/client` and loads every `<name>/index.js` after `main.js` when it serves the shell, so nothing else is edited.
   The feature imports what it reads and listens on the bus: `on("state", ...)`, `on("tick", ...)`,
-  `on("room:draw", now => ...)`.
+  `onFrame((now, dt) => ...)` from `world/api.js` for something drawn in or over the office.
 - Server: `src/server/<name>.ts` for the logic, `src/server/routes/<name>.ts` for its routes (the router loads every
   file there), `src/server/schema/<table>.sql` for its tables, and `addStatePart("<name>", () => ...)` for its part
   of `/api/state`.
-- Event rooms are one file each in `room/events/`; adding one also adds its dates to `room/seasons.js` and one import
-  line in `room/events.js` (three small, distinct edits).
 
 ## Ownership for parallel lanes
 
@@ -112,10 +110,6 @@ style of every element in six states at two sizes is identical before and after.
 **Routes in files, not a table in one file.** Each route file is a plain list, loaded by the router at start. Two
 lanes adding routes add or edit different files. Routes must not overlap (the split checked the moved ones).
 
-**One accessory table.** Accessories stayed one ordered list: the order decides which item each worker gets
-(`wornBy` picks by index), so splitting it by season would have changed who wears what. Adding an item is appending
-one entry, which merges cleanly.
-
 **The schema as files.** One `CREATE TABLE IF NOT EXISTS` file per table, applied in name order at start. A change to
 an existing table is still a careful by-hand migration; the files only make new tables collision-free.
 
@@ -129,16 +123,16 @@ an existing table is still a careful by-hand migration; the files only make new 
   reached from `main.js` or a feature's `index.js`, every file opens with a comment.
 - `test/client/page.test.ts`: in Chrome at 1440x900, no console errors, no page scroll, an answer and a note reach
   the server, the tabs, the worker card, settings and sound respond.
-- `test/client/room-pixels.test.ts` with `scripts/room-hash.ts`: time, randomness and animation frames frozen in the
-  page, fonts blocked; the canvas is hashed after the first frame and after 3 s of frames for 19 states (asks open,
-  a worker selected, all 11 seasons and events, idle by day and night in three), and every element's computed style,
-  box and text is hashed at 1440x900 (plain, settings open, messages tab, a worker selected, idle) and 800x900. All
-  hashes match the tree before the split. It runs by itself while HEAD still has the old `index.html`, and with
-  `PIXEL_BASE=<ref>` at any time, for example to prove a refactor changed nothing on screen.
+- `test/client/world-plan.test.ts`: the office's plan (rooms, walls, cutaway, growth stages), pure, no browser.
+- `test/client/world.test.ts`: in Chrome with WebGL on SwiftShader (`startChrome({ webgl: true })` from
+  `scripts/room-hash.ts`): one office per lane at 1, 4, 9 and 18 lanes, the canvas draws, the walls nearest the camera
+  are low and recomputed after a turn, clicking a worker opens its card and Esc closes it, and the office rests while a
+  room covers it. Run it with `bun test --timeout 90000 test/client/world.test.ts`.
 
 The split was also run on a copy of another lane's branch (a new page section, new routes, a new root module and
-its tests): it placed the new work in its own module, file and route file, the branch's tests passed, and the page
-hashed the same as that branch before the split.
+its tests): it placed the new work in its own module, file and route file, and the branch's tests passed. The
+split's own check hashed the page's computed styles and canvas before and after; that check, and the pixel room it
+hashed, are gone.
 
 ## Running the split again
 

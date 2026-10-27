@@ -1,6 +1,6 @@
 # HQ Office
 
-A local command centre for people who run AI coding agents in herdr: a handheld-RPG-style office where every lane (an AI agent working one task) is a sprite worker, plus the panel where the owner answers HQ's questions. It runs as a herdr plugin or as `bun server.ts`, at http://127.0.0.1:4747 by default.
+A local command centre for people who run AI coding agents in herdr: a 3D office in the manner of late-90s life-sim games where every lane (an AI agent working one task) is a worker in its own office, plus the panel where the owner answers HQ's questions. It runs as a herdr plugin or as `bun server.ts`, at http://127.0.0.1:4747 by default.
 
 If `AGENTS.local.md` exists next to this file, read it too: it holds the rules of this particular installation (how the server is run and restarted, who to report to). It is gitignored and never published.
 
@@ -12,10 +12,10 @@ If `AGENTS.local.md` exists next to this file, read it too: it holds the rules o
 - `bin/hud-plugin.ts`, `herdr-plugin.toml`: the herdr plugin (actions, the status pane, and `greet` on `pane.agent_detected`); `bin/service.ts` (service mode: launchd, systemd), `bin/hud-command.ts` (installs `hud`). Their tests (`test/plugin/`) use a fake home and `test/fake-service.ts` for launchctl and systemctl: never run the real ones from a test.
 
 Rules for anyone changing it:
-- The question panel is the point. A change to the room must never make an open question harder to see or answer.
+- The question panel is the point. A change to the office must never make an open question harder to see or answer.
 - Never touch `hud.db` by hand and never delete it: it holds the owner's answers.
 - After a change under src/server/ (or server.ts), restart the server (the plugin's reload action, or however `AGENTS.local.md` says this installation runs it). The page's files (public/, src/client/) are read on every request; a reload is enough, and open pages reload themselves.
-- Original pixel art only: the style of Gen 3 handheld RPGs, never copied sprites, names or logos from a real game.
+- Original art only: every model, texture and poster is made in this repo, in the spirit of late-90s life-sim games; never copy models, sprites, textures, names, logos or UI from a real game (no plumbob-like markers).
 - A secret value must never reach `hud.db`, a log, a listing or the page's markup or storage. `bun test` greps for it.
 - Code, comments and docs name no real person, machine or service label: say "the owner", "this machine". The owner's name comes from `HUD_OWNER` at run time.
 - Tests start their own servers on spare ports with throwaway data dirs. Never point a test or `hud` at a server that holds real answers.
@@ -29,32 +29,30 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - `public/index.html`: the page shell (head, markup). The server adds every stylesheet and every feature folder when it serves it.
 - `src/client/main.js`: loads the built-in areas in their original order.
 - `src/client/core/`: shared by every area: `state.js` (S, CONFIG), `net.js` (post), `bus.js` (events), `boot.js` (load, stream, autoreload), `format.js`, `text.js`, `dom.js`, `clicks.js`, `status.js`; `base.css`, `controls.css`, `layout.css`.
-- `src/client/room/`: the canvas room: `canvas.js` (pixel grid, px, art cache), `sprites.js`, `palette.js`, `scene.js`, `workers.js`, `spots.js`, `collision.js`, `hero.js`, `breakroom.js`, `loop.js`, `input.js`, `seasons.js`, `weather.js`, `accessory-table.js` (data), `accessories.js`, `themes.js` (data: the looks per level of the lane tree), `looks.js` (who wears which look), `art.js` (tools for event art), `events.js` (runs the current event), `room.css`.
-- `src/client/room/events/`: one file per event room.
-- `src/client/topbar/`, `questions/`, `tell/`, `feed/`, `card/`, `messages/`, `images/`, `sound/`, `settings/`: one folder per panel or feature, its module(s) and its stylesheet. `rooms/` is the ROOMS tab and the room view that takes the stage (`pix.js`: its pixel strip; `markdown.js`: the brief and the thread).
+- `src/client/world/`: the 3D office (three.js): `index.js` (the feature entry: mounts the world on `<canvas id="world">`, fits it right of the question column, drives it from the bus `state` event; Q/E turn a quarter, 0 fits; exposes a read-only `window.__world` for tests), `world.js` (`mountWorld`: build, status, errands, turns, picking, frame loop), `api.js` (the one door for other areas: `THREE`, `onFrame`, `deskAnchor`, `project`, `addToWorld`; bus events `world:ready`, `world:select`, `world:hover`, `world:layout`), `plan.js` (pure: rooms, walls, cutaway, growth stages), `walk.js` (pure: paths from a desk to the break area), `camera.js`, `scene.js` (renderer, lights, frame loop), `rooms.js` (floors, walls with the cutaway), `furniture.js`, `people.js` (workers and poses), `balls.js` (subagent balls), `look.js` (colour tokens per theme, status colours, poses), `textures.js` (canvas textures drawn in code), `kit.js` (low-poly mesh tools), `world.css` (the turn and fit buttons).
+- `src/client/theme/`: light, dark or system theme and the THEME button; emits `theme` on the bus. `src/client/glass/`: the glass shell's small behaviour (feed fold, Esc closes the worker card). `src/client/desk-hud/`: the HTML chip over each desk (lane, status, model, effort, subagents, context).
+- `src/client/vendor/three/`: three.js r186, vendored (minified module, its LICENSE, `addons/RoundedBoxGeometry.js`). `public/index.html` has an import map that maps `"three"` to `/src/client/vendor/three/three.module.min.js`.
+- `src/client/topbar/`, `questions/`, `tell/`, `feed/`, `card/`, `messages/`, `images/`, `sound/`, `settings/`: one folder per panel or feature, its module(s) and its stylesheet. `rooms/` is the ROOMS tab and the room view that takes the stage (`markdown.js`: the brief and the thread; the seats, AT THE TABLE, are in `index.js`).
 - `src/server/`: one file per concern: `config.ts`, `db.ts`, `push.ts` (version, bump), `router.ts`, `page.ts` (shell, client files, autoreload stamp), `json.ts`, `http.ts`, `herdr.ts`, `prompt.ts` (a lane blocked on a prompt: detection and excerpt), `hq-link.ts` (whether HQ can take input, checked every sync; the outbox that holds what it cannot take and sends it once it can), `lanes.ts`, `asks.ts`, `updates.ts`, `events.ts`, `inbox.ts`, `score.ts`, `state.ts`, `machines.ts` (+ `machine-stats.sh`), `settings.ts` (the owner's settings), `rooms.ts` (conference rooms: brief, shelf, thread, delivery to lanes), `main.ts`.
 - `src/server/routes/`: one file per resource; the router loads them all.
 - `src/server/schema/`: one `.sql` file per table, applied at startup.
 - `test/`: the original tests; `test/server/` and `test/client/` mirror `src/`.
-- `scripts/`: `release.ts` (the release routine, below), `restructure.ts` (how the split was made; re-runnable), `room-hash.ts` (pixel and style hashes of the page).
+- `scripts/`: `release.ts` (the release routine, below), `restructure.ts` (how the split was made; re-runnable), `room-hash.ts` (browser test tools: Chrome, with WebGL when asked, a test server, `FREEZE`), `world-lab.ts` (the world lab: fake lanes, no server; `docs/design/world-lab.html`), `world-shots.ts` (lab screenshots to `docs/design/shots/`), `world-page-shots.ts` (the real page on a seeded throwaway server, to `docs/screens/world-*.jpg`), `shell-shots.ts` (the glass shell, `docs/screens/glass-*.jpg`).
 
 ## Working in parallel (lanes)
 
 - Before starting, a lane names the files it will touch. Two lanes never touch the same file at the same time.
 - A lane owns its feature's folder: `src/client/<feature>/`, `src/server/<feature>.ts`, `src/server/routes/<feature>.ts`, `src/server/schema/<table>.sql`, `test/*/<feature>.test.ts`.
-- Shared files change only in a lane that says so up front, as a small change of its own merged before the work that needs it: `src/client/core/*` (contracts: state, net, bus, status, base styles, layout), `src/client/main.js`, `src/client/room/canvas.js`, `sprites.js`, `palette.js`, `seasons.js`, `src/server/main.ts`, `router.ts`, `page.ts`, `db.ts`, `config.ts`, `push.ts`, `state.ts`, `public/index.html`.
-- `src/client/room/accessory-table.js` is append-only: add entries at the end of the list, never reorder (the order decides who wears what).
+- Shared files change only in a lane that says so up front, as a small change of its own merged before the work that needs it: `src/client/core/*` (contracts: state, net, bus, status, base styles, layout), `src/client/main.js`, `src/client/world/api.js`, `src/client/world/plan.js`, `src/client/world/look.js`, `public/index.html`'s import map, `src/server/main.ts`, `router.ts`, `page.ts`, `db.ts`, `config.ts`, `push.ts`, `state.ts`, `public/index.html`.
 - Hook in, do not reach in: listen on `core/bus.js` instead of adding a call to another area's render function; use `addStatePart` instead of editing `state()`; add a route file instead of editing another lane's.
 - Do not reformat, rename or reorder code in files you do not own.
-- A refactor of the room or the page must not change what is drawn: `PIXEL_BASE=HEAD bun test test/client/room-pixels.test.ts` (needs Chrome).
+- A change to the office must keep `bun test --timeout 90000 test/client/world.test.ts` passing (needs Chrome; WebGL runs on SwiftShader).
 - `bun test` passes before every commit; `test/client/modules.test.ts` catches a broken import before a browser does.
 
 ## How to add
 
 - **A page feature or panel**: create `src/client/<name>/index.js` (and `<name>.css`). The page loads it after the built-in areas, no other file changes. Import what you read (`S` from `core/state.js`, `post` from `core/net.js`, `$` from `core/dom.js`) and render from the bus: `on("state", (S) => render())`. A panel inserts its own element (for example into `.under` or under the questions); it must never push an open question out of view.
-- **An accessory**: append one entry to `src/client/room/accessory-table.js`: `{ id, slot: "head" | "body" | "hand", seasons: [...] | "any", pal, front, side }` (or `hand` for a hand item). Original pixel art only.
-- **An event room**: `src/client/room/events/<id>.js` exporting `{ still() {}, live(now) {}, counter(now) {} }` (draw with `dp` and the tools in `room/art.js`), its dates in `EVENTS` in `room/seasons.js`, and one import in `room/events.js`.
-- **Something drawn in the room every frame**: `on("room:draw", (now) => { ... })` in your feature, drawing with `px` from `room/canvas.js`.
+- **Something drawn in or over the office**: `onFrame((now, dt) => ...)`, `deskAnchor(lane)` and `project(v)` from `src/client/world/api.js` (HTML over a desk), or `addToWorld(obj, lane)` for a three.js object in a lane's office; listen for `world:ready` before using them.
 - **A route**: add `{ method, path | prefix | pattern, handle }` to `src/server/routes/<resource>.ts`, or add the file. GET handlers return a Response; POST handlers get `{ body, m }` and return the JSON reply (nothing means `{ ok: true }`); writes are bumped for you.
 - **A table**: `src/server/schema/<table>.sql` with `CREATE TABLE IF NOT EXISTS`. Changing an existing table is a migration: ask HQ first.
 - **Server logic and state**: `src/server/<name>.ts`, imported by its route file; `addStatePart("<name>", () => value)` from `state.ts` puts it in `/api/state` as `S.<name>`.

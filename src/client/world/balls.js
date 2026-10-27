@@ -20,10 +20,14 @@ export class Balls {
     this.c = new THREE.Color();
   }
 
-  // subagents: [{ id?, model }] or a count. frame: the office group's world matrix; centre: a local point.
+  // subagents: the lane's vitals' [{ id, model, family }] (or a count). frame: the office group's world matrix;
+  // centre: a local point.
   set(lane, subagents, frame, centre, now) {
     const list = Array.isArray(subagents) ? subagents : Array.from({ length: Math.max(0, subagents | 0) }, () => ({ model: "" }));
-    const want = list.slice(0, MAX_PER_DESK).map((s, i) => ({ key: s.id ?? `${modelFamily(s.model)}:${i}`, family: modelFamily(s.model) }));
+    const want = list.slice(0, MAX_PER_DESK).map((s, i) => {
+      const family = modelFamily(s.model, s.family);
+      return { key: s.id ?? `${family}:${i}`, family };
+    });
     const d = this.desks.get(lane) ?? { balls: [] };
     d.frame = frame; d.centre = centre;
     const keys = new Set(want.map((w) => w.key));

@@ -62,8 +62,11 @@
 .rvhead h2 { min-width: 0; margin: 0; font: 600 17px/1.3 var(--font); letter-spacing: -0.01em; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .rvhead .who { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; }
 .rvhead .railbtn { margin-left: auto; flex: 0 0 auto; }
-/* the conference room in pixels (pix.js): its height is set from its art */
-.rvpix { display: block; width: 100%; height: 96px; image-rendering: pixelated; border-radius: 10px; background: #9aa8c4; box-shadow: 0 0 0 1px var(--hairline); }
+/* who sits at the table: the owner at the head, then the room's lanes */
+.rvseats { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.rvseats > .k { font: 600 11px/1 var(--font); letter-spacing: 0.04em; color: var(--text-2); margin-right: 2px; }
+.rvseats .rlane.you { cursor: default; }
+.rvseats .rlane.you i { background: var(--text-2); }
 .rvptabs { display: none; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline); }
 .rvptabs .tab { flex: 1 1 0; justify-content: center; }
 /* the thread beside the rail; folded, the thread takes the width */
@@ -148,7 +151,7 @@
   .rvptabs { display: flex; }
   .rvhead h2 { font-size: 16px; }
   .rvhead .who { display: none; }
-  .roomview.typing .rvpix, .roomview.typing .rvhead { display: none; }
+  .roomview.typing .rvseats, .roomview.typing .rvhead { display: none; }
   .rvbody, .roomview.folded .rvbody { grid-template-columns: minmax(0, 1fr); }
   .roomview[data-pane="chat"] .rvrail { display: none; }
   .roomview:not([data-pane="chat"]) .rvchat { display: none; }

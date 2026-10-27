@@ -1,7 +1,7 @@
 // Clicks delegated from the whole document: select a worker, switch the feed tab, MORE/LESS.
 import { $ } from "./dom.js";
 import { renderFeed, renderLog, setFeedTab } from "../feed/feed.js";
-import { select } from "../room/input.js";
+import { select } from "../card/card.js";
 import { expanded } from "./text.js";
 import { renderHud } from "../questions/questions.js";
 import { renderMsgs } from "../messages/messages.js";
