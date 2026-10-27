@@ -35,7 +35,9 @@ Read this before adding an object, a room or a world. Each task below takes minu
    });
    ```
 
-   Colours are palette tokens (`bun tools/catalog.ts` lists objects; `src/catalog/palette.js` lists tokens) or hex.
+   Colours are palette tokens or hex. A token is the engine's (`src/catalog/palette.js`) or one your pack's
+   `palette` names. `check.ts` names an unknown token, or an unknown clip, and the nearest one.
+   `bun tools/catalog.ts` lists objects.
    `k.cyl(part, r, h, at, colour, { top, seg })` makes cylinders and cones. `k.glow` makes lit parts (screens,
    shades) and `k.glass` makes panes.
 2. Add `import sideTable from "./side-table.js";` at the end of the pack's imports and `sideTable,` at the end of
@@ -67,25 +69,140 @@ says which edge to use when it has none. A gap in a wall merges the room with th
 
 ## Add a world
 
-Copy `examples/tiny-house.world.js`. A world is `defineWorld({ format: 1, id, packs, lot, floors, walls, openings,
+Copy `examples/tiny-house.world.js` (examples are for people; the tests use their own copy in `test/fixtures/`, so
+an example can change freely). A world is `defineWorld({ format: 1, id, packs, lot, floors, walls, openings,
 rooms, objects, characters, acts })`. Objects take `{ id, type, at: [x, z], facing }`, where `at` is the footprint's
 north-west tile after turning and `facing` is where its front points. Then:
 
 ```sh
-bun packages/world/tools/check.ts my.world.js && bun packages/world/tools/shot.ts my.world.js --advance 6000 --out my.jpg
+bun packages/world/tools/check.ts my.world.js --map && bun packages/world/tools/shot.ts my.world.js --advance 6000 --out my.jpg
 ```
+
+`--map` prints the lot as text: `,` ground, `.` floor, a letter per object, a digit per character, `|` and `-`
+walls, `D` doors, `W` windows. Read it before you take a shot. Acts in a world file are `sit`, `use`, `walk` and
+`visit` (`{ who, do: "visit", target, wait, then: { do: "sit", ... } }`).
+
+## Worked example: a sofa in your own pack, two in a world
+
+Your files live outside the engine. Here they sit in `den/`:
+
+```
+den/cozy/sofa.js      the object
+den/cozy/index.js     the pack
+den/den.world.js      the world
+```
+
+`den/cozy/sofa.js`, a two-seat sofa on a 2×1 footprint, one slot per seat:
+
+```js
+// A two-seat sofa: a base on short feet, two seat cushions, a back and two arms. Its front (+z) is where you sit.
+import { defineObject } from "@hq/world/model";
+
+export default defineObject({
+  id: "sofa",
+  footprint: [2, 1],
+  height: 0.85,
+  tags: ["seat"],
+  slots: {
+    left: { at: [-0.45, 0.1], y: 0.48, facing: "s", stand: [[0, 1]], clip: "sit" },
+    right: { at: [0.45, 0.1], y: 0.48, facing: "s", stand: [[0, 1]], clip: "sit" },
+  },
+  build(k) {
+    for (const x of [-0.85, 0.85]) for (const z of [-0.3, 0.38]) k.box("foot", [0.06, 0.1, 0.06], [x, 0, z], "wood-dark");
+    k.box("base", [1.8, 0.3, 0.8], [0, 0.1, 0.05], "sofa", { omit: ["-y"] });
+    for (const x of [-0.45, 0.45]) k.box("cushion", [0.86, 0.08, 0.58], [x, 0.4, 0.14], "cushion", { omit: ["-y"] });
+    k.box("back", [1.8, 0.45, 0.2], [0, 0.4, -0.25], "sofa", { omit: ["-y"] });
+    for (const x of [-0.95, 0.95]) k.box("arm", [0.1, 0.55, 0.8], [x, 0.1, 0.05], "sofa-dark");
+  },
+});
+```
+
+The cushions and the back stand on the base, so their bottoms would lie in the base's top plane. `omit: ["-y"]`
+leaves those faces out, and the cushions sit forward of the back so their tops never meet it. `check.ts` names
+both clashes if you leave them in.
+
+`den/cozy/index.js`, the pack and its own colours, one map per theme with the same tokens in each:
+
+```js
+// The cozy pack: a sofa, and the colours it names, for day and night.
+import { definePack } from "@hq/world/model";
+import sofa from "./sofa.js";
+
+export default definePack({
+  id: "cozy",
+  palette: {
+    light: { sofa: "#7d9a8c", "sofa-dark": "#5f7c6f" },
+    dark: { sofa: "#6f8a7e", "sofa-dark": "#536d62" },
+  },
+  objects: [
+    sofa,
+  ],
+});
+```
+
+A pack's tokens belong to it: `sofa` here is `cozy/sofa` inside the engine, so another pack's `sofa` never clashes.
+
+`den/den.world.js`, one room, two sofas facing each other, two people who sit down:
+
+```js
+// The den: one room with a door, two sofas facing each other, and two people who sit down on them.
+import { defineWorld, rect } from "@hq/world/model";
+import starter from "@hq/world/packs/starter";
+import cozy from "./cozy/index.js";
+
+export default defineWorld({
+  format: 1,
+  id: "den",
+  packs: [starter, cozy],
+  lot: { w: 10, d: 8 },
+  floors: [{ rect: [1, 1, 8, 6], finish: "starter/oak" }],
+  walls: [{ path: rect(1, 1, 8, 6), finish: "starter/plaster", outside: "starter/siding" }],
+  openings: [{ type: "starter/door", at: [6, 6], side: "s" }],
+  objects: [
+    { id: "sofa-1", type: "cozy/sofa", at: [2, 2], facing: "s" },
+    { id: "sofa-2", type: "cozy/sofa", at: [2, 5], facing: "n" },
+    { id: "plant-1", type: "starter/plant", at: [7, 2], facing: "s" },
+  ],
+  characters: [{ id: "ada", at: [6, 5], facing: "n" }, { id: "bo", at: [7, 5], facing: "n" }],
+  acts: [{ who: "ada", do: "sit", target: "sofa-1", slot: "left" }, { who: "bo", do: "sit", target: "sofa-2", slot: "right" }],
+});
+```
+
+Check and look, from any folder (here, the one that holds `den/`; paths are relative to where you stand):
+
+```sh
+bun <engine>/tools/check.ts den/cozy/index.js den/den.world.js --map
+bun <engine>/tools/shot.ts den/den.world.js --zoom 2 --advance 8000 --out den.jpg
+```
+
+`check.ts` prints `pack cozy (...): ok`, `world den (...): ok`, then the map:
+
+```
+  2   ,|. a a . . . c .|,
+  ...
+  5   ,|. b b . . 1 2 .|,
+       +-+-+-+-+-+D+-+-+
+```
+
+Open `den.jpg`: Ada sits on `sofa-1`'s left seat and Bo on `sofa-2`'s right seat. If
+`check.ts` fails, its message says what to change: a tile that is free for the whole footprint, the nearest colour
+token, or which faces lie in one plane. `test/tools.test.ts` runs this from three folders.
 
 ## Add a behaviour
 
 What moves lives in an ECS (`src/sim/`). Entities are ids; components are plain JSON; systems run in a fixed order.
 An act becomes a `queue` of steps, and each step kind is a component that one system runs and removes when done.
+A held seat is the character's `holding` component (`{ object, slot }`), so `sim.ecs.toJSON()` carries it and
+nothing else keeps a copy. Nav plans paths only; `planAct(lot, nav, who, act, { holder })` asks the sim who holds a
+slot.
 
-- **A new act made of existing steps** (walk, turn, enter, wait, loop): plan it in `src/nav/act.js`, the way
-  `visit` is planned. Do not add a system.
+- **A new act made of existing steps** (walk, turn, enter, wait, then, loop): plan it in `src/nav/act.js`, the way
+  `visit` is planned, and add its name to `ACTS`. Do not add a system.
 - **A new step kind in the engine**: add `src/sim/systems/<kind>.js`
   (`export default { name, step: "<kind>", run(ecs, dt, { lot, nav, emit }) { ... } }`). In `run`, query
   `ecs.query("<kind>", "body", "anim")`, return true while it is still moving, and `ecs.remove(id, "<kind>")` when
   it is done. Add it to the end of `STEP_SYSTEMS` in `src/sim/systems/index.js`. `wait.js` is the smallest example.
+  A system that throws is switched off and logged once with its name, so a broken one shows up as a stopped behaviour.
 - **A behaviour that belongs to the host** (anything about its own domain): do not edit the package. Pass
   `createWorld(canvas, world, { systems: [mySystem] })` and put your data in your own components
   (`world.sim.ecs.add(id, "myThing", {...})`).
@@ -94,11 +211,20 @@ An act becomes a `queue` of steps, and each step kind is a component that one sy
 
 ## Add a pack
 
-A folder with `index.js` (`export default definePack({ id, objects: [...], palette: { "mypack/oak": "#..." } })`)
-and one file per object. Name it in a world's `packs`. No engine file changes. `check.ts path/to/index.js` checks it.
+A folder with `index.js` (`export default definePack({ id, objects: [...], palette: { light: { oak: "#..." },
+dark: { oak: "#..." } } })`) and one file per object. Both palette maps name the same tokens. Name the pack in a
+world's `packs`. No engine file changes. `check.ts path/to/index.js` checks it. The worked example above is a whole
+pack.
+
+## Change a world while it runs
+
+`world.apply(nextDoc)` validates the whole doc, diffs it and rebuilds only what changed. Characters keep walking;
+one whose seat or target went away plans again or gets a `cancel` event. The same doc twice is a no-op. Tests of
+an edit run headless: `test/view.test.ts` drives the same code with no browser.
 
 ## Change the engine
 
-Say so up front. Keep the pure half pure: `src/model`, `catalog`, `nav`, `anim`, `camera`, `arch` and `lint` never
-import three.js, so `bun test` checks them without a browser. If you change an export, update `api.txt` and
+Say so up front. Keep the pure half pure: `src/model`, `lot`, `catalog`, `nav`, `anim`, `camera`, `arch`, `lint`,
+`sim` and `view` never import three.js, so `bun test` checks them without a browser. `src/world/create.js` only does
+what the view driver (`src/view/driver.js`) tells it: what to draw, when, and whether the shadow map is stale. If you change an export, update `api.txt` and
 `CHANGELOG.md` in the same commit. Run `bun test` in the package, `tools/proof.ts`, and look at the shots.
