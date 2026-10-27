@@ -124,5 +124,8 @@
   /* no Esc key on a touch screen: the button says what it does */
   .x { height: 32px; padding: 0 10px; font-size: 0; }
   .x::after { content: "Close"; font-size: 12px; }
+  /* no keys either: no KEYS mark */
+  #reader.target { outline: none; }
+  #reader.target::after { content: none; }
   .opt { min-height: 40px; }
 }

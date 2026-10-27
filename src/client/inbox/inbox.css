@@ -116,6 +116,7 @@ dialog.keys form { display: flex; justify-content: flex-end; }
   .seg button { height: 30px; }
 }
 @media (max-width: 1150px) and (pointer: coarse) {
+  .item.target::after { content: none; }
   .item .meta .tag { height: 22px; }
   .sopts .opt { min-height: 40px; }
   .qfoot .send { min-height: 36px; }
