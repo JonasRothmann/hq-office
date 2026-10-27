@@ -243,6 +243,75 @@ Building B in `packages/world/` tested the revision against real tools. What cha
 > office layout from the lane tree and the outside generator stay app-side, and any of them can later move to its own
 > package unchanged. The public API is `api.txt` plus world format 1, versioned 0.x, and a test fails when it changes
 > without the changelog.
+>
+> Inside the package, what moves runs in a small ECS of its own (`createEcs`, `createSim`; no dependency), and what
+> stands still stays plain data. The lot (grid, floors, walls, openings, rooms) is a pure model with pure functions
+> over it. Placed objects and characters are entities whose components are plain JSON (`body`, `anim`, `queue`,
+> `holding`, one component per step in progress). Systems run in a fixed order, one file each (sequence, stand, walk,
+> turn, enter, loop, wait, anim), and createWorld's three.js side only mirrors components onto meshes. Three designs
+> were compared: a model plus a scene graph with one step interpreter, a pure ECS, and this hybrid. The interpreter
+> and the hybrid were both built and given the same new behaviour, a visit to another desk (2.12). The interpreter
+> is smaller (79 code lines against 207) and touched one file fewer. The hybrid lets a host add components and
+> systems without editing the package, and its whole state saves and loads as JSON. The numbers were close, and the
+> owner prefers an ECS, so the hybrid was chosen. The app's adapter sets components and passes its own systems; it
+> never edits engine systems.
+
+### 2.12 What moves: an ECS beside the lot model
+
+The owner asked for an ECS if it makes sense. Performance is not the argument: a lot holds tens of characters and
+hundreds of objects. The arguments are composition and agent DX:
+
+- components are plain data, which suits world files, saves and tests;
+- a system is one small file, which suits parallel lanes;
+- queries suit tests and tools ("every chair has a seat slot").
+
+The costs are indirection, the scene graph that three.js still needs, and the static parts (the grid, walls and
+rooms), which are relational data that fit a model better than entities.
+
+Three designs:
+
+1. **Model plus scene graph.** The lot is a pure model. Each character is one plain state object, run by one step
+   interpreter (a chain of `if (step.kind === ...)` cases). This is what phase 1's `createWorld` did, inside the
+   renderer.
+2. **Pure ECS.** Tiles, wall edges, openings and rooms are entities too. Rejected without a prototype. Room
+   detection, the cutaway, the nav grid, the coplanar lint and validation each need the whole lot at once (edges
+   between tiles, flood fills, every primitive), so each system would rebuild the same indexes from components.
+   "Why is this wall here?" would span several stores.
+3. **Hybrid.** The lot stays a pure model. Placed objects and characters are entities with plain-data components.
+   An act becomes a queue of steps. Each step kind is a component, run by its own system. A host adds components and
+   systems through `createWorld(..., { systems })`.
+
+Designs 1 and 3 were both built headless, and both walk Ada from the lounge to chair-1 and sit her down to type
+(`docs/engine/compare/compare.test.ts` checks that they end in the same place). Then the same new behaviour went
+into both: the visit, a real upcoming feature. A worker walks to the lead's desk, stands, waits and walks back:
+`{ do: "visit", target, wait, then }`. Whether the office uses it at all is the app's setting; the engine only
+offers the act.
+
+| Criterion | 1. Model plus scene graph | 3. Hybrid ECS (chosen) |
+| --- | --- | --- |
+| Walk and sit, code lines (shared planner 47 and motion 24 left out) | **79**, 1 file (`docs/engine/compare/scene-graph/walker.js`) | 207, 10 files (`ecs.js` 37, `sim/index.js` 53, 8 system files 117) |
+| The visit: engine files touched | **2**: the planner (+26 lines), `walker.js` (+3: an `else if`) | 3: the planner (+26), a new `systems/wait.js` (14), the system list (+2) |
+| A new step kind from the host, without editing the package | no: it is a case in `walker.js`, a package file | **yes**: a system in `opts.systems` and a component |
+| Two lanes adding behaviours at once | both edit the same `if` chain | each adds a file; only the one-line list is shared |
+| Headless tests | yes (both run in Bun) | yes, and a single system runs on its own over hand-made components |
+| World file | the same in both: `characters` and `acts`; the visit is an act that `planAct` validates | the same |
+| Saving the running state | plain objects, but needs a hand-written load; host state lives elsewhere | **`ecs.toJSON()` and `ecs.load()`**: `sim.test.ts` saves mid-walk, loads into a new sim and ends identically |
+
+Reading the numbers: design 1 is 2.6 times smaller and touched one file fewer, both by small absolute margins (128
+lines, one file). Design 3 is better on the two criteria that grow with the office: behaviours from the host across
+the package boundary, and state as data. Headless testing is a tie. Both designs are pure, which phase 1's renderer
+code was not, so most of that gain came from leaving the renderer, not from the ECS. That is close, and the
+owner's preference breaks the tie: design 3.
+
+What the choice costs, and how it is contained:
+
+- **The step order is spread out.** `sequence.js` starts a step only when a character holds no component of any
+  registered step kind (`ecs.stepKinds()`). A queued step with no system throws an error that names the fix
+  (`no system runs step 'dance'; register one with step: "dance"`).
+- **A frame per step boundary.** When a step finishes mid-frame, the next one starts on the next frame. That costs
+  16 ms per boundary, which no one can see; the rival carried the rest of the frame over.
+- **Queries copy.** A query returns a fresh array of `[id, ...components]`, so systems may add and remove components
+  while they iterate. At tens of entities the copy costs nothing measurable.
 
 ## 3. The layers
 
@@ -258,6 +327,7 @@ runs in Bun tests.
 | `anim` | yes | the rig, clips as keyframes, sampling, blending | meshes |
 | `camera` | yes | the Sims camera rig: state, easing, pose, projection, pixel snap | three.js |
 | `lint` | yes | coplanar faces in a primitive list | where they came from |
+| `sim` | yes | an ECS of placed objects and characters; the step systems; saving its state | meshes, three.js |
 | `render` | no | three.js: renderer, lights, shadows, materials, meshes, characters | the world doc's rules |
 | `world` | no | composition: builds a world view from a world file; the frame loop; events | lanes, HQ |
 | `ui` (in `render` and `world`) | no | projection for overlays, picking, hover | the app's DOM |
@@ -317,7 +387,8 @@ Colours are palette tokens (`"wood"`, `"fabric"`, `"leaf"`) or hex. Openings def
 - Slots: an object's `slots` give where a character stands (`stand`, tile offsets tried in order), where it ends up
   (`at`), which way it faces and which clip it plays. `reserve(objectId, slot, who)` makes a slot exclusive.
 - `planAct(lot, nav, character, { do: "sit", target: "chair-1" })` returns steps:
-  `walk(path) → turn(facing) → enter(slot, clip) → loop(clip)`; the world runs them.
+  `walk(path) → turn(facing) → enter(slot, clip) → loop(clip)`, plus the slot to hold. `{ do: "visit", target, wait,
+  then }` plans `walk → turn → wait`, then the `then` act from the tile beside the target. The sim runs the steps.
 
 ### 3.4 anim
 
@@ -386,10 +457,21 @@ and `ppm` (current pixels per metre). Rules:
   picked and highlighted); `instance: true` objects with four or more copies draw as `InstancedMesh` (phase 2).
 - Characters: a jointed mesh per character from the rig; casts real shadows (no blob decal lying on the floor).
 
-### 3.8 world
+### 3.8 sim
+
+`createSim(lot, nav, { systems })` puts every placed object (`placed`) and character (`character`, `body`, `anim`)
+into an ECS (`createEcs`: entities are ids, components are plain JSON per kind, systems run in a fixed order). `act`
+plans with `planAct`, holds the slot (`holding`) and sets a `queue` of steps. `sequence` starts the next step as a
+component of its kind. `stand`, `walk`, `turn`, `enter`, `wait` and `loop` each run their kind and remove it when
+it is done, and `anim` advances the clips. A host's systems run after the step systems and before `anim`. The whole
+state is `ecs.toJSON()`, and `ecs.load()` restores it. Why an ECS here and not for the lot: 2.12.
+
+### 3.9 world
 
 `createWorld(canvas, world, opts)` validates the world (throws with every problem), builds the catalog, the lot, the
-nav grid, the architecture for the current cutaway, the object meshes and the characters, and starts the frame loop.
+nav grid, the sim, the architecture for the current cutaway, the object meshes and the character meshes, and starts
+the frame loop. Each frame steps the sim, then mirrors its components onto the meshes (render sync); the meshes hold
+no state of their own.
 The loop renders on every animation frame while anything changes (camera moving, a character acting, a drag,
 a time change) and draws nothing while the view is still. No frame cap applies during interaction; an optional
 `idleFps` limits only ambient animation (characters idling) when nothing else moves.
@@ -437,7 +519,9 @@ re-exports it and adds the browser half.
 | `detectRooms` | `(doc) → Room[]` |
 | `toJSON` / `fromJSON` | `(world) → string`, `(json, packs) → World` |
 | `createNav` | `(lot) → Nav` (`path`, `reserve`, `release`, `walkable`) |
-| `planAct` | `(lot, nav, character, act) → Step[]` |
+| `planAct` | `(lot, nav, character, act) → { steps, hold? } \| { problem }` |
+| `createEcs` | `() → Ecs` (`add`, `get`, `has`, `remove`, `query`, `system`, `step`, `toJSON`, `load`; experimental) |
+| `createSim` | `(lot, nav, { systems, emit }) → Sim` (`act`, `step`, `character`, `ecs`; experimental) |
 | `cutaway` | `(lot, { mode, rot, focus }) → Set<string>` |
 | `buildArchitecture` | `(lot, cut, palette) → Primitive[]` |
 | `lintCoplanar` | `(primitives) → Pair[]` |
@@ -448,11 +532,13 @@ re-exports it and adds the browser half.
 `@hq/world` adds:
 
 ```js
-/** createWorld(canvas, world, { theme, time, walls, rot, zoom, clock: "raf"|"manual", idleFps }) → WorldView
+/** createWorld(canvas, world, { theme, time, walls, rot, zoom, clock: "raf"|"manual", idleFps, systems }) → WorldView
  *  WorldView:
  *   camera: { rotate(dir), zoom(step), pan(dxPx, dyPx), focusOn(x, z), fit(), pose(), state }
  *   setWalls(mode, focusRoom?), setTheme("light"|"dark"), setTime("14:00")
- *   act(characterId, act) → Promise<void>          walk to a slot and use it
+ *   act(characterId, act) → Promise<void>          walk to a slot and use it, or visit (walk, wait, then)
+ *   character(id) → { x, z, ry, hips, clip, step }
+ *   sim: { ecs, act, step, character, characters, pose, on }   the ECS (experimental)
  *   pick(clientX, clientY) → { kind: "object"|"character"|"tile", id?, tile } | null
  *   hover(clientX, clientY)                          highlights what pick would return
  *   project([x, y, z]) → { x, y, visible }           CSS px, snapped to device pixels
@@ -543,7 +629,7 @@ Checked against a read-only diagnosis (verified here in the vendored three.js), 
    nothing moves (`people.js:14`); the light sum (1.8 + 0.8 + 1.2) with no tone mapping clips.
 
 Each one is impossible by construction in the engine: the shadow taps are world-fixed (3.7), the loop has no cap
-during interaction (3.8), the architecture has no overlapping coplanar faces and the lint fails the build if any
+during interaction (3.9), the architecture has no overlapping coplanar faces and the lint fails the build if any
 appear (3.6, 8), and the camera snaps to device pixels at rest (3.5). The proof measures it: two frames during a pan
 are compared after undoing the known whole-pixel shift.
 
@@ -594,11 +680,10 @@ darkening), then rich (time of day, lamps, AO) only if a laptop keeps 60 fps whi
 
 ## 9. Alternatives considered
 
-1. **ECS (entities, components, systems) instead of a model plus a scene graph.** An ECS shines with thousands of
-   entities and many systems over them. A lot has dozens of objects and a handful of characters; the hard parts are
-   the grid, the walls, rooms and validation, which are relational data, not components. An ECS would spread one
-   object's rules over several systems and make "why is this chair here" harder to answer. Chosen: a plain data
-   model (the doc and the derived lot), pure functions over it, and a thin scene graph built from it.
+1. **A pure ECS, or none.** The draft rejected an ECS altogether: the hard parts (grid, walls, rooms, validation) are
+   relational data, not components. That still holds for the lot, so a pure ECS (2.12, design 2) was rejected. For
+   what moves, a model plus a step interpreter was built and measured against a hybrid ECS. It was smaller, but the
+   hybrid was chosen (2.12).
 2. **Building three.js objects directly in `build()` (as the current kit does)** instead of recording primitives.
    Simpler for one renderer, but the lint, footprint checks and golden tests would need a browser, and agents would
    reach for three.js internals. Recording primitives costs one conversion step and keeps the whole model testable
@@ -704,7 +789,11 @@ light, and the HQ office itself.
 1. **The office as a world, behind the adapter.** Write `src/client/office/plan.js` (the lane tree to a `WorldDoc`)
    and `src/client/office/adapter.js` (today's `api.js` contract on `world.anchor`, `project`, `attach`, `on`). Ship
    it behind a setting next to the current world. This is the step that proves the boundary. Everything else
-   follows from what it needs.
+   follows from what it needs. The adapter writes lane state as components (a `lane` component on each worker,
+   for example) and passes its own systems (status, subagent balls) through `createWorld(..., { systems })`.
+   The visit to the lead's desk is the app's setting. When it is on, the adapter sends
+   `act(worker, { do: "visit", target: leadDesk, wait, then: { do: "sit", target: ownChair, clip: "type" } })`.
+   The engine part already exists and is tested (`sim.test.ts`).
 2. **Engine features the office needs**, in that order: `InstancedMesh` for `instance: true` objects (a 12-lane
    office has 48 desks and chairs); per-room light (a uniform per room, so a lit office glows at night among dark
    ones); anchors and `attach` on characters (the desk HUD, the subagent balls); model edits at run time

@@ -16,6 +16,7 @@ const world = createWorld(canvas, house, { theme: "light", time: "14:00", walls:
 world.bindInput(canvas);                       // drag to pan, wheel to zoom, click to pick
 world.camera.rotate(1);                        // a quarter turn; the camera's height and focus never move
 await world.act("ada", { do: "sit", target: "chair-1", clip: "type" });
+world.act("ada", { do: "visit", target: "chair-3", wait: 4, then: { do: "sit", target: "chair-1", clip: "type" } });
 world.on("pick", (hit) => console.log(hit));   // { kind: "object" | "character" | "tile", id, tile }
 ```
 
@@ -24,7 +25,7 @@ world.on("pick", (hit) => console.log(hit));   // { kind: "object" | "character"
 | Entry | What | Runs in |
 | --- | --- | --- |
 | `@hq/world` | everything below, plus `createWorld` (three.js) | browser |
-| `@hq/world/model` | world files, packs, validation, rooms, nav, acts, camera rig, cutaway, architecture as primitives, coplanar lint, rig and clips | Bun and browser (no three.js) |
+| `@hq/world/model` | world files, packs, validation, rooms, nav, acts, the sim (an ECS of objects and characters), camera rig, cutaway, architecture as primitives, coplanar lint, rig and clips | Bun and browser (no three.js) |
 | `@hq/world/packs/starter` | the starter pack: oak floor, plaster, siding, door, window, desk, chair, plant, lamp | Bun and browser |
 
 The full list of exported names is `api.txt`. The design and its reasons are in the host repo's

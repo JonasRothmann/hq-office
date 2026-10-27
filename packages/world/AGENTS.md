@@ -75,6 +75,23 @@ north-west tile after turning and `facing` is where its front points. Then:
 bun packages/world/tools/check.ts my.world.js && bun packages/world/tools/shot.ts my.world.js --advance 6000 --out my.jpg
 ```
 
+## Add a behaviour
+
+What moves lives in an ECS (`src/sim/`). Entities are ids; components are plain JSON; systems run in a fixed order.
+An act becomes a `queue` of steps, and each step kind is a component that one system runs and removes when done.
+
+- **A new act made of existing steps** (walk, turn, enter, wait, loop): plan it in `src/nav/act.js`, the way
+  `visit` is planned. Do not add a system.
+- **A new step kind in the engine**: add `src/sim/systems/<kind>.js`
+  (`export default { name, step: "<kind>", run(ecs, dt, { lot, nav, emit }) { ... } }`). In `run`, query
+  `ecs.query("<kind>", "body", "anim")`, return true while it is still moving, and `ecs.remove(id, "<kind>")` when
+  it is done. Add it to the end of `STEP_SYSTEMS` in `src/sim/systems/index.js`. `wait.js` is the smallest example.
+- **A behaviour that belongs to the host** (anything about its own domain): do not edit the package. Pass
+  `createWorld(canvas, world, { systems: [mySystem] })` and put your data in your own components
+  (`world.sim.ecs.add(id, "myThing", {...})`).
+- Test it headless: `createSim(lot, nav)` from `@hq/world/model`, then `sim.act(...)` and `sim.step(1 / 60)` in a loop
+  (see `test/sim.test.ts`). `sim.ecs.toJSON()` is the whole state.
+
 ## Add a pack
 
 A folder with `index.js` (`export default definePack({ id, objects: [...], palette: { "mypack/oak": "#..." } })`)
