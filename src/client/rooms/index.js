@@ -39,6 +39,7 @@ const part = (cls) => view.querySelector(`.${cls}`);
 const body = part("rbody"), thread = part("rthread");
 
 let openSlug = null; // the room in the reader
+const sending = new Set(); // rooms whose message is on its way
 let detail = null; // the open room, as /api/rooms/SLUG gave it
 let fetching = "";
 let stick = true; // the room opens at its newest message
@@ -226,7 +227,7 @@ function renderSend(r) {
 }
 function sendState() {
   const btn = part("rsend").querySelector("[data-room-send]");
-  if (btn && openSlug) btn.disabled = !draft(openSlug).text.trim() && !hasImages(key(openSlug));
+  if (btn && openSlug) btn.disabled = sending.has(openSlug) || (!draft(openSlug).text.trim() && !hasImages(key(openSlug)));
 }
 
 // ---- drawing the room ----
@@ -315,12 +316,14 @@ addEventListener("hashchange", route);
 
 // ---- sending ----
 
+// A message clears only its own room's box: the reader may show another room by the time the server answers.
 async function send(btn) {
   const slug = openSlug, d = draft(slug), k = key(slug);
   const text = withImages(k, d.text.trim());
-  if (!text) return;
+  if (!text || sending.has(slug)) return;
   const wait = notReady(k);
   if (wait) { toast(wait); return; }
+  sending.add(slug);
   btn.disabled = true;
   try {
     await post(`/api/rooms/${encodeURIComponent(slug)}/post`, { text, to: d.to, reply: d.reply });
@@ -328,11 +331,13 @@ async function send(btn) {
     d.text = "";
     d.reply = null;
     clearImages(k);
+    sending.delete(slug);
+    if (openSlug !== slug) return;
     const ta = part("rsend").querySelector("textarea");
     if (ta) ta.value = "";
     stick = true;
     renderSend(roomOf(slug));
-  } catch (err) { toast(err.message); btn.disabled = false; }
+  } catch (err) { sending.delete(slug); toast(err.message); sendState(); }
 }
 
 // ---- input ----

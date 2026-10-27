@@ -31,6 +31,7 @@ el.innerHTML = `<header class="rv-head"><div class="meta"></div><h3 class="rv-ti
   <footer class="rv-foot"><div class="rcomp"></div></footer>`;
 const part = (c) => el.querySelector(`.${c}`);
 let shownId = null, compFor = null;
+const sending = new Set(); // updates whose reply is on its way
 
 function render() {
   const u = updateOf(shownId);
@@ -57,24 +58,26 @@ function render() {
 }
 function sendState() {
   const b = part("rcomp").querySelector("[data-rsend]");
-  if (b) b.disabled = !(replies.get(shownId) || "").trim() && !hasImages(key(shownId));
+  if (b) b.disabled = sending.has(shownId) || (!(replies.get(shownId) || "").trim() && !hasImages(key(shownId)));
 }
 
+// A reply clears only its own box: the reader may show another update by the time the server answers.
 async function send(btn) {
   const u = updateOf(shownId), k = key(shownId);
   const text = withImages(k, (replies.get(shownId) || "").trim());
-  if (!u || !text) return;
+  if (!u || !text || sending.has(u.id)) return;
   const wait = notReady(k);
   if (wait) { toast(wait); return; }
+  sending.add(u.id);
   btn.disabled = true;
   try {
     await post("/api/notes", { text: `re: #u${u.id} ("${short(u.title || u.body, 50).replace(/"/g, "'")}") ${text}` });
     replies.delete(u.id);
     clearImages(k);
-    const ta = part("rcomp").querySelector("textarea");
-    if (ta) ta.value = "";
+    if (shownId === u.id) { const ta = part("rcomp").querySelector("textarea"); if (ta) ta.value = ""; }
     toast("SENT TO HQ.");
   } catch (err) { toast(err.message); }
+  sending.delete(u.id);
   sendState();
 }
 
