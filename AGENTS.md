@@ -43,7 +43,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 
 - Before starting, a lane names the files it will touch. Two lanes never touch the same file at the same time.
 - A lane owns its feature's folder: `src/client/<feature>/`, `src/server/<feature>.ts`, `src/server/routes/<feature>.ts`, `src/server/schema/<table>.sql`, `test/*/<feature>.test.ts`.
-- Shared files change only in a lane that says so up front, as a small change of its own merged before the work that needs it: `src/client/core/*` (contracts: state, net, bus, status, base styles, layout), `src/client/main.js`, `src/client/world/api.js`, `src/client/world/plan.js`, `src/client/world/look.js`, `public/index.html`'s import map, `src/server/main.ts`, `router.ts`, `page.ts`, `db.ts`, `config.ts`, `push.ts`, `state.ts`, `public/index.html`.
+- Shared files change only in a lane that says so up front, as a small change of its own merged before the work that needs it: `src/client/core/*` (contracts: state, net, bus, status, base styles, layout), `src/client/main.js`, `src/client/world/api.js`, `src/client/world/plan.js`, `src/client/world/look.js`, `src/server/main.ts`, `router.ts`, `page.ts`, `db.ts`, `config.ts`, `push.ts`, `state.ts`, `public/index.html`.
 - Hook in, do not reach in: listen on `core/bus.js` instead of adding a call to another area's render function; use `addStatePart` instead of editing `state()`; add a route file instead of editing another lane's.
 - Do not reformat, rename or reorder code in files you do not own.
 - A change to the office must keep `bun test --timeout 90000 test/client/world.test.ts` passing (needs Chrome; WebGL runs on SwiftShader).

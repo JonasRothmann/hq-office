@@ -218,6 +218,13 @@ export function mountWorld(canvas, opts = {}) {
       o.group.updateMatrixWorld(true);
       balls.set(lane, v.subagents ?? [], o.group.matrixWorld, BALL_CENTRE, now);
     }
+    // HQ's subagents hop round its desk in the suite (the suite's desk stands where an office's does)
+    const hv = vitals[hqName];
+    if (built.suite && hv) {
+      seen.add(hqName);
+      built.suite.group.updateMatrixWorld(true);
+      balls.set(hqName, hv.subagents ?? [], built.suite.group.matrixWorld, BALL_CENTRE, now);
+    }
     for (const lane of balls.desks.keys()) if (!seen.has(lane)) balls.drop(lane, now);
     dirty = true;
   }
