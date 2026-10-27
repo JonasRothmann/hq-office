@@ -4,13 +4,12 @@
 // changes only where the layout did, so world.apply(next) rebuilds only that.
 import { describe, expect, test } from "bun:test";
 import { fromJSON, validateWorld, formatProblems, buildLot, diffWorld, cutaway, lotPrims, lintCoplanar, describePairs, WALL_MODES, CLIPS } from "@hq/world/model";
-import starter from "@hq/world/packs/starter";
-import placeholder from "../../src/client/office/placeholder/index.js";
+import japandi from "../../src/client/office/japandi/index.js";
 import { officeDoc, deskId, chairId, workerId } from "../../src/client/office/plan.js";
 import { STATUS_ACTS } from "../../src/client/office/acts.js";
 import { FOOT } from "../../src/client/office/furnish.js";
 
-const PACKS = [starter, placeholder];
+const PACKS = [japandi];
 const STATUSES = ["moving", "needs_you", "blocked", "hq_turn", "waiting", "stale", "done", "parked", "gone"];
 type Lane = { name: string; parent?: string | null; status?: string };
 // A lane's status, fixed by its name, so a lane keeps its status while others come and go.

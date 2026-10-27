@@ -3,12 +3,13 @@
 // each lane gets a desk, a chair and a worker with stable ids, and an act for its status (acts.js). Called again with
 // the last result each time the lanes change, it keeps every place it can, so `world.apply(next)` has a small diff.
 import { plan as layoutOf, INDOOR } from "./layout.js";
-import { SEATS_AT, TEAM_ROOM, SUITE_AT, BREAK_AT, FOOT, frameSize, place, tileAt, sideOf } from "./furnish.js";
+import { SEATS_AT, TEAM_ROOM, SUITE_AT, BREAK_AT, FOOT, OVER, frameSize, place, tileAt, sideOf, hash } from "./furnish.js";
 import { actFor, rowOf } from "./acts.js";
 
-export const PACKS = ["starter", "placeholder"];
+export const PACKS = ["japandi"];
 const MARGIN = 2; // tiles of ground round the building
-const WALL = { finish: "starter/plaster", outside: "starter/siding" };
+const WALL = { finish: "japandi/plaster", outside: "japandi/cladding" };
+const FLOOR = { team: "japandi/oak", hq: "japandi/oak", corridor: "japandi/stone", break: "japandi/terrazzo" };
 const LOUNGE = new Set(["corridor", "break"]);
 
 export const deskId = (lane) => `desk:${lane}`;
@@ -27,7 +28,7 @@ export function officeDoc(lanes, prev = null, opts = {}) {
   const doc = {
     format: 1, id: "office", packs: PACKS,
     lot: { w: maxX - minX + 2 * MARGIN, d: maxZ - minZ + 2 * MARGIN },
-    floors: layout.rooms.filter((r) => INDOOR.has(r.kind)).map((r) => ({ rect: [r.x + o.x, r.z + o.z, r.w, r.d], finish: "starter/oak" })),
+    floors: layout.rooms.filter((r) => INDOOR.has(r.kind)).map((r) => ({ rect: [r.x + o.x, r.z + o.z, r.w, r.d], finish: FLOOR[r.kind] ?? "japandi/oak" })),
     walls: wallPaths(layout.walls, o),
     openings: [...doors(layout.walls, o), ...windows(layout, o)],
     rooms: labels(layout, o),
@@ -37,8 +38,8 @@ export function officeDoc(lanes, prev = null, opts = {}) {
   // workers: one per live desk, and HQ in its suite
   const workers = [];
   const seat = (room, lane, at, vacant) => {
-    doc.objects.push({ id: deskId(lane), ...place(room, { type: "starter/desk", at: at.desk, facing: at.deskFacing }, o) });
-    doc.objects.push({ id: chairId(lane), ...place(room, { type: "starter/chair", at: at.chair, facing: at.chairFacing }, o) });
+    doc.objects.push({ id: deskId(lane), ...place(room, { type: "japandi/desk", at: at.desk, facing: at.deskFacing }, o) });
+    doc.objects.push({ id: chairId(lane), ...place(room, { type: "japandi/chair", at: at.chair, facing: at.chairFacing }, o) });
     if (!vacant) workers.push({ lane, beside: tileAt(room, at.beside, o) });
   };
   const furnish = (room, list) => { for (const obj of list) doc.objects.push({ id: `${obj.id}:${room.id}`, ...place(room, obj, o) }); };
@@ -48,10 +49,10 @@ export function officeDoc(lanes, prev = null, opts = {}) {
   }
   for (const room of layout.teamRooms) {
     room.seats.forEach((s, i) => seat(room, s.lane, SEATS_AT[i], s.vacant));
-    furnish(room, TEAM_ROOM.objects);
+    furnish(room, TEAM_ROOM.objects(room));
   }
   const lounge = layout.rooms.find((r) => r.kind === "break") ?? layout.rooms.find((r) => r.id === "hall");
-  if (lounge.kind === "break") furnish(lounge, BREAK_AT.objects(frameSize(lounge)[0]));
+  if (lounge.kind === "break") furnish(lounge, BREAK_AT.objects(...frameSize(lounge)));
 
   const statusOf = (lane) => (lane === hq ? opts.hqStatus ?? status.get(hq) ?? "moving" : status.get(lane));
   const spot = spotsFor(workers.filter((w) => rowOf(statusOf(w.lane)).place === "break"), freeTiles(lounge, doc, layout, o));
@@ -86,9 +87,9 @@ function wallPaths(segments, o) {
   return paths;
 }
 
-// A door on every door segment: on the north side of the tile south of an "x" segment, the west side of the tile
+// A doorway with a noren on every door segment: on the north side of the tile south of an "x" segment, the west side of the tile
 // east of a "z" one.
-const doors = (segments, o) => segments.filter((w) => w.door).map((w) => ({ type: "starter/door", at: [w.x + o.x, w.z + o.z], side: w.dir === "x" ? "n" : "w" }));
+const doors = (segments, o) => segments.filter((w) => w.door).map((w) => ({ type: "japandi/noren", at: [w.x + o.x, w.z + o.z], side: w.dir === "x" ? "n" : "w" }));
 
 // Windows on a team room's back wall, where that wall faces the outdoors.
 function windows(layout, o) {
@@ -99,7 +100,7 @@ function windows(layout, o) {
       const [x, z] = tileAt(room, at, o), side = sideOf(room, "n");
       const px = x - o.x, pz = z - o.z;
       const seg = { n: `x:${px}:${pz}`, s: `x:${px}:${pz + 1}`, w: `z:${px}:${pz}`, e: `z:${px + 1}:${pz}` }[side];
-      if (outer.has(seg)) out.push({ type: "starter/window", at: [x, z], side });
+      if (outer.has(seg)) out.push({ type: "japandi/window", at: [x, z], side });
     }
   }
   return out;
@@ -123,20 +124,39 @@ function labels(layout, o) {
   return out;
 }
 
-// The tiles of the lounge where a worker can stand: not under an object and not in a doorway.
+// The tiles of the lounge where a worker can stand: not under an object that blocks, not in a doorway, and reachable
+// from a way into the room (furniture can close off a corner). In the layout's coordinates, then moved by o.
 function freeTiles(room, doc, layout, o) {
-  const used = new Set();
-  for (const obj of doc.objects) {
+  const blocked = new Set(), doorway = new Set();
+  for (const obj of doc.objects.filter((o) => !OVER.has(o.type))) {
     const [fx, fz] = FOOT[obj.type] ?? [1, 1];
     const [w, d] = obj.facing === "e" || obj.facing === "w" ? [fz, fx] : [fx, fz];
-    for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) used.add(`${obj.at[0] + x},${obj.at[1] + z}`);
+    for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) blocked.add(`${obj.at[0] + x - o.x},${obj.at[1] + z - o.z}`);
   }
   for (const w of layout.walls.filter((w) => w.door)) {
-    used.add(`${w.x + o.x},${w.z + o.z}`);
-    used.add(w.dir === "x" ? `${w.x + o.x},${w.z - 1 + o.z}` : `${w.x - 1 + o.x},${w.z + o.z}`);
+    doorway.add(`${w.x},${w.z}`);
+    doorway.add(w.dir === "x" ? `${w.x},${w.z - 1}` : `${w.x - 1},${w.z}`);
+  }
+  // the edge between a tile and its neighbour, as the layout keys its wall segments
+  const walls = new Map(layout.walls.map((w) => [`${w.dir}:${w.x}:${w.z}`, w]));
+  const edge = (x, z, dx, dz) => (dz ? `x:${x}:${z + Math.max(dz, 0)}` : `z:${x + Math.max(dx, 0)}:${z}`);
+  const inside = (x, z) => x >= room.x && x < room.x + room.w && z >= room.z && z < room.z + room.d;
+  const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const seen = new Set(), queue = [];
+  for (let z = room.z; z < room.z + room.d; z++) for (let x = room.x; x < room.x + room.w; x++) {
+    if (blocked.has(`${x},${z}`)) continue;
+    const entry = STEPS.some(([dx, dz]) => !inside(x + dx, z + dz) && (!walls.has(edge(x, z, dx, dz)) || walls.get(edge(x, z, dx, dz)).door));
+    if (entry) { seen.add(`${x},${z}`); queue.push([x, z]); }
+  }
+  while (queue.length) {
+    const [x, z] = queue.pop();
+    for (const [dx, dz] of STEPS) {
+      const k = `${x + dx},${z + dz}`;
+      if (inside(x + dx, z + dz) && !blocked.has(k) && !seen.has(k)) { seen.add(k); queue.push([x + dx, z + dz]); }
+    }
   }
   const out = [];
-  for (let z = room.z + o.z; z < room.z + room.d + o.z; z++) for (let x = room.x + o.x; x < room.x + room.w + o.x; x++) if (!used.has(`${x},${z}`)) out.push([x, z]);
+  for (let z = room.z; z < room.z + room.d; z++) for (let x = room.x; x < room.x + room.w; x++) if (seen.has(`${x},${z}`) && !doorway.has(`${x},${z}`)) out.push([x + o.x, z + o.z]);
   return out;
 }
 
@@ -154,12 +174,6 @@ function spotsFor(idle, tiles) {
     }
   }
   return out;
-}
-
-function hash(s) {
-  let h = 2166136261;
-  for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619);
-  return h >>> 0;
 }
 
 // A worker's look, picked by its lane's name from warm, muted colours (the office's own).
