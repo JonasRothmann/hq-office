@@ -37,3 +37,27 @@ export function exportNames(file: string, seen = new Set<string>()): Set<string>
   for (const m of code.matchAll(/^export\s+\*\s+from\s+["']([^"']+)["']/gm)) for (const n of exportNames(resolve(dirname(file), m[1]), seen)) if (n !== "default") names.add(n);
   return names;
 }
+
+// The code without comments (Bun's transpiler), so a word in a comment never counts; an HTML file's module scripts.
+const jsT = new Bun.Transpiler({ loader: "js" }), tsT = new Bun.Transpiler({ loader: "ts" });
+export function codeOf(file: string, text: string): string {
+  if (file.endsWith(".html")) return [...text.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => jsT.transformSync(m[1])).join("\n");
+  return (file.endsWith(".ts") ? tsT : jsT).transformSync(text);
+}
+
+// Every dynamic import(): its literal specifier, or null when the argument is not a plain string (a variable, a call,
+// a template with ${}).
+export function dynamicImports(code: string): (string | null)[] {
+  const out: (string | null)[] = [];
+  for (const m of code.matchAll(/\bimport\s*\(\s*/g)) {
+    const rest = code.slice(m.index! + m[0].length);
+    const lit = /^(["'`])([^"'`]*)\1\s*[,)]/.exec(rest);
+    out.push(lit && !(lit[1] === "`" && lit[2].includes("${")) ? lit[2] : null);
+  }
+  return out;
+}
+
+// The code with every string's contents blanked (quotes kept), so a word in a message never counts as code.
+export function withoutStrings(code: string): string {
+  return code.replace(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g, (_m, q: string, body: string) => q + " ".repeat(body.length) + q);
+}

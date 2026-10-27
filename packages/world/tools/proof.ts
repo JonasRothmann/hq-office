@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The engine's proof, measured in headless Chrome on a world (default: the tiny house):
+// The engine's proof, measured in headless Chrome on a world (default: the test house):
 //   1. a 90° turn: six frames, the camera's height and the focus's screen point per frame (must not move);
 //   2. panning: two consecutive frames compared after undoing the whole-pixel shift, for the engine and for the old
 //      defects switched back on (no pixel snap; three's screen-space shadow dither);
@@ -16,7 +16,7 @@ const args = process.argv.slice(2);
 const arg = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 const root = resolve(arg("root") ?? PKG);
 const out = resolve(arg("out") ?? "shots");
-const worldUrl = "/" + relative(root, resolve(arg("world") ?? join(PKG, "examples/tiny-house.world.js")));
+const worldUrl = "/" + relative(root, resolve(arg("world") ?? join(PKG, "test/fixtures/house.world.js")));
 mkdirSync(out, { recursive: true });
 const save = (name: string, dataUrl: string) => { writeFileSync(join(out, name), Buffer.from(dataUrl.split(",")[1], "base64")); return name; };
 
