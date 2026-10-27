@@ -15,7 +15,7 @@ import { createNav } from "../nav/nav.js";
 import { createSim } from "../sim/index.js";
 import { FADE } from "../sim/motion.js";
 import { cutaway, WALL_MODES } from "../arch/cutaway.js";
-import { createCamera, stepCamera, rotateCamera, zoomCamera, panCamera, fitCamera, focusCamera, ZOOMS } from "../camera/rig.js";
+import { createCamera, stepCamera, rotateCamera, zoomCamera, panCamera, fitCamera, focusCamera, insetCamera, ZOOMS } from "../camera/rig.js";
 
 /**
  * @typedef {object} DriverOptions
@@ -25,6 +25,7 @@ import { createCamera, stepCamera, rotateCamera, zoomCamera, panCamera, fitCamer
  * @property {"up"|"cutaway"|"down"} [walls]
  * @property {string|null} [focusRoom]
  * @property {{ x: number, y: number }} [offset]
+ * @property {{ left: number, top: number, right: number, bottom: number }} [insets]   CSS px a host's panels cover
  * @property {boolean} [snap]           snap to device pixels at rest (default true)
  * @property {number} [idleFps]         how often a clip looping in place is drawn when nothing else moves (default 0)
  * @property {import("../sim/ecs.js").System[]} [systems]
@@ -41,13 +42,14 @@ export function createDriver(world, opts = {}) {
   let lot = first.lot, catalog = first.catalog, nav = createNav(lot);
   const sim = createSim(lot, nav, { systems: opts.systems, emit: opts.emit });
   const size = opts.size ?? { w: 800, h: 600, dpr: 1 };
-  const cam = createCamera({ w: size.w, h: size.h, dpr: size.dpr ?? 1, rot: opts.rot ?? 0, snap: opts.snap !== false, offset: opts.offset ?? { x: 0, y: 0 }, bounds: lotBounds(lot) });
+  const cam = createCamera({ w: size.w, h: size.h, dpr: size.dpr ?? 1, rot: opts.rot ?? 0, snap: opts.snap !== false, offset: opts.offset ?? { x: 0, y: 0 }, insets: opts.insets ?? null, bounds: lotBounds(lot) });
   let box = indoorBox(lot);
   fitCamera(cam, box);
   if (opts.zoom !== undefined && ZOOMS[opts.zoom]) { cam.zoom = opts.zoom; cam.ppm = ZOOMS[opts.zoom]; }
   let wallMode = WALL_MODES.includes(opts.walls) ? opts.walls : "cutaway";
   let focusRoom = opts.focusRoom ?? null;
   const idleFps = opts.idleFps ?? 0;
+  let paused = false;
 
   const pending = { render: true, shadows: true };
   const stats = { frames: 0, renders: 0, shadows: 0 };
@@ -101,6 +103,7 @@ export function createDriver(world, opts = {}) {
     get cutText() { return cutText; },
     get walls() { return wallMode; },
     get focusRoom() { return focusRoom; },
+    get paused() { return paused; },
     sim, cam, stats,
 
     /** Run the world's own acts (createWorld does, unless startActs is false). */
@@ -111,6 +114,7 @@ export function createDriver(world, opts = {}) {
      * @returns {{ render: boolean, shadows: boolean, cut: Set<string>|null }}   cut: the new cut set, when it changed
      */
     tick(now, dtMs) {
+      if (paused) return NONE;
       stats.frames++;
       // a camera that was moving at the start of this step changed the pose, even on the step that brings it to rest
       const moving = !!(cam.turn || cam.zooming || cam.moving);
@@ -173,6 +177,10 @@ export function createDriver(world, opts = {}) {
     fit({ ease = false } = {}) { fitCamera(cam, box, { ease }); invalidate(); },
     /** The view's size: CSS px the camera draws and device px per CSS px (see view/size.js). Never refits. */
     resize({ w, h, dpr = cam.dpr }) { if (w === cam.w && h === cam.h && dpr === cam.dpr) return; cam.w = w; cam.h = h; cam.dpr = dpr; invalidate(); },
+    /** The edges a host's panels cover (CSS px): the view centres in the rest and fit() fits into it. Never refits. */
+    setInsets(insets) { insetCamera(cam, insets); invalidate(); },
+    /** Paused, nothing steps (camera, characters, host systems) and nothing draws; resuming draws once. */
+    pause(on) { paused = !!on; if (!paused) invalidate(); },
     setWalls(mode, room = null) { if (WALL_MODES.includes(mode)) wallMode = mode; focusRoom = room; invalidate(); },
     invalidate,
     /** A room's tiles as a box, for fitBox; null for an unknown room. */

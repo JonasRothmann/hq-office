@@ -36,6 +36,12 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   each equal to `lintCoplanar(lotPrims(lot, catalog, cut))`. It lints every distinct primitive of all the views
   once and lints a view again on its own only when it holds both parts of a clash. `check.ts` uses it: the 24
   views of a 24-lane office take under 1 s instead of about 6 s (measured on a loaded machine).
+- Insets for a host whose panels cover part of the canvas: `createWorld(..., { insets: { left, top, right, bottom } })`
+  and `view.camera.setInsets(insets)`, in CSS px. The view centres in the free part and `fit()` picks the zoom that
+  fits there. `setInsets` never refits on its own. `createCamera` takes `insets` too, and the camera state carries
+  them. The names in `api.txt` did not change.
+- `view.pause(on)`: while paused nothing steps (camera, characters, host systems) and nothing draws; resuming draws
+  once. `inspect().paused` says which. For a view the host has covered, such as a sheet over it on a phone.
 
 ### Changed
 

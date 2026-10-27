@@ -33,6 +33,8 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  *                                           else moves; default 0: a still view draws nothing
  * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's own box, in device pixels
  * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
+ * @property {{ left: number, top: number, right: number, bottom: number }} [insets]   CSS px of the canvas that the
+ *                                           host's panels cover: the view centres in the rest, and fits into it
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
  * @property {{ screenNoise?: boolean, noSnap?: boolean, shadowRadius?: number, oldSizing?: boolean }} [debug]
@@ -66,7 +68,7 @@ export function createWorld(canvas, world, opts = {}) {
   }
   const s0 = measure(null);
 
-  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
+  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, insets: opts.insets, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
   const { sim, cam } = driver;
   let theme = opts.theme === "dark" ? "dark" : "light";
   let time = opts.time ?? (theme === "dark" ? "21:00" : "14:00");
@@ -366,6 +368,8 @@ export function createWorld(canvas, world, opts = {}) {
       /** Centre on a box ({ minX, minZ, maxX, maxZ }, a room's for example) at the nearest zoom that fits it, eased. */
       fitBox(box, o) { driver.fitBox(box, o); },
       fit(o) { driver.fit(o); },
+      /** The edges of the canvas a host's panels cover, CSS px ({ left, top, right, bottom }). Never refits. */
+      setInsets(insets) { driver.setInsets(insets); },
       pose: () => cameraPose(cam),
       get state() { return { rot: cam.rot, az: cam.az, zoom: cam.zoom, ppm: cam.ppm, focus: [...cam.focus], turning: !!cam.turn, moving: !!cam.moving }; },
     },
@@ -436,11 +440,13 @@ export function createWorld(canvas, world, opts = {}) {
       return view.inspect();
     },
     render() { syncArch(); render(); },
+    /** Pause (true) or resume: while paused nothing steps or draws, for a view the host has covered. */
+    pause(on) { driver.pause(on); },
     /** Request a frame (the host changed something the engine cannot see, such as an attached object). */
     invalidate(o) { driver.invalidate(o); },
     bindInput(el = canvas) { return bindInput(view, el, emit); },
     inspect() {
-      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
+      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, paused: driver.paused, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
         camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
         size: { w: cam.w, h: cam.h, dpr: cam.dpr, buffer: [canvas.width, canvas.height] },
         stats: { ...stats, frames: driver.stats.frames },

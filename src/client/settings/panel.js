@@ -1,25 +1,29 @@
 // The SETTINGS panel.
 import { $ } from "../core/dom.js";
 import { esc } from "../core/format.js";
-import { DEFAULTS, PERFORMANCE_CHOICES, OUTSIDE_CHOICES, changeSettings, resetSettings, settings } from "./prefs.js";
+import { DEFAULTS, PERFORMANCE_CHOICES, OUTSIDE_CHOICES, OFFICE_CHOICES, changeSettings, resetSettings, settings } from "./prefs.js";
 import { on } from "../core/bus.js";
 
 // SETTINGS opens a panel of choices. Each choice has a default, and RESET puts them all back.
-const SETTING_OPTIONS = { performance: PERFORMANCE_CHOICES, outside: OUTSIDE_CHOICES };
-const SETTING_TITLES = { performance: "PERFORMANCE", outside: "OUTSIDE" };
+const SETTING_OPTIONS = { performance: PERFORMANCE_CHOICES, outside: OUTSIDE_CHOICES, office: OFFICE_CHOICES };
+const SETTING_TITLES = { performance: "PERFORMANCE", outside: "OUTSIDE", office: "OFFICE" };
 // SMOOTH: the office moves at 30 frames a second. BALANCED: at 15. POWER SAVER: it draws only when something
 // changes (a lane, the camera, the theme); an idle office shows no new frames.
 const PERFORMANCE_LABELS = { smooth: "SMOOTH", balanced: "BALANCED", saver: "POWER SAVER" };
 // OUTSIDE: what surrounds the office: a valley with a river (NATURE), a town with streets and cars (CITY), or the
 // garden alone (OFF). REROLL grows a different one.
 const OUTSIDE_LABELS = { nature: "NATURE", city: "CITY", off: "OFF" };
-const label = (key, v) => (key === "performance" ? PERFORMANCE_LABELS[v] : key === "outside" ? OUTSIDE_LABELS[v] : v).toUpperCase();
+// OFFICE: CLASSIC draws the office as it always has; NEW draws it on the new engine.
+const OFFICE_LABELS = { classic: "CLASSIC", new: "NEW" };
+const label = (key, v) => (key === "performance" ? PERFORMANCE_LABELS[v] : key === "outside" ? OUTSIDE_LABELS[v] : key === "office" ? OFFICE_LABELS[v] : v).toUpperCase();
 function renderSettings() {
-  const row = (key, extra = "") => `<div class="srow"><span class="k">${SETTING_TITLES[key]}</span><div class="opts2">${SETTING_OPTIONS[key].map((v) =>
-    `<button class="btn-s ${settings[key] === v ? "on" : ""}" type="button" data-set="${key}" data-val="${esc(v)}">${esc(label(key, v))}</button>`).join("")}${extra}</div></div>`;
+  const row = (key, extra = "", hint = "") => `<div class="srow"><span class="k">${SETTING_TITLES[key]}</span><div class="opts2">${SETTING_OPTIONS[key].map((v) =>
+    `<button class="btn-s ${settings[key] === v ? "on" : ""}" type="button" data-set="${key}" data-val="${esc(v)}">${esc(label(key, v))}</button>`).join("")}${extra}</div>${hint ? `<span class="hint">${hint}</span>` : ""}</div>`;
   $("settings").innerHTML = `<div class="shead"><b class="k">SETTINGS</b><span class="spacer"></span><button class="btn-s" type="button" data-close>CLOSE</button></div>`
     + row("performance")
-    + row("outside", `<button class="btn-s" type="button" data-reroll ${settings.outside === "off" ? "disabled" : ""}>REROLL</button>`)
+    + row("office", "", "NEW draws the office on the new engine. The page reloads to switch.")
+    + row("outside", `<button class="btn-s" type="button" data-reroll ${settings.outside === "off" ? "disabled" : ""}>REROLL</button>`,
+      settings.office === "new" ? "The new office shows its plain lot for now. NATURE and CITY come to it later." : "")
     // The lane tree: what each level is called (from the top: lanes under HQ first; deeper lanes take the last
     // name), shown on the worker card.
     + `<form class="srow" data-levels><span class="k">LEVEL NAMES</span><div class="opts2"><input class="levels" name="levels" maxlength="200" spellcheck="false" autocomplete="off" value="${esc(settings.levels)}" aria-label="Level names, comma-separated"><button class="btn-s" type="submit">SAVE</button></div><span class="hint">From the top, comma-separated. Deeper lanes use the last name.</span></form>`

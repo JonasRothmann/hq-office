@@ -1,7 +1,7 @@
 // The page, with no build step: the shell (public/index.html) and the client files under src/client, served as
 // they are. The shell links every stylesheet it finds (core/ first, then by path) and loads every feature folder
 // (src/client/<name>/index.js) after main.js, so adding either is adding a file. When any page file changes, the
-// stamp changes, it rides on the next state, and every open page reloads itself.
+// stamp changes (a file under packages/ counts too), it rides on the next state, and every open page reloads itself.
 import { readdirSync, statSync, watch } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 import { DIR } from "./config.ts";
@@ -9,6 +9,8 @@ import { bump } from "./push.ts";
 
 const SHELL = join(DIR, "public", "index.html");
 const CLIENT = join(DIR, "src", "client");
+// The packages' browser modules (served by routes/packages.ts): an edit there reloads open pages too.
+const PACKAGES = join(DIR, "packages");
 const TYPES: Record<string, string> = { ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
 
 function clientFiles(dir = CLIENT): string[] {
@@ -48,7 +50,7 @@ let stamp = 0;
 function restamp() {
   try {
     let h = 2166136261;
-    for (const f of [SHELL, ...clientFiles()].sort()) for (const c of `${f}:${statSync(f).mtimeMs};`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    for (const f of [SHELL, ...clientFiles(), ...clientFiles(PACKAGES)].sort()) for (const c of `${f}:${statSync(f).mtimeMs};`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     stamp = h >>> 0;
   } catch {
     stamp = 0;
@@ -58,7 +60,7 @@ export function pageStamp() {
   return stamp;
 }
 restamp();
-for (const dir of [join(DIR, "public"), CLIENT]) {
+for (const dir of [join(DIR, "public"), CLIENT, PACKAGES]) {
   watch(dir, { recursive: true }, () => {
     restamp();
     bump();

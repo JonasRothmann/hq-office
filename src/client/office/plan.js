@@ -18,7 +18,7 @@ export const workerId = (lane) => `lane:${lane}`;
 
 // lanes: [{ name, parent, status }] in the order they appeared (HQ's own lane may be among them). prev: the last
 // result, so desks keep their places. opts.hq: HQ's lane name; opts.hqStatus: its status when it is not a lane here.
-// Returns { doc, layout }.
+// Returns { doc, layout, origin }: origin is where the layout's (0, 0) lies on the lot.
 export function officeDoc(lanes, prev = null, opts = {}) {
   const hq = opts.hq ?? "hq";
   const layout = layoutOf(lanes, prev?.layout ?? null, { hq });
@@ -62,7 +62,7 @@ export function officeDoc(lanes, prev = null, opts = {}) {
     doc.characters.push({ id, at: w.beside, facing: "s", look: lookOf(w.lane) });
     doc.acts.push(actFor(id, statusOf(w.lane), { chair: chairId(w.lane), beside: w.beside, spot: spot.get(w.lane) ?? w.beside }));
   }
-  return { doc, layout };
+  return { doc, layout, origin: o };
 }
 
 // A paper pendant every four tiles down the middle of a hall (two tiles wide), so a hall is not dark at night. Each
