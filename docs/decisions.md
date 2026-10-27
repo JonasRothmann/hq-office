@@ -104,3 +104,22 @@ facing pairs), one team per room, a second room for a team past four, and lanes 
 What a lane owns is now its desk: `deskAnchor(lane)`, `addToWorld(obj, lane)`, the subagent balls and picking all
 key on the desk, not the room. `window.__world` lists `rooms` (`{ id, team, lanes }`) and `desks` instead of
 `offices`.
+
+## D13. The interior: Nordic studio as the base, with Tokyo's best pieces grafted in
+
+Two designers dressed the same showroom (`docs/design/nordic/`, `docs/design/tokyo/`) after the owner said the
+office must first look like a proper, cool office. Nordic is the base: its people read as people (faces, hair,
+varied clothes, clear poses), and its rooms feel lived in (bike, dog bed, enamel pendants, pinboard, books, plants
+at three heights). Grafted from Tokyo: the wall band (skirting, timber battens, rail) that gives even the cut-down
+walls detail, noren in doorways, the raised tatami lounge and tea corner in the break area, the pegboard workbench
+with a 3D printer, the lit sign, and the stone lantern and maple in the garden. Together they make the Scandinavian
+and Japanese mix the brief asks for.
+
+## D14. Procedural surroundings: nature or city, seeded per installation
+
+The owner asked for generated surroundings. A pure, seeded generator (`src/client/world/outside/gen.js`) makes a
+river valley (hills, forest, a river with a bridge) or a neighbourhood (streets, crossings, other buildings, cars and
+people walking), and `build.js` draws it with instancing (12 to 24 draw calls). The seed defaults to the owner's
+name, so a page always shows the same place; a setting picks nature, city or off. The office's own lot and garden
+stay with the interior; the generator never places anything on it, and it grows the land only when the office
+outgrows it.
