@@ -180,6 +180,7 @@
 import { mountWorld } from "/src/client/world/world.js";
 import { deskAnchor, project, onFrame } from "/src/client/world/api.js";
 import { STATUS, MODEL, modelFamily } from "/src/client/world/look.js";
+import { place } from "/src/client/desk-hud/layout.js";
 
 const q = new URLSearchParams(location.search);
 const theme = q.get("theme") === "dark" ? "dark" : "light";
@@ -266,15 +267,33 @@ for (const l of lanes) {
   huds.appendChild(el);
   chips.set(l.name, el);
 }
+// Desks in a team room stand close, so the chips are laid out as the page's desk HUD does (desk-hud/layout.js):
+// waiting lanes first, then the desk nearest the camera; a chip whose spot is taken moves to the nearest free one.
+const status = new Map(lanes.map((l) => [l.name, l.status]));
+// crowdedAt: the zoom at which full chips had to move more than 40 px; they stay small until the zoom changes
+let crowdedAt = 0;
 onFrame(() => {
-  const small = world.view.ppm < 30;
+  const ppm = world.view.ppm;
+  if (crowdedAt && Math.abs(ppm - crowdedAt) > crowdedAt * 0.15) crowdedAt = 0;
+  const small = ppm < 30 || crowdedAt > 0;
+  const column = document.getElementById("column");
+  const obstacles = ui && column ? [column.getBoundingClientRect()].map((r) => ({ x: r.left, y: r.top, w: r.width, h: r.height })) : [];
+  const items = [];
   for (const [name, el] of chips) {
     const a = deskAnchor(name);
     const p = a && project(a);
     if (!p || !p.visible) { el.style.display = "none"; continue; }
     el.style.display = "";
     el.classList.toggle("small", small);
-    el.style.transform = `translate(${Math.round(p.x - el.offsetWidth / 2)}px, ${Math.round(p.y - el.offsetHeight)}px)`;
+    items.push({ key: name, x: p.x - el.offsetWidth / 2, y: p.y - el.offsetHeight, w: el.offsetWidth, h: el.offsetHeight, wait: status.get(name) === "needs_you" });
+  }
+  items.sort((a, b) => Number(b.wait) - Number(a.wait) || b.y - a.y);
+  const spots = place(items, { obstacles, bounds: { x: 0, y: 0, w: innerWidth, h: innerHeight }, reach: 160 });
+  if (!small && [...spots.values()].some((s) => !s || s.moved > 40)) crowdedAt = ppm;
+  for (const it of items) {
+    const el = chips.get(it.key), s = spots.get(it.key);
+    if (!s) { el.style.display = "none"; continue; }
+    el.style.transform = `translate(${Math.round(s.x)}px, ${Math.round(s.y)}px)`;
   }
 });
 
