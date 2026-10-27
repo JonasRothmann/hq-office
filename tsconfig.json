@@ -1,0 +1,11 @@
+{
+  // Bun's half of the page's import map: app files that Bun runs (tests, tools) import @hq/world by its public
+  // entries, as the browser does. Exactly the package's exports; test/client/world-package.test.ts holds them equal.
+  "compilerOptions": {
+    "paths": {
+      "@hq/world": ["./packages/world/src/index.js"],
+      "@hq/world/model": ["./packages/world/src/model/index.js"],
+      "@hq/world/packs/starter": ["./packages/world/packs/starter/index.js"]
+    }
+  }
+}

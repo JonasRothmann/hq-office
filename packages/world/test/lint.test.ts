@@ -42,6 +42,15 @@ describe("coplanar lint", () => {
     expect(lintCoplanar(k.prims)).toEqual([]);
   });
 
+  test("among many faces in one plane, only the two that overlap are a pair; edge to edge and corner to corner are not", () => {
+    const k = new Kit();
+    for (let x = 0; x < 20; x++) for (let z = 0; z < 20; z++) k.box(`top-${x}-${z}`, [0.5, 0.04, 0.5], [x, 0.7, z], "oak");
+    k.box("edge", [0.5, 0.04, 0.5], [0.5, 0.7, 0], "oak");     // meets top-0-0 along an edge
+    k.box("corner", [0.5, 0.04, 0.5], [1.5, 0.7, 0.5], "oak"); // meets top-1-0 and top-2-1 at corners
+    k.box("over", [0.5, 0.04, 0.5], [7.2, 0.7, 7.2], "oak");   // lies over a corner of top-7-7
+    expect(lintCoplanar(k.prims).map((p) => [p.a.part, p.b.part].sort().join("+"))).toEqual(["over+top-7-7", "over+top-7-7"]);
+  });
+
   test("the tiny house has no coplanar pairs in any rotation, wall mode or turn", () => {
     const { lot, catalog } = buildLot(tiny);
     for (const mode of WALL_MODES) for (let rot = 0; rot < 4; rot++) {
