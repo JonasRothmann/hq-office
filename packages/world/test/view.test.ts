@@ -2,7 +2,7 @@
 // shadows; a walk draws every frame; a turn never refits; edits at run time keep the sim going, rebuild only what
 // changed, and the same doc twice is a no-op; the backing store matches device pixels, so a pan moves whole pixels.
 import { describe, expect, test } from "bun:test";
-import { fromJSON, cameraPose, project, panCamera } from "@hq/world/model";
+import { fromJSON, cameraPose, project, panCamera, ZOOM_STOPS } from "@hq/world/model";
 import { createDriver } from "../src/view/driver.js";
 import { canvasSize } from "../src/view/size.js";
 import house from "./fixtures/house.world.js";
@@ -225,7 +225,7 @@ describe("canvas sizing", () => {
       const s = canvasSize({ css, dpr });
       expect(Number.isInteger(s.bw) && Number.isInteger(s.bh)).toBe(true);
       expect(s.w * s.dpr).toBeCloseTo(s.bw, 9); // the camera draws exactly the backing store
-      const d = driver(quiet, { size: { w: s.w, h: s.h, dpr: s.dpr }, zoom: 2 });
+      const d = driver(quiet, { size: { w: s.w, h: s.h, dpr: s.dpr }, zoom: ZOOM_STOPS.near });
       const pts = [[5, 0, 5], [3.3, 1.2, 7.9], [11.7, 2.9, 2.2]];
       const dev = () => { const pose = cameraPose(d.cam); return pts.map((p) => { const q = project(pose, p); return [q.x * s.dpr, q.y * s.dpr]; }); };
       const a = dev();

@@ -21,7 +21,7 @@
 <canvas id="c"></canvas>
 <div class="bar">
   <button data-rot="-1" title="Q">⟲</button><button data-rot="1" title="E">⟳</button>
-  <button data-zoom="0">far</button><button data-zoom="1">mid</button><button data-zoom="2">near</button>
+  <button data-zoom="far" title="-">far</button><button data-zoom="mid">mid</button><button data-zoom="near" title="+">near</button>
   <button data-walls="up">walls up</button><button data-walls="cutaway">cutaway</button><button data-walls="down">walls down</button>
   <button data-theme="light">day</button><button data-theme="dark">night</button>
 </div>
@@ -30,9 +30,11 @@
   const q = new URLSearchParams(location.search);
   const lab = (window.__lab = { ready: false, error: null });
   try {
-    const { createWorld } = await import("@hq/world");
+    const { createWorld, ZOOM_STOPS } = await import("@hq/world");
     const mod = await import(q.get("world") ?? "/@hq/world/examples/tiny-house.world.js");
     const num = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
+    // ?zoom= a stop's name (far, mid, near) or its index into ZOOMS
+    const zoom = q.has("zoom") ? (ZOOM_STOPS[q.get("zoom")] ?? num("zoom")) : undefined;
     if (q.has("clean")) document.body.classList.add("clean");
     const canvas = document.getElementById("c");
     // ?box=WxH&at=X,Y: a canvas of that CSS size and place (fractions allowed), to prove the sizing
@@ -42,7 +44,7 @@
     }
     const world = createWorld(canvas, mod.default, {
       theme: q.get("theme") ?? "light", time: q.get("time") ?? undefined, walls: q.get("walls") ?? "cutaway", focusRoom: q.get("focus"),
-      rot: num("rot") ?? 0, zoom: num("zoom"), clock: q.has("manual") ? "manual" : "raf",
+      rot: num("rot") ?? 0, zoom, clock: q.has("manual") ? "manual" : "raf",
       idleFps: num("idleFps"),
       debug: { screenNoise: q.has("screenNoise"), noSnap: q.has("noSnap"), shadowRadius: num("shadowRadius"), oldSizing: q.has("oldSizing") },
     });
@@ -57,11 +59,17 @@
     document.querySelector(".bar").addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b) return;
       if (b.dataset.rot) world.camera.rotate(Number(b.dataset.rot));
-      if (b.dataset.zoom) world.camera.zoom(Number(b.dataset.zoom));
+      if (b.dataset.zoom) world.camera.zoom(ZOOM_STOPS[b.dataset.zoom]);
       if (b.dataset.walls) world.setWalls(b.dataset.walls);
       if (b.dataset.theme) world.setTheme(b.dataset.theme);
     });
-    addEventListener("keydown", (e) => { if (e.key === "q") world.camera.rotate(-1); if (e.key === "e") world.camera.rotate(1); });
+    addEventListener("keydown", (e) => {
+      if (e.key === "q") world.camera.rotate(-1);
+      if (e.key === "e") world.camera.rotate(1);
+      // + and = a stop closer, - a stop further, about the focus
+      if (e.key === "+" || e.key === "=") world.camera.zoom(world.camera.state.zoom + 1);
+      if (e.key === "-") world.camera.zoom(world.camera.state.zoom - 1);
+    });
 
     // For the proof: the drawing buffer's pixels right after a render (RGBA, rows bottom-up).
     const gl = world.three.renderer.getContext();
