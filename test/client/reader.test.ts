@@ -87,7 +87,9 @@ test.skipIf(!chromeFound)("a message to a room clears only its own box, though t
   await page.evaluate(`location.hash = "#room/r-two"`);
   await until(`!!document.querySelector("#roomView .rhead, #roomView")?.textContent.includes("Room two") && !!document.querySelector("#roomView .rsend textarea")`);
   await type("#roomView .rsend textarea", "for room two");
-  await page.evaluate(`window.__go()`);
+  // Read the box the moment the send has finished (its toast), before the next state can redraw the room.
+  const box = await page.evaluate(`new Promise((ok) => { const mo = new MutationObserver(() => { if (/(SENT TO|KEPT FOR) ALPHA/.test(document.body.textContent)) { mo.disconnect(); ok(document.querySelector("#roomView .rsend textarea").value); } }); mo.observe(document.body, { subtree: true, childList: true, characterData: true }); window.__go(); })`);
+  expect(box).toBe("for room two");
   await until(`(async () => (await (await fetch("/api/rooms/r-one")).json()).messages.some((m) => m.text === "for room one"))()`);
   await Bun.sleep(300);
   expect(await page.evaluate(`document.querySelector("#roomView .rsend textarea").value`)).toBe("for room two");
