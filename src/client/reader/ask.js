@@ -1,6 +1,8 @@
 // A question in the reader: who asks and how it waits (the tier and priority menu in the head), the whole body as
 // markdown with folding sections, its links as cards, HQ's checklist and comments, then the options (1 to 9), the
-// secrets it asks for and the answer box at the foot. Answering, here or from the stack, goes through sendAnswer.
+// secrets it asks for and the answer box at the foot. Answering, here or from the stack, goes through sendAnswer. The
+// thread with the lane sits under the body: REPLY sends the box to the lane (or HQ) and keeps the question open. An
+// answered question shows its answer and its thread, with REOPEN.
 import { emit, on } from "../core/bus.js";
 import { toast } from "../core/dom.js";
 import { S } from "../core/state.js";
@@ -14,10 +16,13 @@ import { clearImages, composer, hasImages, imageKeys, notReady, withImages } fro
 import { editedTag, ledgerHtml, toggleOlder } from "../ledger/ledger.js";
 import { linkCards } from "./links.js";
 import { current, defineView, hide, show } from "./shell.js";
+import { sendReply, threadHtml, toHtml, toOf } from "./thread.js";
 
 export const PRIORITIES = ["urgent", "high", "normal", "low"];
 const PRIO_NAME = ["Urgent", "High", "Normal", "Low"];
 export const askOf = (id) => S?.open.find((a) => a.id === id) ?? null;
+// An answered (or withdrawn) question, while the state lists it (today's, the last 40).
+const closedOf = (id) => S?.answered?.find((a) => a.id === id) ?? null;
 export const itemOf = (key) => S?.inbox?.find((i) => i.key === key) ?? null;
 export const sendLabel = (a) => (a.kind === "action" ? "DONE" : a.kind === "info" ? "OK" : "SEND");
 export const laneColor = (name) => { const l = S?.lanes.find((x) => x.name === name); return (STATUS_TEXT[l?.status] ?? [null, "#8b8d98"])[1]; };
@@ -98,10 +103,12 @@ el.className = "rview askview";
 el.dataset.view = "question";
 el.setAttribute("aria-label", "Question");
 el.innerHTML = `<header class="rv-head"><div class="meta"></div><h3 class="rv-title"></h3></header>
-  <div class="rv-body"><div class="doc md"></div><div class="lcards"></div><div class="ledger"></div></div>
-  <footer class="rv-foot"><div class="opts"></div><div class="asksec"></div><div class="rcomp"></div></footer>`;
+  <div class="rv-body"><div class="doc md"></div><div class="lcards"></div><div class="ledger"></div><section class="rthread ithread" aria-label="Thread"></section></div>
+  <footer class="rv-foot"><div class="opts"></div><div class="asksec"></div><div class="tobar"></div><div class="rcomp"></div></footer>`;
 const part = (c) => el.querySelector(`.${c}`);
 let shownId = null, compFor = null, secFor = "", menuOpen = false, gone = false;
+const replying = new Set(); // questions whose reply is on its way
+const reopening = new Set();
 
 const LOCK = `<svg class="lock" viewBox="0 0 10 12" width="10" height="12" aria-hidden="true"><path d="M2.5 5V3.5a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="1" y="5" width="8" height="6.5" rx="1" fill="currentColor"/></svg>`;
 
@@ -134,11 +141,47 @@ function secretsHtml(a) {
     + `<label><span class="sk">READABLE FOR</span><input class="sin min" type="number" min="1" max="10080" step="1" autocomplete="off" data-secret-min value="${esc(d.minutes ?? 60)}"><span class="sk">MIN</span></label>`;
 }
 
+// The box's buttons: REPLY (to the thread, the question stays open), then the answer's own send.
+const replyBtn = `<button class="send reply-only" type="button" data-reply-only title="Send to the thread; the question stays open">REPLY</button>`;
+function replyState(id) {
+  const b = part("rcomp").querySelector("[data-reply-only]");
+  if (b) b.disabled = replying.has(id) || (!(drafts.get(id)?.text || "").trim() && !hasImages(id));
+}
+
+// Answered or withdrawn: what was answered, the thread, and a box for replies; an answered one can be reopened.
+function renderClosed(a) {
+  el.dataset.ask = a.id;
+  el.dataset.lane = a.lane || "";
+  el.classList.remove("blocking");
+  const answered = a.status === "answered";
+  setHTML(part("meta"), `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${esc(a.lane)}">${esc(a.lane)}</button>` : `<b class="lname">HQ</b>`}${kindTag(a)}<span class="tag ${answered ? "done" : "muted"}">${answered ? "ANSWERED" : "WITHDRAWN"}</span><span class="spacer"></span><span class="idt">#${a.id} · ${answered ? "answered" : "withdrawn"} ${clock(a.answered_at)}</span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`);
+  setHTML(part("rv-title"), linkify(a.title));
+  part("doc").hidden = !a.body;
+  setHTML(part("doc"), a.body ? doc(a.body) : "");
+  setHTML(part("lcards"), "");
+  setHTML(part("ledger"), "");
+  setHTML(part("ithread"), threadHtml("question", a.id));
+  setHTML(part("opts"), `<div class="answered"><span class="k">${answered ? "YOUR ANSWER" : "WITHDRAWN BY HQ"}</span><div class="md">${esc(a.answer || "")}</div></div>`);
+  part("asksec").innerHTML = "";
+  secFor = "";
+  setHTML(part("tobar"), toHtml("question", a.id, a.lane));
+  if (compFor !== `${a.id}:closed`) {
+    compFor = `${a.id}:closed`;
+    const d = drafts.get(a.id) || {};
+    part("rcomp").innerHTML = composer(a.id, `<textarea rows="1" placeholder="Reply in the thread. ⌘↩ sends.">${esc(d.text || "")}</textarea>`, `${answered ? `<button class="btn-s reopen" type="button" data-reopen title="Open it again: the answer no longer stands">REOPEN</button>` : ""}${replyBtn}`);
+  }
+  const ro = part("rcomp").querySelector("[data-reopen]");
+  if (ro) ro.disabled = reopening.has(a.id);
+  replyState(a.id);
+}
+
 function render() {
   const a = askOf(shownId);
   if (!a) {
-    // Answered somewhere else, or withdrawn: said once, and the box stays shut.
-    if (!gone) { gone = true; setHTML(part("rcomp"), `<div class="gone">This question is no longer open.</div>`); part("opts").innerHTML = ""; part("asksec").innerHTML = ""; compFor = null; }
+    const done = closedOf(shownId);
+    if (done) { gone = false; renderClosed(done); return; }
+    // No longer listed anywhere: said once, and the box stays shut.
+    if (!gone) { gone = true; setHTML(part("rcomp"), `<div class="gone">This question is no longer open.</div>`); part("opts").innerHTML = ""; part("asksec").innerHTML = ""; part("tobar").innerHTML = ""; compFor = null; }
     return;
   }
   gone = false;
@@ -153,7 +196,9 @@ function render() {
   setHTML(part("doc"), a.body ? doc(a.body) : "");
   setHTML(part("lcards"), linkCards(itemOf(`ask:${a.id}`)?.links));
   setHTML(part("ledger"), ledgerHtml(a.id));
+  setHTML(part("ithread"), threadHtml("question", a.id));
   setHTML(part("opts"), optsHtml(a));
+  setHTML(part("tobar"), toHtml("question", a.id, a.lane));
   // The secrets' inputs and the answer box are built once per question, so what is typed in them stays as it is.
   const sec = (a.secrets ?? []).join("\n");
   if (secFor !== `${a.id}:${sec}`) {
@@ -162,14 +207,50 @@ function render() {
     // Values being pasted are kept in memory only and put back as the input's value, never as markup.
     for (const inp of part("asksec").querySelectorAll("[data-secret]")) { const v = secretDrafts.get(a.id)?.[inp.dataset.secret]; if (v) inp.value = v; }
   }
-  if (compFor !== a.id) {
-    compFor = a.id;
+  if (compFor !== `${a.id}:open`) {
+    compFor = `${a.id}:open`;
     const d = drafts.get(a.id) || {};
     const hint = a.kind === "action" ? "Optional note for HQ" : a.options.length ? "Add detail, or your own answer" : "Your answer";
-    part("rcomp").innerHTML = composer(a.id, `<textarea rows="1" placeholder="${hint}. ⌘↩ sends.">${esc(d.text || "")}</textarea>`, `<button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-send>${sendLabel(a)}</button>`);
+    part("rcomp").innerHTML = composer(a.id, `<textarea rows="1" placeholder="${hint}. ⌘↩ sends.">${esc(d.text || "")}</textarea>`, `${replyBtn}<button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-send>${sendLabel(a)}</button>`);
   }
   const send = part("rcomp").querySelector("[data-send]");
   if (send) { send.disabled = !ready(a); send.textContent = sendLabel(a); send.title = unconfirmed.has(a.id) ? "Click or pick an option to answer this one" : ""; }
+  replyState(a.id);
+}
+
+// REPLY: the box goes to the thread (the lane, or HQ by the To chip) and the question stays open. Clears only its own
+// box: the reader may show another question by the time the server answers.
+async function reply(btn) {
+  const id = shownId, a = askOf(id) ?? closedOf(id);
+  const d = drafts.get(id) || {};
+  const text = withImages(id, (d.text || "").trim());
+  if (!a || !text || replying.has(id)) return;
+  const wait = notReady(id);
+  if (wait) { toast(wait); return; }
+  replying.add(id);
+  btn.disabled = true;
+  try {
+    await sendReply("question", id, text, toOf("question", id, a.lane));
+    const now = drafts.get(id);
+    if (now) { delete now.text; drafts.set(id, now); }
+    clearImages(id);
+    if (shownId === id) { const ta = part("rcomp").querySelector("textarea"); if (ta) ta.value = ""; }
+  } catch (err) { toast(err.message); }
+  replying.delete(id);
+  if (shownId === id) render();
+}
+async function reopen(btn) {
+  const id = shownId;
+  if (reopening.has(id)) return;
+  reopening.add(id);
+  btn.disabled = true;
+  try {
+    await post(`/api/asks/${id}/reopen`, {});
+    unconfirmed.delete(id);
+    toast("REOPENED. THE LANE IS TOLD.");
+  } catch (err) { toast(err.message); }
+  reopening.delete(id);
+  if (shownId === id) render();
 }
 
 defineView("question", {
@@ -179,12 +260,18 @@ defineView("question", {
     if (!same) { shownId = id; compFor = null; secFor = ""; menuOpen = false; gone = false; part("rv-body").scrollTop = 0; }
     render();
   },
-  render(keys) { if (!keys || ["open", "ledger", "inbox", "lanes"].some((k) => keys.has(k))) render(); },
+  render(keys) { if (!keys || ["open", "answered", "ledger", "inbox", "lanes", "rooms"].some((k) => keys.has(k))) render(); },
   focus() { el.querySelector(".rcomp textarea")?.focus(); },
 });
 export const toggleMenu = () => { menuOpen = !menuOpen; render(); };
 export const pickInReader = (n) => { const a = askOf(shownId); if (a?.options[n]) pick(a.id, a.options[n]); };
-export const sendInReader = () => { const b = part("rcomp").querySelector("[data-send]"); if (b && !b.disabled) sendAnswer(shownId, b); };
+// ⌘Enter answers; on an answered question, where there is nothing to answer, it sends the reply.
+export const sendInReader = () => {
+  const b = part("rcomp").querySelector("[data-send]");
+  if (b) { if (!b.disabled) sendAnswer(shownId, b); return; }
+  const r = part("rcomp").querySelector("[data-reply-only]");
+  if (r && !r.disabled) reply(r);
+};
 
 // ---- input ----
 
@@ -197,6 +284,10 @@ el.addEventListener("click", async (e) => {
   if (opt) { pick(shownId, opt.dataset.opt); return; }
   const send = t.closest("[data-send]");
   if (send) { sendAnswer(shownId, send); return; }
+  const rep = t.closest("[data-reply-only]");
+  if (rep) { reply(rep); return; }
+  const ro = t.closest("[data-reopen]");
+  if (ro) { reopen(ro); return; }
   const more = t.closest("[data-ledger-more]");
   if (more) { toggleOlder(Number(more.dataset.ledgerMore)); render(); return; }
   // The owner moves an unlocked ask between tiers; HQ is told on the server. A locked one answers 409, said in a toast.
@@ -215,14 +306,22 @@ el.addEventListener("click", async (e) => {
 });
 el.addEventListener("input", (e) => {
   const a = askOf(shownId);
-  if (!a) return;
+  if (!a) {
+    // An answered question takes a reply only.
+    if (e.target.tagName !== "TEXTAREA" || !closedOf(shownId)) return;
+    drafts.set(shownId, { ...drafts.get(shownId), text: e.target.value });
+    replyState(shownId);
+    return;
+  }
   const d = drafts.get(a.id) || {};
   if (e.target.dataset.secretMin !== undefined) { d.minutes = e.target.value; drafts.set(a.id, d); }
   else if (e.target.dataset.secret !== undefined) secretDrafts.set(a.id, { ...secretDrafts.get(a.id), [e.target.dataset.secret]: e.target.value });
   else if (e.target.tagName === "TEXTAREA") { d.text = e.target.value; drafts.set(a.id, d); }
   else return;
   touched(a.id);
-  part("rcomp").querySelector("[data-send]").disabled = !ready(a, d);
+  const send = part("rcomp").querySelector("[data-send]");
+  if (send) send.disabled = !ready(a, d);
+  replyState(a.id);
 });
 el.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!e.repeat) sendInReader(); }
@@ -231,11 +330,14 @@ el.addEventListener("keydown", (e) => {
 // A pick, from here or the stack, and a picked, uploaded or removed image can change what can be sent.
 on("draft", (id) => { if (id === shownId) render(); });
 on("attach", (key) => { if (key === String(shownId)) render(); });
+// The thread came in, or its To changed.
+on("thread", () => { if (current?.kind === "question" && current.ref === shownId) render(); });
+on("thread-to", (k) => { if (k === `question:${shownId}`) render(); });
 // An edit that removed the picked option drops the pick, so SEND cannot send it; drafts of answered asks go.
 on("state", (S, keys) => {
   if (keys && !keys.has("open")) return;
   for (const a of S.open) { const d = drafts.get(a.id); if (d?.opt && !a.options.includes(d.opt)) { delete d.opt; emit("draft", a.id); } }
   for (const id of unconfirmed) if (!S.open.some((a) => a.id === id)) unconfirmed.delete(id);
   for (const id of secretDrafts.keys()) if (!S.open.some((a) => a.id === id)) secretDrafts.delete(id);
-  for (const key of imageKeys()) if (/^\d+$/.test(key) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
+  for (const key of imageKeys()) if (/^\d+$/.test(key) && key !== String(shownId) && !S.open.some((a) => String(a.id) === key)) clearImages(key);
 });

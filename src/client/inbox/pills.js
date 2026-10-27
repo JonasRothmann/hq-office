@@ -8,7 +8,8 @@ import { current } from "../reader/shell.js";
 
 const MAX = 3;
 function render() {
-  const rooms = (S?.rooms ?? []).filter((r) => !r.archivedAt);
+  // A thread shows with its question or update, not as a pill.
+  const rooms = (S?.rooms ?? []).filter((r) => !r.archivedAt && !r.thread);
   const open = current?.kind === "room" ? current.ref : null;
   const pills = rooms.filter((r) => r.unread || r.slug === open).slice(0, MAX);
   setHTML($("roomPills"), pills.map((r) => `<button class="pill glass room${r.unread ? " unread" : ""}${r.slug === open ? " on" : ""}" type="button" data-read="room:${esc(r.slug)}" title="${esc(r.title)}"><span class="rk">ROOM</span><span class="t">${esc(r.title)}</span>${r.unread ? `<span class="tag count">${r.unread}</span>` : ""}</button>`).join(""));
