@@ -1,20 +1,22 @@
 // The keys, live only while no text field has focus: J and K move through the stack, Enter opens, 1 to 9 pick an
-// option, R replies, ⌘Enter sends, E opens the tier menu, T is Tell HQ, Esc steps back, ? lists them.
-import { $ } from "../core/dom.js";
-import { drafts } from "./drafts.js";
-import { askOf, canSend, pick, pickInReader, sendAnswer, sendInReader, toggleMenu } from "../reader/ask.js";
+// option, R replies, ⌘Enter sends, M opens the tier menu, T is Tell HQ, Esc steps back, ? lists them. Q and E are the
+// office's (they turn it). They act on one target, marked KEYS: the card used last, or the reader. A held key repeats
+// only J and K: a repeated ⌘Enter, Enter or pick is dropped.
+import { $, toast } from "../core/dom.js";
+import { askOf, pick, pickInReader, ready, sendAnswer, sendInReader, toggleMenu } from "../reader/ask.js";
 import { sendReplyInReader } from "../reader/update.js";
 import { close, current } from "../reader/shell.js";
-import { focused, move, open, openFocused } from "./stack.js";
+import { focused, keyTarget, move, open, openFocused } from "./stack.js";
 
 const KEYS = [
   ["J / K", "Next or previous card. With the reader open, it follows."],
-  ["Enter", "Open the card in the reader."],
+  ["Enter", "Open the selected card in the reader."],
   ["1 – 9", "Pick that option."],
   ["R", "Reply: open the card with the cursor in its box."],
   ["⌘ Enter", "Send the answer."],
-  ["E", "The tier and priority menu."],
+  ["M", "The tier and priority menu."],
   ["T", "Tell HQ."],
+  ["Q / E", "Turn the office a quarter."],
   ["Esc", "Close the menu, then the reader, then the worker card."],
   ["?", "This list."],
 ];
@@ -23,7 +25,7 @@ function help() {
   if (!dialog) {
     dialog = document.createElement("dialog");
     dialog.className = "keys glass";
-    dialog.innerHTML = `<h3>KEYS</h3><dl>${KEYS.map(([k, v]) => `<dt><kbd>${k}</kbd></dt><dd>${v}</dd>`).join("")}</dl><p>They work while no text field has the cursor.</p><form method="dialog"><button class="btn">CLOSE</button></form>`;
+    dialog.innerHTML = `<h3>KEYS</h3><dl>${KEYS.map(([k, v]) => `<dt><kbd>${k}</kbd></dt><dd>${v}</dd>`).join("")}</dl><p>They work while no text field has the cursor. Keys act on the card or reader marked KEYS: the one you used last. A long question is answered only in the reader.</p><form method="dialog"><button class="btn">CLOSE</button></form>`;
     dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
     document.body.append(dialog);
   }
@@ -31,12 +33,16 @@ function help() {
 }
 
 const typing = (t) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
-// The question the keys act on: the reader's, else the focused short card's.
+// Enter on a control is the control's own.
+const control = (t) => t instanceof Element && !!t.closest("a, button, summary, input, textarea, select, [role=tab], [role=button], [contenteditable]");
+// The question the keys act on: the reader's when the reader is the target, else the target card's. A long card is
+// answered only in the reader, so it is no target for ⌘Enter or 1 to 9.
 function target() {
-  if (current?.kind === "question") return { id: current.ref, inReader: true };
-  const i = focused();
-  return i?.kind === "question" ? { id: i.ref, inReader: false } : null;
+  const t = keyTarget();
+  if (t?.where === "reader") return current?.kind === "question" ? { id: current.ref, inReader: true } : null;
+  return t?.item?.kind === "question" ? { id: t.item.ref, inReader: false, short: t.item.short } : null;
 }
+const openFirst = () => toast("A LONG QUESTION IS ANSWERED IN THE READER: ENTER OPENS IT.");
 
 document.addEventListener("keydown", (e) => {
   if (e.defaultPrevented || document.querySelector("dialog[open]")) return;
@@ -53,28 +59,34 @@ document.addEventListener("keydown", (e) => {
   if (typing(e.target) || e.altKey) return;
   if (e.key === "Enter" && mod) {
     e.preventDefault();
-    if (current?.kind === "update") { sendReplyInReader(); return; }
+    if (e.repeat) return;
+    if (keyTarget()?.where === "reader" && current?.kind === "update") { sendReplyInReader(); return; }
     const t = target();
-    if (t?.inReader) sendInReader();
-    else if (t) { const a = askOf(t.id); if (a && canSend(a, drafts.get(a.id) || {})) sendAnswer(a.id, document.querySelector(`.ask[data-ask="${a.id}"] [data-quick]`)); }
+    if (!t) return;
+    if (t.inReader) { sendInReader(); return; }
+    if (!t.short) { openFirst(); return; }
+    const a = askOf(t.id);
+    if (a && ready(a)) sendAnswer(a.id, document.querySelector(`.ask[data-ask="${a.id}"] [data-quick]`));
     return;
   }
   if (mod) return;
   const k = e.key;
-  if (k === "j" || k === "J") { e.preventDefault(); move(1); }
-  else if (k === "k" || k === "K") { e.preventDefault(); move(-1); }
-  else if (k === "Enter") { if (focused()) { e.preventDefault(); openFocused(); } }
+  if (k === "j" || k === "J") { e.preventDefault(); move(1); return; }
+  if (k === "k" || k === "K") { e.preventDefault(); move(-1); return; }
+  if (e.repeat) return;
+  if (k === "Enter") { if (!control(e.target) && focused()) { e.preventDefault(); openFocused(); } }
   else if (/^[1-9]$/.test(k)) {
     const t = target();
     if (!t) return;
     e.preventDefault();
     if (t.inReader) pickInReader(Number(k) - 1);
+    else if (!t.short) openFirst();
     else { const a = askOf(t.id); if (a?.options[Number(k) - 1]) pick(a.id, a.options[Number(k) - 1]); }
   } else if (k === "r" || k === "R") {
     e.preventDefault();
-    if (focused() && !current) openFocused({ focus: true });
+    if (keyTarget()?.where === "stack") openFocused({ focus: true });
     else document.querySelector("#reader .rview:not([hidden]) .rv-foot textarea")?.focus();
-  } else if (k === "e" || k === "E") {
+  } else if (k === "m" || k === "M") {
     const t = target();
     if (!t) return;
     e.preventDefault();

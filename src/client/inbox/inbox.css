@@ -31,11 +31,17 @@
 /* the one the reader shows: raised, and joined to the reader by its right edge */
 .item.on { background: var(--surface-solid); box-shadow: inset 0 0 0 1.5px var(--text), 0 4px 14px rgba(15, 20, 30, 0.14); }
 .item.blocking.on { box-shadow: inset 3px 0 0 var(--st-red), inset 0 0 0 1.5px var(--text), 0 4px 14px rgba(15, 20, 30, 0.14); }
+/* the key target: the card the keyboard acts on, a ring and a KEYS tab hanging from its top edge (after .on so it wins) */
+.item.target { position: relative; box-shadow: inset 0 0 0 2px var(--st-blue), var(--card-shadow); }
+.item.blocking.target { box-shadow: inset 3px 0 0 var(--st-red), inset 0 0 0 2px var(--st-blue), var(--card-shadow); }
+.item.unread.target { box-shadow: inset 3px 0 0 var(--st-amber), inset 0 0 0 2px var(--st-blue), var(--card-shadow); }
+.item.target::after { content: "KEYS"; position: absolute; top: 0; left: 50%; transform: translateX(-50%); padding: 1px 5px; border-radius: 0 0 4px 4px; background: var(--st-blue); color: #fff; font: 600 9px/1.4 var(--font); letter-spacing: .06em; pointer-events: none; }
 .item.flash { animation: flash .9s ease 2; }
 .item .meta { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 18px; }
 .item .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
 .item .lname { min-width: 0; font: 600 12px/1.2 var(--font); color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .item .meta .tag { flex: none; height: 18px; padding: 0 6px; font-size: 10.5px; }
+.item .meta .tag.kind { background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--hairline); letter-spacing: 0.06em; text-transform: uppercase; }
 .item .rk { font: 600 9.5px/1 var(--font); letter-spacing: 0.06em; color: var(--text-3); }
 .item .plus { font: 600 10.5px/1 var(--font); color: var(--text-3); }
 .item .timer, .item .age { flex: none; font: 500 11.5px/1 var(--mono); color: var(--text-3); }
@@ -44,6 +50,17 @@
 .item.ask.hot .timer { color: var(--st-red-text); }
 .item .st { margin: 0; font: 600 13.5px/1.35 var(--font); letter-spacing: -0.003em; color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .item .pv { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* a short card's whole body: the markdown, not clamped; its images a small thumb */
+.item .sbody { min-width: 0; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.item .sbody p { margin: 0 0 4px; }
+.item .sbody > :last-child { margin-bottom: 0; }
+.item .sbody img.thumb { display: inline-block; max-width: 100%; max-height: 72px; border-radius: 6px; }
+/* the links: chips in a row, each one line */
+.slinks { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.lchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 22px; min-width: 0; padding: 0 8px; border-radius: 6px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline); overflow: hidden; white-space: nowrap; text-decoration: none; transition: box-shadow .12s; }
+.lchip:hover { box-shadow: inset 0 0 0 1px var(--hairline-2); }
+.lchip b { min-width: 0; font: 600 11.5px/1 var(--font); color: var(--st-blue-text); overflow: hidden; text-overflow: ellipsis; }
+.lchip small { min-width: 0; font: 400 10.5px/1 var(--font); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
 .shapes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .shape { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline); font: 500 10.5px/1 var(--font); color: var(--text-2); }
 .shapes .open { margin-left: auto; font: 600 11.5px/1 var(--font); color: var(--st-blue-text); }

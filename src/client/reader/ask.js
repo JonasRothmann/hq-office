@@ -21,6 +21,7 @@ export const askOf = (id) => S?.open.find((a) => a.id === id) ?? null;
 export const itemOf = (key) => S?.inbox?.find((i) => i.key === key) ?? null;
 export const sendLabel = (a) => (a.kind === "action" ? "DONE" : a.kind === "info" ? "OK" : "SEND");
 export const laneColor = (name) => { const l = S?.lanes.find((x) => x.name === name); return (STATUS_TEXT[l?.status] ?? [null, "#8b8d98"])[1]; };
+export const kindTag = (a) => `<span class="tag kind k-${esc(a.kind)}">${esc(String(a.kind).toUpperCase())}</span>`;
 
 // An ask for secrets is answered with all of them, or (with none filled) in words, an image, or like any other ask.
 export function canSend(a, d = drafts.get(a.id) || {}) {
@@ -28,11 +29,29 @@ export function canSend(a, d = drafts.get(a.id) || {}) {
   const filled = want.filter((n) => secretDrafts.get(a.id)?.[n]).length;
   return want.length && filled ? filled === want.length : a.kind !== "decision" || !!d.opt || !!(d.text || "").trim() || hasImages(a.id);
 }
+// Sends in flight, by ask id: their buttons stay off until the server answers, whatever redraws them.
+const sending = new Set();
+// After an answer lands the next question can sit where the last one was, its send ready (an ACTION's DONE, an INFO's
+// OK, a pick kept from before). A second ⌘Enter or a double click would answer it unseen. So for GUARD_MS no send is
+// ready, except on a question the owner has since picked or typed in.
+const GUARD_MS = 1200;
+let guardUntil = 0;
+const freed = new Set();
+function guard() {
+  guardUntil = Date.now() + GUARD_MS;
+  freed.clear();
+  setTimeout(() => { for (const a of S?.open ?? []) emit("draft", a.id); }, GUARD_MS + 20);
+}
+// Whether a send button is on: the answer is complete, it is not already on its way, and no guard holds it.
+export const ready = (a, d = drafts.get(a.id) || {}) => canSend(a, d) && !sending.has(a.id) && (Date.now() >= guardUntil || freed.has(a.id));
+// The owner did something to this question: the guard no longer holds it.
+export function touched(id) { if (Date.now() < guardUntil && !freed.has(id)) { freed.add(id); emit("draft", id); } }
 // Picks an option, or unpicks it; the stack and the reader both draw the pick.
 export function pick(id, opt) {
   const d = drafts.get(id) || {};
   d.opt = d.opt === opt ? undefined : opt;
   drafts.set(id, d);
+  freed.add(id);
   emit("draft", id);
 }
 // The open questions in the stack's order: the one after id, else the one before it.
@@ -44,7 +63,7 @@ function nextQuestion(id) {
 
 export async function sendAnswer(id, btn) {
   const ask = askOf(id);
-  if (!ask) return;
+  if (!ask || !ready(ask)) return;
   const d = drafts.get(id) || {};
   const wait = notReady(id);
   if (wait) { toast(wait); return; }
@@ -53,6 +72,7 @@ export async function sendAnswer(id, btn) {
   const values = secretDrafts.get(id);
   const next = nextQuestion(id);
   const reading = current?.kind === "question" && current.ref === id;
+  sending.add(id);
   if (btn) btn.disabled = true;
   try {
     if (ask.secrets?.length && values && Object.values(values).some(Boolean)) {
@@ -67,12 +87,14 @@ export async function sendAnswer(id, btn) {
     }
     drafts.delete(id);
     clearImages(id);
+    sending.delete(id);
+    guard();
     // Answered from the reader: on to the next question, the way a list of them is read.
     if (reading) { if (next != null && askOf(next)) show("question", next); else hide(); }
   } catch (err) {
+    sending.delete(id);
     toast(err.message);
-    if (btn) btn.disabled = false;
-    if (reading) render();
+    emit("draft", id);
   }
 }
 
@@ -102,10 +124,10 @@ function metaHtml(a) {
   const move = a.tier_locked
     ? `<p class="lockwhy">${LOCK} ${lane || "The lane"} cannot go on without the answer, so it stays blocking until answered.</p>`
     : `<button class="btn-s tier-set" type="button" data-tier="${blocking ? "nonblocking" : "blocking"}">${blocking ? "MAKE NON-BLOCKING" : "MAKE BLOCKING"}</button>`;
-  const menu = `<details class="tiermenu"${menuOpen ? " open" : ""}><summary title="Tier and priority (E)"><span class="tag tierchip${blocking ? " blocking" : ""}">${a.tier_locked ? LOCK : ""}${tier}</span><span class="tag prio p${p}">${PRIO_NAME[p]}</span></summary>
+  const menu = `<details class="tiermenu"${menuOpen ? " open" : ""}><summary title="Tier and priority (M)"><span class="tag tierchip${blocking ? " blocking" : ""}">${a.tier_locked ? LOCK : ""}${tier}</span><span class="tag prio p${p}">${PRIO_NAME[p]}</span></summary>
     <div class="pop"><div class="k">PRIORITY</div><div class="prios">${PRIORITIES.map((name, i) => `<button class="btn-s prio-set${i === p ? " on" : ""}" type="button" data-prio="${name}">${PRIO_NAME[i].toUpperCase()}</button>`).join("")}</div>
     <div class="k">TIER</div>${move}${moved}</div></details>`;
-  return `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${lane}">${lane}</button>` : `<b class="lname">HQ</b>`}${where ? `<span class="where">${where}</span>` : ""}${menu}${editedTag(a.id)}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span><span class="idt">#${a.id} · asked ${clock(a.created_at)} · <span data-since="${a.created_at}"></span></span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`;
+  return `<span class="dot" style="background:${laneColor(a.lane)}"></span>${a.lane ? `<button class="lname" type="button" data-select="${lane}">${lane}</button>` : `<b class="lname">HQ</b>`}${where ? `<span class="where">${where}</span>` : ""}${kindTag(a)}${menu}${editedTag(a.id)}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span><span class="idt">#${a.id} · asked ${clock(a.created_at)} · <span data-since="${a.created_at}"></span></span><button class="x" type="button" data-close aria-label="Close" title="Close (Esc)">Esc</button>`;
 }
 
 function optsHtml(a) {
@@ -154,7 +176,7 @@ function render() {
     part("rcomp").innerHTML = composer(a.id, `<textarea rows="1" placeholder="${hint}. ⌘↩ sends.">${esc(d.text || "")}</textarea>`, `<button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-send>${sendLabel(a)}</button>`);
   }
   const send = part("rcomp").querySelector("[data-send]");
-  if (send) { send.disabled = !canSend(a); send.textContent = sendLabel(a); }
+  if (send) { send.disabled = !ready(a); send.textContent = sendLabel(a); }
 }
 
 defineView("question", {
@@ -204,10 +226,11 @@ el.addEventListener("input", (e) => {
   else if (e.target.dataset.secret !== undefined) secretDrafts.set(a.id, { ...secretDrafts.get(a.id), [e.target.dataset.secret]: e.target.value });
   else if (e.target.tagName === "TEXTAREA") { d.text = e.target.value; drafts.set(a.id, d); }
   else return;
-  part("rcomp").querySelector("[data-send]").disabled = !canSend(a, d);
+  touched(a.id);
+  part("rcomp").querySelector("[data-send]").disabled = !ready(a, d);
 });
 el.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendInReader(); }
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!e.repeat) sendInReader(); }
 });
 
 // A pick, from here or the stack, and a picked, uploaded or removed image can change what can be sent.
