@@ -29,7 +29,7 @@ src/client/               the page, plain ES modules and stylesheets, served as 
 src/server/               the server, one file per concern
   main.ts                 loads every module in the old order, starts the timers
   config.ts db.ts push.ts router.ts page.ts json.ts http.ts
-  herdr.ts lanes.ts asks.ts updates.ts events.ts inbox.ts score.ts state.ts machines.ts
+  herdr.ts lanes.ts asks.ts updates.ts events.ts inbox.ts owner-inbox.ts score.ts state.ts machines.ts
   routes/                 one file per resource: a list of { method, path | prefix | pattern, handle }
   schema/                 one .sql file per table, applied at startup
   machine-stats.sh        the machine sampler (runs here or over ssh)

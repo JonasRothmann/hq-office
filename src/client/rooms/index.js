@@ -16,7 +16,7 @@ import { emit, on } from "../core/bus.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { qTab } from "../messages/messages.js";
 import { clearImages, composer, hasImages, notReady, openPreview, withImages } from "../images/images.js";
-import { markdown } from "./markdown.js";
+import { markdown } from "../core/markdown.js";
 
 const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };

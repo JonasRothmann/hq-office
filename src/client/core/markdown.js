@@ -1,10 +1,10 @@
-// The room brief's markdown, as safe HTML: everything is escaped first, then headings, lists (with [ ] and [x]),
+// Markdown as safe HTML, for every body an agent writes (questions, updates, a room's brief and thread): everything is escaped first, then headings, lists (with [ ] and [x]),
 // quotes, rules, tables, code fences (with COPY), inline code, bold, italic and links (http(s) or a path on this
 // HUD). Nothing an agent writes can add a tag, an attribute or a script. A thread's messages use it too, as chat:
 // each line break shows, a blank line starts a paragraph, and [image: PATH] (an attached image) and #1234 (a PR)
 // show as they do in MESSAGES.
-import { esc } from "../core/format.js";
-import { CONFIG } from "../core/state.js";
+import { esc } from "./format.js";
+import { CONFIG } from "./state.js";
 
 // A link's target: http(s), or a path on this HUD (never a protocol-relative //host).
 const LINK = /\[([^\]\n]+)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]*)\)/g;
