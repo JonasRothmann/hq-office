@@ -193,22 +193,6 @@ describe("outside: the lot it generates for", () => {
     expect(growLot({ ...office, maxX: office.maxX - 25 }, g)).not.toBe(g);
     expect(growLot({ ...office, door: "e" }, g)).not.toBe(g);
   });
-  test("the path runs in from the lot's edge to the office's own path, wherever its door is", () => {
-    const entry = { x: 6.5, z: office.maxZ - 0.6 };
-    const g = growLot({ ...office, entry });
-    expect(growLot({ ...office, entry }, g)).toBe(g);
-    expect(growLot({ ...office, entry: { x: 2.5, z: entry.z } }, g)).not.toBe(g);
-    const L = generate({ mode: "nature", seed: 7, lot: g });
-    expect(L.path.entry).toEqual(entry);
-    expect(L.path.all[0]).toEqual(entry);
-    // straight out to the lot's edge, in steps the ribbon draws (none longer than 2.5 m)
-    const edge = L.path.all.findIndex((p: Pt) => p.z >= g.maxZ - 1e-6);
-    expect(edge).toBeGreaterThan(0);
-    for (let i = 1; i <= edge; i++) {
-      expect(L.path.all[i].x).toBe(entry.x);
-      expect(L.path.all[i].z - L.path.all[i - 1].z).toBeLessThan(2.5);
-    }
-  });
   test("an office that grows a room at a time regenerates seldom", () => {
     let g = growLot(office), changes = 0;
     for (let k = 1; k <= 12; k++) { const n = growLot({ ...office, maxX: office.maxX + 5 * k }, g); if (n !== g) changes++; g = n; }

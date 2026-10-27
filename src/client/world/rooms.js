@@ -4,6 +4,7 @@ import { WALL_H, KERB_H, wallCuts, toWorld } from "./plan.js";
 import { surface, wallpaper, cladding, glass as glassTexture, glow as glowTexture } from "./textures.js";
 import { scatterCourt } from "./furniture.js";
 import { garden } from "./garden.js";
+import { ATLAS, atlasTexture } from "./atlas.js";
 
 const T = 0.15;          // wall thickness
 const HALF = T / 2;
@@ -43,14 +44,15 @@ function capBox(kit, w, y, hex) {
   else kit.box(T + 0.03, 0.035, len, hex, w.x, y, w.z + 0.5);
 }
 
-// The back-wall tiles that get a window (a team room: local x 1..2 and 5..6, either side of the poster), when that wall
-// faces outdoors.
+// The back-wall tiles that get a window (a 7 m wall: local x 1..2 and 4..5 either side of the pier; a shorter one: two
+// single panes), when that wall faces outdoors.
 function windowKeys(p) {
   const keys = new Set();
   for (const r of p.rooms) {
     if (r.kind !== "team" && r.kind !== "hq" && r.kind !== "break") continue;
     // a room may say which back-wall tiles are windows (r.windows); adjacent ones join into one wide window
-    const spots = (r.windows ?? (r.kind === "break" && r.w < 6.5 && r.d < 6.5 ? [1, 3] : [1, 2, 4, 5])).map((i) => i + 0.5);
+    const width = r.back === "w" || r.back === "e" ? r.d : r.w;
+    const spots = (r.windows ?? (width >= 7 ? [1, 2, 4, 5] : [1, 3])).map((i) => i + 0.5);
     for (const lx of spots) {
       const p0 = toWorld(r, lx, 0);
       const back = r.back ?? "n";
@@ -151,6 +153,10 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   const glassMat = keep(new THREE.MeshBasicMaterial({ map: L.night ? null : glassTexture(), color: L.night ? "#22304c" : "#ffffff" }));
   const windows = windowKeys(p);
   const doors = new Set(p.walls.filter((w) => w.door).map((w) => `${w.dir}:${w.x}:${w.z}`));
+  // indigo noren in the doorways of the rooms people work and rest in: a one-metre door between two rooms
+  const clothMat = keep(roomsMaterial({ map: atlasTexture(L), rooms }));
+  const kindOf = new Map(p.rooms.map((r) => [r.id, r.kind]));
+  const ROOMY = new Set(["team", "hq", "break"]);
   const keyOf = (w, k = 0) => (w.dir === "x" ? `x:${w.x + k}:${w.z}` : `z:${w.x}:${w.z + k}`);
   // a strip on the room side(s) of a wall tile: skirting, a window board. y0 its bottom, h tall, `out` deep.
   const trim = (kit, w, y0, h, out, hex) => {
@@ -176,7 +182,7 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   const build = (rot) => {
     const cuts = wallCuts(p, rot);
     const g = new THREE.Group();
-    const up = new Kit(), caps = new Kit(), glass = new Kit(), out = new Kit();
+    const up = new Kit(), caps = new Kit(), glass = new Kit(), out = new Kit(), cloth = new Kit();
     p.walls.forEach((w, i) => {
       const cut = cuts[i];
       if (cut) { if (!w.door) capBox(caps, w, KERB_H, L.cap); return; }
@@ -187,6 +193,15 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
         if (!doors.has(keyOf(w, -1))) across(up, w, 0.03, 0, DOOR_TOP, 0.06, T + 0.05, OAK);
         if (!doors.has(keyOf(w, 1))) across(up, w, 0.97, 0, DOOR_TOP, 0.06, T + 0.05, OAK);
         across(up, w, 0.5, DOOR_TOP - 0.06, 0.07, 1.0, T + 0.05, OAK);
+        const single = !doors.has(keyOf(w, -1)) && !doors.has(keyOf(w, 1));
+        if (single && w.a && w.b && (ROOMY.has(kindOf.get(w.a)) || ROOMY.has(kindOf.get(w.b)))) {
+          across(cloth, w, 0.5, DOOR_TOP - 0.13, 0.025, 0.94, 0.025, "#3a3028");
+          for (const s of [-1, 0, 1]) {
+            const o = { room: w.light, tex: { r: ATLAS.noren, face: "all" } };
+            if (w.dir === "x") cloth.box(0.29, 0.72, 0.012, "#ffffff", w.x + 0.5 + s * 0.3, DOOR_TOP - 0.86, w.z, o);
+            else cloth.box(0.012, 0.72, 0.29, "#ffffff", w.x, DOOR_TOP - 0.86, w.z + 0.5 + s * 0.3, o);
+          }
+        }
       } else if (outside && windows.has(`${w.dir}:${w.x}:${w.z}`)) {
         segBox(up, w, KERB_H, SILL, "#ffffff", out);
         segBox(up, w, HEAD, WALL_H, "#ffffff", out);
@@ -212,6 +227,7 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
     if (!out.empty) g.add(out.mesh(cladMat, { uv: true, shade: wallShade }));
     if (!caps.empty) g.add(caps.mesh(capMat, { cast: false }));
     if (!glass.empty) g.add(glass.mesh(glassMat, { cast: false, uv: true }));
+    if (!cloth.empty) { const m = cloth.mesh(clothMat, { atlas: ATLAS.size, white: ATLAS.white, cast: false }); m.name = "noren"; g.add(m); }
     g.userData.cuts = cuts;
     return g;
   };

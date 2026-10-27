@@ -76,7 +76,8 @@ const LOOK = {
       corridor: { base: "#d9d2c4", alt: "#c9c1b1", line: "#958b78", kind: "cement" },
       break: { base: "#ebe5da", alt: "#cfc6b6", line: "#a89e8c", kind: "terrazzo" },
     },
-    wall: { face: "#f4efe7", alt: "#e9e2d6", trim: "#d9c095", kind: "plain" },
+    // white plaster over a band of oak battens to a rail at the window sills
+    wall: { face: "#f4efe7", alt: "#e9e2d6", trim: "#d9c095", gap: "#8f7652", rails: "#c4a77a", rail: 0.8, kind: "band" },
     cladding: { base: "#3d3c38", alt: "#363531", line: "#252420", kind: "boards" },
     cap: "#9a8462",
     wood: "#dcc29a", woodEdge: "#c4a77a", steel: "#2b2b2e",

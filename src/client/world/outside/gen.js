@@ -146,14 +146,10 @@ export function lineLength(pts, closed = false) {
 
 // ---- the lot -------------------------------------------------------------------------------------------------------
 
-// entry (optional): where the office's own path ends inside the lot, near the door side; the land's path starts
-// level with it and runs in to it, so the two meet.
 export function normLot(lot) {
   const l = lot ?? { minX: -10, minZ: -6, maxX: 10, maxZ: 6 };
-  const entry = l.entry && Number.isFinite(+l.entry.x) && Number.isFinite(+l.entry.z) ? { x: +l.entry.x, z: +l.entry.z } : null;
-  return { minX: +l.minX, minZ: +l.minZ, maxX: +l.maxX, maxZ: +l.maxZ, door: ["n", "s", "e", "w"].includes(l.door) ? l.door : "s", entry };
+  return { minX: +l.minX, minZ: +l.minZ, maxX: +l.maxX, maxZ: +l.maxZ, door: ["n", "s", "e", "w"].includes(l.door) ? l.door : "s" };
 }
-const sameEntry = (a, b) => (!a && !b) || (a && b && a.x === b.x && a.z === b.z);
 
 // The lot to generate for: the office's lot rounded out to LOT_STEP with half a metre to spare. While the office's
 // lot still fits in the previous one, with no side more than MAX_SLACK too big, the previous one is kept, so an
@@ -165,13 +161,13 @@ export function growLot(lot, prev = null) {
   if (prev) {
     const fits = l.minX >= prev.minX && l.minZ >= prev.minZ && l.maxX <= prev.maxX && l.maxZ <= prev.maxZ;
     const slack = Math.max(l.minX - prev.minX, l.minZ - prev.minZ, prev.maxX - l.maxX, prev.maxZ - l.maxZ);
-    if (fits && slack <= MAX_SLACK && prev.door === l.door && sameEntry(prev.entry, l.entry)) return prev;
+    if (fits && slack <= MAX_SLACK && prev.door === l.door) return prev;
   }
   const lo = (v) => Math.floor((v - 0.5) / LOT_STEP) * LOT_STEP, hi = (v) => Math.ceil((v + 0.5) / LOT_STEP) * LOT_STEP;
   const grew = (side) => (prev && prev.door === l.door ? (side === "minX" ? l.minX < prev.minX : side === "minZ" ? l.minZ < prev.minZ : side === "maxX" ? l.maxX > prev.maxX : l.maxZ > prev.maxZ) : false);
   return {
     minX: lo(l.minX) - (grew("minX") ? AHEAD : 0), minZ: lo(l.minZ) - (grew("minZ") ? AHEAD : 0),
-    maxX: hi(l.maxX) + (grew("maxX") ? AHEAD : 0), maxZ: hi(l.maxZ) + (grew("maxZ") ? AHEAD : 0), door: l.door, entry: l.entry,
+    maxX: hi(l.maxX) + (grew("maxX") ? AHEAD : 0), maxZ: hi(l.maxZ) + (grew("maxZ") ? AHEAD : 0), door: l.door,
   };
 }
 
@@ -250,9 +246,7 @@ function nature(R, s, lot, ext) {
   // The path: out from the middle of the door side, gently winding, over the river on a bridge if it meets it.
   const door = lot.door;
   const out = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[door];
-  const en = lot.entry, ns = door === "n" || door === "s";
-  const ex = en && ns ? clamp(en.x, lot.minX + 1, lot.maxX - 1) : cx, ez = en && !ns ? clamp(en.z, lot.minZ + 1, lot.maxZ - 1) : cz;
-  const start = door === "n" ? { x: ex, z: lot.minZ } : door === "s" ? { x: ex, z: lot.maxZ } : door === "e" ? { x: lot.maxX, z: ez } : { x: lot.minX, z: ez };
+  const start = door === "n" ? { x: cx, z: lot.minZ } : door === "s" ? { x: cx, z: lot.maxZ } : door === "e" ? { x: lot.maxX, z: cz } : { x: lot.minX, z: cz };
   const pathPhase = R() * 6.28;
   const path = [];
   for (let t = 0; t <= PAD + 4; t += 1.25) {
@@ -260,13 +254,6 @@ function nature(R, s, lot, ext) {
     path.push({ x: r2(start.x + out[0] * t - out[1] * k), z: r2(start.z + out[1] * t + out[0] * k) });
   }
   path[0] = { x: r2(start.x), z: r2(start.z) };
-  // in from the lot's edge to where the office's path ends
-  const entry = en ? { x: r2(ns ? start.x : en.x), z: r2(ns ? en.z : start.z) } : { x: r2(start.x), z: r2(start.z) };
-  if (en) {
-    const gap = Math.hypot(start.x - entry.x, start.z - entry.z), n = Math.ceil(gap / 1.2);
-    for (let k = 1; k < n; k++) path.unshift({ x: r2(start.x + ((entry.x - start.x) * k) / n), z: r2(start.z + ((entry.z - start.z) * k) / n) });
-    if (gap > 0.05) path.unshift(entry);
-  }
   // The bridge goes where the path is deepest in the first stretch of water it meets; a second stretch ends the path.
   let bridge = null;
   const wet = path.map((p) => { const h = halfAt(p.x, p.z); return { d: h.d, w: h.w, in: h.d < h.w + 0.6 }; });
@@ -427,7 +414,7 @@ function nature(R, s, lot, ext) {
   return {
     terrain,
     water: { level: WATER.level, river: riverPts, pond },
-    path: { points: pathOut, all: path, width: 1.4, entry },
+    path: { points: pathOut, all: path, width: 1.4, entry: { x: r2(start.x), z: r2(start.z) } },
     bridge,
     trees, rocks, flowers, reeds, tufts,
   };

@@ -1,6 +1,6 @@
 // The world's entry: mountWorld(canvas, { theme, hq, insets }) builds the team rooms and desks for the lanes and keeps
 // them drawn.
-import { THREE, roomLight, MAX_ROOMS } from "./kit.js";
+import { THREE, Kit, roomLight, roomMaterial, MAX_ROOMS } from "./kit.js";
 import { plan as makePlan, diff, cameraSide, toWorld, deskPlace, KERB_H, WALL_H } from "./plan.js";
 import { lookFor, STATUS } from "./look.js";
 import { View } from "./camera.js";
@@ -13,7 +13,7 @@ import { route } from "./walk.js";
 import { screen as screenTexture, glow } from "./textures.js";
 import { bindWorld, runFrame } from "./api.js";
 import { emit } from "../core/bus.js";
-import { REACH, frontDoor } from "./garden.js";
+import { REACH, frontDoor, steppingStones } from "./garden.js";
 import { mountOutside } from "./outside/outside.js";
 
 const RISE_MS = 800;   // a new lane's desk rises from the floor
@@ -25,11 +25,12 @@ const LIT = new Set(["moving", "needs_you", "blocked", "hq_turn", "waiting", "do
 const WARM = new THREE.Color(1.0, 0.8, 0.55);
 // Frames a second per PERFORMANCE choice; POWER SAVER draws only when something changes or moves.
 const FPS = { smooth: 30, balanced: 15, saver: 30 };
-// The land round the office (outside/) starts where the garden ends, REACH past the building, and its path runs in to
-// where the garden's path from the front door ends.
+// The land round the office (outside/) starts where the garden ends, REACH past the building. Its path leaves from
+// the middle of the lot's front side, so the lot is centred on the front door; stepping stones join the two paths.
 const lotOf = (p) => {
   const b = p.bounds, door = frontDoor(p);
-  return { minX: b.minX - REACH, minZ: b.minZ - REACH, maxX: b.maxX + REACH, maxZ: b.maxZ + REACH, door: "s", entry: door === null ? null : { x: door, z: b.maxZ + REACH - 0.6 } };
+  const half = door === null ? null : Math.max(door - (b.minX - REACH), b.maxX + REACH - door);
+  return { minX: half === null ? b.minX - REACH : door - half, minZ: b.minZ - REACH, maxX: half === null ? b.maxX + REACH : door + half, maxZ: b.maxZ + REACH, door: "s" };
 };
 const OUTSIDE = new Set(["nature", "city", "off"]);
 const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
@@ -50,6 +51,7 @@ export function mountWorld(canvas, opts = {}) {
   let selected = null;
   let mode = "smooth", paused = false, dirty = true, frames = 0;
   let turn = null, wallScale = 1;
+  let link = null, linked = null; // the stepping stones between the garden's path and the land's, for this layout
   let outside = null, outsideMode = OUTSIDE.has(opts.outside) ? opts.outside : "nature", outsideSeed = opts.outsideSeed || "hq";
 
   // Each room's light: one Color, shared by the room's own materials (a uniform) and by the walls (a slot in an array).
@@ -320,6 +322,22 @@ export function mountWorld(canvas, opts = {}) {
     dirty = true;
   }
 
+  // Stepping stones from the end of the garden's path to the start of the land's, rebuilt when either changes.
+  function linkPaths() {
+    const layout = outside?.layout ?? null, door = p ? frontDoor(p) : null;
+    const key = layout && door !== null && layout.path?.entry ? `${door}:${p.bounds.maxZ}:${layout.path.entry.x}:${layout.path.entry.z}` : null;
+    if (key === linked) return;
+    linked = key;
+    if (link) { sc.scene.remove(link); link.geometry.dispose(); link.material.dispose(); link = null; }
+    if (!key) return;
+    const kit = new Kit();
+    steppingStones(kit, { x: door, z: p.bounds.maxZ + REACH - 0.3 }, layout.path.entry);
+    link = kit.mesh(roomMaterial({ room: outdoor }), { cast: false });
+    link.name = "garden-link";
+    sc.scene.add(link);
+    dirty = true;
+  }
+
   // The land round the office: "nature", "city" or "off", and the seed it grows from.
   function setOutside(m, seed) {
     const nextMode = OUTSIDE.has(m) ? m : outsideMode, nextSeed = seed || outsideSeed;
@@ -491,6 +509,7 @@ export function mountWorld(canvas, opts = {}) {
     balls.update(now);
     // the land's cars, people and water (left out of busy: in POWER SAVER they stand still)
     outside?.update(now, dt);
+    linkPaths();
     runFrame(now, dt);
     sc.renderer.render(sc.scene, view.camera);
     frames++;
@@ -564,7 +583,7 @@ export function mountWorld(canvas, opts = {}) {
     get view() { return view; },
     get plan() { return p; },
     get renderer() { return sc.renderer; },
-    dispose() { sc.stop(); ro.disconnect(); cleanups.forEach((f) => f()); teardown(); outside?.dispose(); outside = null; balls.dispose(); sc.renderer.dispose(); bindWorld(null); },
+    dispose() { sc.stop(); ro.disconnect(); cleanups.forEach((f) => f()); teardown(); outside?.dispose(); outside = null; linkPaths(); balls.dispose(); sc.renderer.dispose(); bindWorld(null); },
   };
   bindWorld(api);
   emit("world:ready");

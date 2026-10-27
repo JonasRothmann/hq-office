@@ -100,6 +100,18 @@ function rowan(kit, x, y, z) {
   for (let k = 0; k < 7; k++) { const a = k * 1.7; kit.sphere(0.06, "#c8443a", x + Math.cos(a) * 0.55, y + 1.45 + (k % 3) * 0.3, z + Math.sin(a) * 0.45, { detail: 0 }); }
 }
 
+// Stepping stones from the end of the garden's path (`from`) to where the land's path starts (`to`): the walk that
+// joins the garden to the land round it. Flat granite slabs, about 0.7 m apart, a little off the line by turns.
+export function steppingStones(kit, from, to, y = -0.12) {
+  const len = Math.hypot(to.x - from.x, to.z - from.z);
+  const n = Math.max(1, Math.round(len / 0.7));
+  const nx = -(to.z - from.z) / (len || 1), nz = (to.x - from.x) / (len || 1);
+  for (let k = 0; k <= n; k++) {
+    const t = k / n, off = (k % 2 ? 0.12 : -0.12) * (k > 0 && k < n ? 1 : 0);
+    kit.cyl(0.3 + 0.04 * ((k * 5) % 3), 0.03, k % 2 ? "#c9c3b7" : "#bdb6a8", from.x + (to.x - from.x) * t + nx * off, y, from.z + (to.z - from.z) * t + nz * off, { seg: 7 });
+  }
+}
+
 // The middle of the front door (an outer door on the south side, toward the default view), or null.
 export function frontDoor(p) {
   const b = p.bounds;
