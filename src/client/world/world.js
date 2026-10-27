@@ -5,7 +5,7 @@ import { lookFor, STATUS } from "./look.js";
 import { View } from "./camera.js";
 import { createScene } from "./scene.js";
 import { buildRooms } from "./rooms.js";
-import { buildOffice, buildSuite, buildBreak, OFFICE_SPOTS, SUITE_SPOTS } from "./furniture.js";
+import { buildOffice, buildSuite, buildBreak, OFFICE_SPOTS, SUITE_SPOTS, localSize } from "./furniture.js";
 import { Worker } from "./people.js";
 import { Balls } from "./balls.js";
 import { route } from "./walk.js";
@@ -98,7 +98,7 @@ export function mountWorld(canvas, opts = {}) {
       s.room = p.hq;
       s.worker = new Worker(hqName, L, lightOf(p.hq.id));
       s.group.add(s.worker.root);
-      s.worker.place({ seat: SUITE_SPOTS.seat, stand: SUITE_SPOTS.stand, faceDesk: Math.PI });
+      s.worker.place({ seat: SUITE_SPOTS.seat, stand: SUITE_SPOTS.stand, faceDesk: SUITE_SPOTS.faceDesk ?? Math.PI });
       built.root.add(s.group);
       built.suite = s;
     }
@@ -124,7 +124,17 @@ export function mountWorld(canvas, opts = {}) {
       const i = built.wallIndex.get(k);
       return i === undefined ? true : built.cuts[i];
     };
+    // what hangs on a room's walls (prints, boards, shelves) shows only while the middle of that wall stands
+    const sideCut = (room, side) => {
+      const { w, d } = localSize(room);
+      const [lx, lz] = side === "n" ? [w / 2, 0] : side === "w" ? [0, d / 2] : [w, d / 2];
+      const p = toWorld(room, lx, lz);
+      const alongX = (side === "n") === (room.back === "n" || room.back === "s");
+      const i = built.wallIndex.get(alongX ? `x:${Math.floor(p.x)}:${Math.round(p.z)}` : `z:${Math.round(p.x)}:${Math.floor(p.z)}`);
+      return i === undefined ? true : built.cuts[i];
+    };
     for (const o of [...built.offices.values(), built.suite, built.lounge]) {
+      for (const dec of o?.decor ?? []) dec.mesh.visible = !sideCut(o.room, dec.side);
       if (!o?.wallPoster) continue;
       const cut = wallAt(o.room, o.wallPoster.position.x);
       o.wallPoster.visible = !cut;

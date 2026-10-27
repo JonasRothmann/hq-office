@@ -218,6 +218,28 @@ lanes.forEach((l, i) => {
   };
 });
 
+// ?scene=showroom: one team room, the HQ suite and the break area side by side, people in every pose (no fake lanes).
+// at=x,z centres the view on a ground point; zoom and rot as for the office.
+lab: {
+if (q.get("scene") === "showroom") {
+  const { mountShowroom } = await import("/docs/design/showroom.js");
+  const world = mountShowroom(document.getElementById("world"), { theme, insets: ui ? { left: 444, top: 56 } : {} });
+  for (let i = 0; i < ((rot % 4) + 4) % 4; i++) world.rotate(1);
+  if (zoom !== null) { world.zoom(zoom); world.view.ppm = world.view.ppmTo; }
+  if (q.has("ppm")) { world.zoom(2); world.view.ppm = world.view.ppmTo = Number(q.get("ppm")); }
+  const at = (q.get("at") ?? "").split(",").filter(Boolean).map(Number);
+  if (at.length === 2) world.focus(at[0], at[1]);
+  window.world = world;
+  document.getElementById("huds").style.display = "none";
+  addEventListener("keydown", (e) => {
+    if (e.key === "q" || e.key === "Q") world.rotate(-1);
+    if (e.key === "e" || e.key === "E") world.rotate(1);
+    if (["1", "2", "3"].includes(e.key)) world.zoom(Number(e.key) - 1);
+  });
+  let frames = 0;
+  onFrame(() => { if (++frames === 8) window.__worldReady = true; });
+  break lab;
+}
 const canvas = document.getElementById("world");
 const world = mountWorld(canvas, { theme, insets: ui ? { left: 444, top: 56 } : {} });
 for (let i = 0; i < ((rot % 4) + 4) % 4; i++) world.rotate(1);
@@ -283,6 +305,7 @@ for (const b of document.querySelectorAll("#views [data-zoom]")) b.onclick = () 
 // For screenshots: ready once a few frames have drawn
 let frames = 0;
 onFrame(() => { if (++frames === 8) window.__worldReady = true; });
+}
 </script>
 </body>
 </html>

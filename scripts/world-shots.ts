@@ -25,17 +25,37 @@ export const SHOTS: [string, string][] = [
   ["light-4-rot1", "theme=light&lanes=4&rot=1"],
 ];
 
+// The Nordic studio's showroom (one team room, the HQ suite, the break area), always JPEG, into docs/design/nordic.
+export const SHOWROOM: [string, string][] = [
+  ["showroom-light-mid", "scene=showroom&theme=light&ui=0&zoom=1&at=10.5,3"],
+  ["showroom-dark-mid", "scene=showroom&theme=dark&ui=0&zoom=1&at=10.5,3"],
+  ["showroom-light-near-team", "scene=showroom&theme=light&ui=0&zoom=2&at=3.6,2.6"],
+  ["showroom-dark-near-team", "scene=showroom&theme=dark&ui=0&zoom=2&at=3.6,2.6"],
+  ["showroom-light-near-hq", "scene=showroom&theme=light&ui=0&zoom=2&at=10.6,2.6"],
+  ["showroom-light-near-break", "scene=showroom&theme=light&ui=0&zoom=2&at=17.6,2.6"],
+  ["showroom-dark-near-break", "scene=showroom&theme=dark&ui=0&zoom=2&at=17.6,2.6"],
+  ["showroom-light-far", "scene=showroom&theme=light&ui=0&zoom=0&at=10.5,2"],
+  ["showroom-light-rot1", "scene=showroom&theme=light&ui=0&zoom=1&rot=1&at=10.5,2.5"],
+  // closer than the near step, to judge faces and clothes
+  ["showroom-light-people", "scene=showroom&theme=light&ui=0&ppm=170&at=3.4,2.4"],
+  ["showroom-light-people-break", "scene=showroom&theme=light&ui=0&ppm=150&at=16.2,2.3"],
+];
+
 if (import.meta.main) {
   const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
-  const out = resolve(ROOT, process.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? "docs/design/shots");
+  const outArg = process.argv.find((a) => a.startsWith("--out="))?.slice(6);
+  const out = resolve(ROOT, outArg ?? "docs/design/shots");
+  const nordic = resolve(ROOT, outArg ?? "docs/design/nordic");
   mkdirSync(out, { recursive: true });
+  mkdirSync(nordic, { recursive: true });
   const server = serveLab(freePort());
   const chrome = await startChrome({ webgl: true });
   const errors: string[] = [];
   try {
     const { s, evaluate } = await newSession(chrome.cdp, errors);
     await s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-    for (const [name, query] of SHOTS) {
+    for (const [name, query] of [...SHOTS, ...SHOWROOM]) {
+      const dir = name.startsWith("showroom") ? nordic : out;
       if (only && !name.includes(only)) continue;
       const t0 = Date.now();
       errors.length = 0;
@@ -50,11 +70,14 @@ if (import.meta.main) {
       if (!ready) { console.error(`${name}: not ready`, errors.slice(0, 5)); continue; }
       await Bun.sleep(Number(process.env.SHOT_SETTLE ?? 1500));
       const png = Buffer.from((await s("Page.captureScreenshot", { format: "png" })).data, "base64");
-      for (const ext of ["png", "jpg"]) { const f = join(out, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }
-      let file = join(out, `${name}.png`), bytes: Buffer = png;
-      if (png.length > MAX_BYTES) {
-        bytes = Buffer.from((await s("Page.captureScreenshot", { format: "jpeg", quality: 85 })).data, "base64");
-        file = join(out, `${name}.jpg`);
+      for (const ext of ["png", "jpg"]) { const f = join(dir, `${name}.${ext}`); if (existsSync(f)) unlinkSync(f); }
+      let file = join(dir, `${name}.png`), bytes: Buffer = png;
+      if (png.length > MAX_BYTES || dir === nordic) {
+        for (const quality of [85, 78, 70, 60]) {
+          bytes = Buffer.from((await s("Page.captureScreenshot", { format: "jpeg", quality })).data, "base64");
+          if (bytes.length <= MAX_BYTES) break;
+        }
+        file = join(dir, `${name}.jpg`);
       }
       writeFileSync(file, bytes);
       const info = await evaluate("(() => { const r = world.renderer.info.render; return `${r.calls} draw calls, ${Math.round(r.triangles / 1000)}k triangles`; })()").catch(() => "");
