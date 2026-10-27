@@ -2,7 +2,7 @@
 
 // Status colours, shared with the UI (spec section 3).
 export const STATUS = {
-  needs_you: "#e5484d", blocked: "#e5484d", hq_turn: "#f5a524", waiting: "#3e63dd",
+  needs_you: "#e5484d", blocked: "#e5484d", hq_turn: "#f5a524", waiting: "#3e63dd", with_lead: "#d6883c",
   moving: "#30a46c", done: "#12a594", parked: "#8b8d98", gone: "#8b8d98", stale: "#8b8d98",
 };
 export const MODEL = { opus: "#8e4ec6", sonnet: "#12a594", haiku: "#f5a524", other: "#8b8d98" };
@@ -23,7 +23,7 @@ export function poseOf(status) {
   switch (status) {
     case "moving": return "work";
     case "needs_you": case "blocked": return "raise";
-    case "hq_turn": return "fold";
+    case "hq_turn": case "with_lead": return "fold";
     case "waiting": return "lean";
     case "done": return "mug";
     case "stale": return "sleep";
@@ -38,6 +38,7 @@ export function markerOf(status, blocking = 0) {
     case "needs_you": case "blocked": return { color: STATUS.needs_you, glyph: "!" };
     case "hq_turn": return { color: STATUS.hq_turn, glyph: "hq" };
     case "waiting": return { color: STATUS.waiting, glyph: "clock" };
+    case "with_lead": return { color: STATUS.with_lead, glyph: "clock" };
     default: return blocking > 0 ? { color: STATUS.needs_you, glyph: "!" } : null;
   }
 }

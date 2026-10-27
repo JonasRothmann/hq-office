@@ -36,6 +36,7 @@ export type InboxItem = {
   links: InboxLink[];
   holder: string | null; // the lead holding a question (null: the owner, or not a question)
   escalateAt: number | null; // when a question a lead holds goes to the owner on its own
+  tier?: "blocking" | "nonblocking"; // a question's tier, so a filter never hides a blocking one a lead holds
 };
 
 const FENCE = /^\s*```/;
@@ -142,6 +143,7 @@ export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): I
       links: linksOf([a.link, a.body], shelves, roomTitles),
       holder: a.holder ?? null,
       escalateAt: a.holder ? (a.escalate_at ?? null) : null,
+      tier: a.tier === "blocking" ? "blocking" : "nonblocking",
     })),
     ...updates.map((u): InboxItem => ({
       key: `update:${u.id}`,

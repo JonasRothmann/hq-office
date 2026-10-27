@@ -40,7 +40,7 @@ const GROUPS = [
 // under every filter: a filter saved in this browser must never hide one.
 export const shown = () => {
   const reading = readerKey(current);
-  return (S?.inbox ?? []).filter((i) => filter === "all" || i.group === "blocking" || (filter === "rooms" ? i.kind === "room" : i.needsYou || i.group === "leads" || i.key === reading));
+  return (S?.inbox ?? []).filter((i) => filter === "all" || i.group === "blocking" || i.tier === "blocking" || (filter === "rooms" ? i.kind === "room" : i.needsYou || i.group === "leads" || i.key === reading));
 };
 const PRIO = ["URGENT", "HIGH", "", "LOW"];
 
