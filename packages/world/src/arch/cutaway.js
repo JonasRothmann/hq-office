@@ -3,7 +3,7 @@
 // up: none. down: every edge. cutaway: an edge is cut when the tile behind it (seen from the camera) is indoors, so
 // the near walls of every room drop, or when a full wall there would hide indoor tiles within REACH behind it. With a
 // focus room, only walls in front of that room drop.
-import { WALL_H, tileKey, parseEdge } from "../model/grid.js";
+import { WALL_H, SIDES, tileKey, parseEdge, sideEdge } from "../model/grid.js";
 
 export const WALL_MODES = ["up", "cutaway", "down"];
 // How far behind itself a full wall hides the floor along the view (30° pitch, 45° azimuth): about 3.6 m.
@@ -12,6 +12,16 @@ const REACH = WALL_H / Math.tan(Math.PI / 6) / Math.SQRT2;
 // The signs of the camera's x and z offset from what it looks at, for a rotation (azimuth 45° + rot·90°).
 export function cameraSide(rot) {
   return [{ sx: 1, sz: 1 }, { sx: 1, sz: -1 }, { sx: -1, sz: -1 }, { sx: -1, sz: 1 }][((rot % 4) + 4) % 4];
+}
+
+// Whether a placed object hangs on a cut wall: it is tagged "wall" (a clock, a print, a radiator), so it hangs on the
+// wall behind it (on the side opposite its facing), and that wall is cut on any of its tiles. The view hides it then,
+// so nothing floats where a wall dropped to its kerb.
+/** @stability experimental */
+export function hangsOnCut(object, cut) {
+  if (!object.def?.tags?.includes("wall") || !cut.size) return false;
+  const back = SIDES[(SIDES.indexOf(object.facing) + 2) % 4];
+  return object.tiles.some(([x, z]) => cut.has(sideEdge(x, z, back)));
 }
 
 /** @stability stable  @returns {Set<string>} cut edge keys */

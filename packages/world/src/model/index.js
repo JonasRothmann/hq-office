@@ -14,7 +14,7 @@ export { createNav } from "../nav/nav.js";
 export { planAct, ACTS } from "../nav/act.js";
 export { createEcs } from "../sim/ecs.js";
 export { createSim } from "../sim/index.js";
-export { cutaway, WALL_MODES } from "../arch/cutaway.js";
+export { cutaway, hangsOnCut, WALL_MODES } from "../arch/cutaway.js";
 export { buildArchitecture, objectPrims, lotPrims } from "../arch/build.js";
 export { lintCoplanar, describePair, describePairs } from "../lint/coplanar.js";
 export { lintViews } from "../lint/views.js";

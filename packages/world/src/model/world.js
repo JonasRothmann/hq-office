@@ -15,6 +15,8 @@
  * @property {{ id?: string, type: string, at: Tile, facing?: Side }[]} objects    at: the footprint's north-west tile
  * @property {{ id: string, at: Tile, facing?: Side, look?: Record<string, string> }[]} characters
  * @property {{ who: string, do: "sit"|"use"|"walk", target?: string, slot?: string, to?: Tile }[]} acts
+ * @property {{ light: Record<string, string>, dark: Record<string, string> }} [palette]   the world's own colours for
+ *   any token (the engine's "cap" or "ground", or a pack's "<pack>/<token>"), over the packs' colours
  */
 
 /** @typedef {{ doc: WorldDoc, packs: import("../catalog/define.js").Pack[] }} World */
@@ -41,6 +43,7 @@ function normalise(d) {
     format: d.format ?? FORMAT, id: d.id ?? "world", packs: d.packs ?? [], lot: d.lot,
     floors: d.floors ?? [], walls: d.walls ?? [], openings: d.openings ?? [], rooms: d.rooms ?? [],
     objects, characters: (d.characters ?? []).map((c) => ({ facing: "s", ...c })), acts: d.acts ?? [],
+    ...(d.palette === undefined ? {} : { palette: d.palette }),
   };
 }
 

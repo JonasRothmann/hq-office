@@ -1,4 +1,4 @@
-// A matt charcoal glazed dome on a steel cord, with a warm bulb under its rim. Its 2×1 footprint centres it over one
+// A matt charcoal glazed dome on a dark cord, with a warm bulb under its rim. Its 2×1 footprint centres it over one
 // desk or table; it hangs, so it does not block.
 import { defineObject } from "@hq/world/model";
 import { ball } from "./look/shapes.js";
@@ -14,7 +14,7 @@ export default defineObject({
   anchors: { light: [0, 1.64, 0] },
   build(k) {
     k.cyl("rose", 0.05, 0.02, [0, 2.86, 0], "steel", { seg: 8 });
-    k.cyl("cord", 0.004, 2.87 - 1.96, [0, 1.96, 0], "steel", { seg: 3 });
+    k.cyl("cord", 0.009, 2.87 - 1.96, [0, 1.96, 0], "charcoal", { seg: 6 }); // thick enough to read from the camera
     k.cyl("fitting", 0.03, 0.04, [0, 1.92, 0], "steel", { seg: 8 });
     // the dome in three stacked frustums, wide at the rim and narrowing to the fitting
     k.cyl("dome", 0.2, 0.08, [0, RIM, 0], "charcoal", { top: 0.14, seg: 14 });

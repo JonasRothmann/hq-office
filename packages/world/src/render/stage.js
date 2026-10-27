@@ -13,6 +13,14 @@ const SKY = [
 ];
 const _a = new THREE.Color(), _b = new THREE.Color();
 
+// A lamp's light at full night: warm, no shadow, out by day. It shines down in a wide soft cone, so it makes a pool on
+// the floor and the desks under it, and a lamp in a corner does not burn a white patch on the wall beside it. The
+// square fall-off within REACH metres leaves the rest of a room to the night's low fill. INTENSITY keeps a desk 1 m
+// under a pendant short of white.
+const LAMP = { intensity: 4.2, reach: 6, decay: 2, angle: 1.05, penumbra: 0.9 };
+// How much of the day's fill (ambient and sky) is left at a light level: a curve, so dusk stays bright and night drops.
+const fill = (level) => level ** 1.35;
+
 export function parseTime(t) {
   if (typeof t === "number") return ((t % 24) + 24) % 24;
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(t));
@@ -89,20 +97,38 @@ export function createStage(canvas, { antialias = true } = {}) {
 
   function setShadowBox(b) { box = b; fitShadow(); }
 
+  // Lamps: one light per object with a light anchor, at `at` in world space, aimed straight down, lit by night only.
+  const lamps = new Set();
+  let night = 0, lampColor = "#ffe3ad";
+  function addLamp(at) {
+    const l = new THREE.SpotLight(lampColor, LAMP.intensity * night, LAMP.reach, LAMP.angle, LAMP.penumbra, LAMP.decay);
+    l.position.set(...at);
+    l.target.position.set(at[0], 0, at[2]);
+    scene.add(l, l.target);
+    l.updateMatrixWorld();
+    l.target.updateMatrixWorld();
+    lamps.add(l);
+    return l;
+  }
+  function removeLamp(l) { scene.remove(l, l.target); l.dispose(); lamps.delete(l); }
+
   function setTime(t, palette) {
     const s = skyAt(parseTime(t));
     sunDir = s.sun;
-    const night = 1 - s.level;
+    night = 1 - s.level;
+    const f = fill(s.level);
     sun.color.copy(s.color);
-    sun.intensity = 1.7 * s.level;
+    sun.intensity = 1.7 * s.level ** 1.3;
     sun.castShadow = true;
     sun.shadow.intensity = 0.55 + 0.25 * s.level;
     ambient.color.copy(s.color).lerp(new THREE.Color("#ffffff"), 0.4);
-    ambient.intensity = 0.55 + 0.75 * s.level;
+    ambient.intensity = 1.3 * f;
     hemi.color.set(palette?.sky ?? "#fff6e8").lerp(s.color, 0.5);
     hemi.groundColor.set("#b9a58a");
-    hemi.intensity = 0.4 + 0.8 * s.level;
+    hemi.intensity = 1.2 * f;
     scene.background = new THREE.Color(palette?.bg ?? "#dfe6ea");
+    lampColor = palette?.lamp ?? lampColor;
+    for (const l of lamps) { l.intensity = LAMP.intensity * night; l.color.set(lampColor); }
     fitShadow();
     return { night };
   }
@@ -112,5 +138,5 @@ export function createStage(canvas, { antialias = true } = {}) {
     renderer.setSize(bw, bh, false);
   }
 
-  return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };
+  return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, addLamp, removeLamp, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };
 }

@@ -1005,6 +1005,15 @@ step 4 has not started.
    - Cost: a 12-lane lot is about 2,200 primitives, 450 draw calls and 75k triangles. The bands make a wall four
      boxes instead of one, which makes the coplanar lint about a third slower. Step 5 brought the draw calls down
      (below).
+   - The polish pass, against the old renderer's shots. Engine: a pack's `overrides` and a doc's `palette`
+     recolour the engine's own tokens (the pack makes the wall tops smoked oak and the ground moss); lamps are warm
+     downlights and night keeps less fill, so rooms pool under their lamps; a piece tagged `wall` hides while its
+     wall is cut (`hangsOnCut`). Pack: the lit つくる sign, a clock, a corkboard, two prints and radiators, the long
+     dining table, a bike, a dog in its bed, a record player and a lounge chair; plants with leaf clusters; a rug
+     that shows on oak; cords that read. Each team room varies by index: a corkboard or a print between the windows,
+     a clock and a print on the side walls, and a signature (the bike, the dog or the reading chair). Halls get a
+     paper pendant every four tiles. Lights reach through walls (no point shadows), so a lamp by an outer wall
+     warms the ground outside.
 4. **The app adapter, behind a setting.** `src/client/office/adapter.js` keeps today's `api.js` contract on
    `world.anchor`, `project`, `attach` and `on`: the desk HUD chips, the subagent balls, picking and hover mapped
    back to lanes. On each state change it calls the generator and `world.apply(doc)`, which does nothing when the
@@ -1028,7 +1037,8 @@ step 4 has not started.
    without). The lint is faster too: the coplanar lint sweeps each plane's runs along one axis, and `lintViews` lints
    every distinct primitive of all views once. `test/client/office-plan.test.ts` went from 33 s (14 s CPU) to about 5 s
    CPU, one 24-lane lint from about 0.6 s to 0.2 s, and its 24 views from about 6 s to under 1 s. Per-room light at night
-   is not part of this step and is still open.
+   came with the polish pass (step 3): each lamp is its own warm downlight, outside the batches. A batched piece on a
+   cut wall hides the way a hovered one does: its instance shrinks to nothing, and hover never shows it.
 6. **The outside generator, last.** The city around the office becomes an app-side generator that adds ground
    objects around the lot, or a separate pack when a second world wants it.
 

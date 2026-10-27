@@ -6,6 +6,7 @@
  * @property {boolean} same        nothing changed
  * @property {boolean} lot         the lot's size, floors, walls, openings or room labels changed
  * @property {boolean} packs       the doc names other packs
+ * @property {boolean} palette     the doc's own colours changed
  * @property {{ added: string[], removed: string[], changed: string[] }} objects      changed: type, at or facing (an
  *   edit at run time also names objects whose height moved with a floor under them; this pure diff cannot see that)
  * @property {{ added: string[], removed: string[], changed: string[] }} characters   changed: look (a character's
@@ -19,13 +20,14 @@ const key = (v) => JSON.stringify(v);
 export function diffWorld(a, b) {
   const lot = key([a.lot, a.floors, a.walls, a.openings, a.rooms]) !== key([b.lot, b.floors, b.walls, b.openings, b.rooms]);
   const packs = key(a.packs) !== key(b.packs);
+  const palette = key(a.palette ?? null) !== key(b.palette ?? null);
   const objects = byId(a.objects, b.objects, (x, y) => key([x.type, x.at, x.facing]) === key([y.type, y.at, y.facing]));
   const characters = byId(a.characters, b.characters, (x, y) => key(x.look ?? {}) === key(y.look ?? {}));
   const had = new Map();
   for (const act of a.acts) had.set(key(act), (had.get(key(act)) ?? 0) + 1);
   const acts = b.acts.filter((act) => { const n = had.get(key(act)) ?? 0; if (n) had.set(key(act), n - 1); return !n; });
   const empty = (d) => !d.added.length && !d.removed.length && !d.changed.length;
-  return { same: !lot && !packs && empty(objects) && empty(characters) && !acts.length, lot, packs, objects, characters, acts };
+  return { same: !lot && !packs && !palette && empty(objects) && empty(characters) && !acts.length, lot, packs, palette, objects, characters, acts };
 }
 
 function byId(before, after, same) {

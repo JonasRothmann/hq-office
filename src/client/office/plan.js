@@ -53,6 +53,7 @@ export function officeDoc(lanes, prev = null, opts = {}) {
   }
   const lounge = layout.rooms.find((r) => r.kind === "break") ?? layout.rooms.find((r) => r.id === "hall");
   if (lounge.kind === "break") furnish(lounge, BREAK_AT.objects(...frameSize(lounge)));
+  for (const hall of layout.rooms.filter((r) => r.kind === "corridor")) doc.objects.push(...hallLights(hall, o));
 
   const statusOf = (lane) => (lane === hq ? opts.hqStatus ?? status.get(hq) ?? "moving" : status.get(lane));
   const spot = spotsFor(workers.filter((w) => rowOf(statusOf(w.lane)).place === "break"), freeTiles(lounge, doc, layout, o));
@@ -62,6 +63,18 @@ export function officeDoc(lanes, prev = null, opts = {}) {
     doc.acts.push(actFor(id, statusOf(w.lane), { chair: chairId(w.lane), beside: w.beside, spot: spot.get(w.lane) ?? w.beside }));
   }
   return { doc, layout };
+}
+
+// A paper pendant every four tiles down the middle of a hall (two tiles wide), so a hall is not dark at night. Each
+// keeps its place as the hall grows: its id is its tile, counted from the hall's start, so a longer hall only adds.
+function hallLights(hall, o) {
+  const along = hall.w >= hall.d, len = along ? hall.w : hall.d, out = [];
+  if ((along ? hall.d : hall.w) !== 2) return out;
+  for (let i = 1; i + 2 <= len; i += 4) {
+    const [x, z] = along ? [hall.x + i, hall.z] : [hall.x, hall.z + i];
+    out.push({ id: `hall-light:${hall.id}@${i}`, type: "japandi/pendant-washi", at: [x + o.x, z + o.z], facing: "s" });
+  }
+  return out;
 }
 
 // The layout's one-tile wall segments, merged into straight runs.
