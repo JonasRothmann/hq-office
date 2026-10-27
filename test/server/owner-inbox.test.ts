@@ -106,3 +106,33 @@ test("previews leave out code and markup; only this HUD's files and real address
   // A local path that is not a file of this HUD is not a card, a full stop is not part of a URL, an unknown room is a link.
   expect((await item(c.id)).links.map((l: any) => [l.url, l.kind])).toEqual([["https://example.com/a", "link"], ["http://127.0.0.1:9/#room/gone", "link"]]);
 });
+
+// /api/state builds the inbox from what it already loaded (S.open, S.updates, S.rooms, the listed rooms' shelves),
+// /api/owner-inbox loads it all on its own: the two must agree, item for item, after every kind of write.
+test("the inbox in /api/state is the inbox loaded on its own, after every kind of write", async () => {
+  const same = async () => {
+    const [s, own] = await Promise.all([state(), (await fetch(`${server.base}/api/owner-inbox`)).json()]);
+    expect(s.inbox).toEqual(own);
+    return s.inbox;
+  };
+  await post("/api/lanes", { name: "birch", machine: "local" });
+  await post("/api/rooms", { slug: "shelf-a", title: "Shelf A", owner: "birch" });
+  await post("/api/rooms/shelf-a/artifacts", { title: "Plan on the shelf", url: "https://example.com/plan-a", as: "birch" });
+  await same();
+  const q = await post("/api/asks", { lane: "birch", kind: "decision", title: "Which plan?", body: "See https://example.com/plan-a and [the room](/#room/shelf-a).", options: ["A", "B"], tier: "blocking" });
+  await post("/api/asks", { lane: "birch", kind: "action", title: "Rotate it", secrets: ["TOKEN"] });
+  const inbox = await same();
+  const item = inbox.find((i: any) => i.key === `ask:${q.id}`);
+  expect(item.links.map((l: any) => [l.kind, l.title, l.shelf?.slug ?? null])).toEqual([["link", "Plan on the shelf", "shelf-a"], ["room", "Shelf A", null]]);
+  // A second link to the same URL on the shelf: the newest one names it.
+  await post("/api/rooms/shelf-a/artifacts", { title: "Plan, revised", url: "https://example.com/plan-a", as: "birch" });
+  expect((await same()).find((i: any) => i.key === `ask:${q.id}`).links[0].title).toBe("Plan, revised");
+  await post("/api/updates", { lane: "birch", title: "On it", body: "Links https://example.com/plan-a" });
+  await post(`/api/asks/${q.id}/tier`, { priority: "urgent", by: "owner" });
+  await same();
+  await post(`/api/asks/${q.id}/answer`, { answer: "A" });
+  await post("/api/rooms/shelf-a/archive", {});
+  await same();
+  // Nothing written: the same again.
+  expect(await same()).toEqual(await same());
+});

@@ -3,6 +3,7 @@
 // S.rooms; an item holds what the stack shows and the links the reader shows as preview cards, built only from what
 // this server knows (a room's shelf, the rooms themselves), never by fetching a page.
 import { db } from "./db.ts";
+import { version } from "./push.ts";
 import { addStatePart } from "./state.ts";
 import { kindOf, roomsView } from "./rooms.ts";
 import type { Ask } from "./types.ts";
@@ -96,14 +97,29 @@ export function linksOf(texts: (string | null)[], shelves: Map<string, Shelf>, r
   return out;
 }
 
-export function ownerInbox(): InboxItem[] {
-  const asks = (db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY tier = 'blocking' DESC, priority, COALESCE(due, 9e15), created_at").all() as Ask[])
-    .map((a) => ({ ...a, options: a.options ? JSON.parse(a.options) : [], secrets: a.secrets ? JSON.parse(a.secrets) : [] }));
-  const updates = db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 40").all() as { id: number; at: number; lane: string | null; title: string; body: string | null; read_at: number | null }[];
-  const rooms = roomsView();
+type OpenAsk = Ask & { options: string[]; secrets: string[] };
+type Update = { id: number; at: number; lane: string | null; title: string; body: string | null; read_at: number | null };
+type RoomRow = ReturnType<typeof roomsView>[number];
+
+// The shelves of the listed rooms (never an archived room that is no longer listed), by URL; the newest link to a URL
+// wins. Kept until the next write: every write bumps the version.
+let shelfCache: { key: string; shelves: Map<string, Shelf> } | null = null;
+function shelvesOf(slugs: string[]) {
+  const key = `${version}:${slugs.join("\n")}`;
+  if (shelfCache?.key === key) return shelfCache.shelves;
   const shelves = new Map<string, Shelf>();
+  if (slugs.length) {
+    const rows = db.query(`SELECT a.url, a.title, a.by, a.at, a.slug, r.title AS room FROM room_artifacts a JOIN rooms r ON r.slug = a.slug WHERE a.slug IN (${slugs.map(() => "?").join(",")}) ORDER BY a.id`).all(...slugs) as Shelf[];
+    for (const s of rows) shelves.set(s.url, s);
+  }
+  shelfCache = { key, shelves };
+  return shelves;
+}
+
+// The inbox from the open asks, the updates and the rooms, as state() loads them.
+export function inboxOf(asks: OpenAsk[], updates: Update[], rooms: RoomRow[]): InboxItem[] {
+  const shelves = shelvesOf(rooms.map((r) => r.slug));
   const roomTitles = new Map(rooms.map((r) => [r.slug, r.title]));
-  for (const s of db.query("SELECT a.url, a.title, a.by, a.at, a.slug, r.title AS room FROM room_artifacts a JOIN rooms r ON r.slug = a.slug ORDER BY a.id").all() as Shelf[]) shelves.set(s.url, s);
   return [
     ...asks.map((a): InboxItem => ({
       key: `ask:${a.id}`,
@@ -159,4 +175,13 @@ export function ownerInbox(): InboxItem[] {
   ];
 }
 
-addStatePart("inbox", ownerInbox);
+// GET /api/owner-inbox: the same, loaded on its own.
+export function ownerInbox(): InboxItem[] {
+  const asks = (db.query("SELECT * FROM asks WHERE status = 'open' ORDER BY tier = 'blocking' DESC, priority, COALESCE(due, 9e15), created_at").all() as Ask[])
+    .map((a) => ({ ...a, options: a.options ? JSON.parse(a.options) : [], secrets: a.secrets ? JSON.parse(a.secrets) : [] }));
+  return inboxOf(asks, db.query("SELECT * FROM updates ORDER BY at DESC, id DESC LIMIT 40").all() as Update[], roomsView());
+}
+
+// In /api/state it is built from the parts state() has already loaded (rooms.ts adds S.rooms before this part), so a
+// state build runs no query of its own here, but the shelves after a write.
+addStatePart("inbox", (s) => inboxOf(s.open, s.updates, s.rooms ?? roomsView()));
