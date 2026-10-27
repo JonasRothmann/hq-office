@@ -467,7 +467,9 @@ and `ppm` (current pixels per metre). Rules:
 - `WebGLRenderer({ antialias: true })`: MSAA on the default framebuffer, `outputColorSpace` sRGB,
   `NeutralToneMapping` (keeps flat albedo hues), DPR capped at 2.
 - Light rig: hemisphere (sky/ground) + ambient + one directional sun with shadows. `setTime("hh:mm")` moves the sun
-  and blends its colour through day `#FFFFFF`, sunset `#D96D32`, dusk `#575757` and night `#3E5898`.
+  and blends its colour through day `#FFFFFF`, sunset `#D96D32`, dusk `#575757` and night `#3E5898`. Night keeps
+  less of the day's fill. Each object with a `light` anchor has its own warm spot light aimed down (the `lamp` token),
+  lit by night only and never batched.
 - Shadows: one 2048² map. The shadow camera is orthographic, fitted to the lot's bounds in light space, and its
   centre is snapped to whole shadow texels, so a sun that moves (time of day) or a lot that grows never makes the
   shadows swim. The map redraws only when a caster moves (`autoUpdate = false`, `needsUpdate` on change).
@@ -742,11 +744,11 @@ Costs are estimates for a 2020-era laptop GPU (Apple M1 or Intel Iris Xe) at 144
 | Anti-aliasing | MSAA 4× on the default framebuffer | ~free on tile-based Apple GPUs; 10-20 % fill on Iris Xe |
 | Resolution | DPR capped at 2 | ×4 pixels vs DPR 1; the main GPU cost of everything below |
 | Tone mapping | Neutral, exposure 1 | free (in the material shader) |
-| Lights | ambient + hemisphere + 1 directional | < 0.3 ms |
+| Lights | ambient + hemisphere + 1 directional; by night one warm spot per lamp, no shadow | < 0.3 ms by day |
 | Shadows | 2048² PCF, 5 taps, world-fixed rotation, lot-fitted, texel-snapped, redrawn only on change | ~0.5-1 ms per redraw; 5 taps per pixel otherwise |
 | Contact darkening | baked vertex shade at wall bases and under objects | free |
 | Materials | Lambert, vertex colours, ≤ 4 classes | one program each |
-| Draw calls | architecture 3-4; one per type per class (a batch of instances), one per character | HQ at 12 lanes 42 calls, 83 with a shadow redraw; 24 lanes 54 and 107 |
+| Draw calls | architecture 3-4; one per type per class (a batch of instances), one per character | HQ at 12 lanes 42 calls, 83 with a shadow redraw; 24 lanes 54 and 107. With the polish pass's pieces: 55 and 109; 65 and 129 |
 | Frame loop | render on change at display rate; nothing when still | 0 when idle |
 | Later, optional | half-resolution SAO or GTAO | 2-6 ms; has its own noise, so only with a world-fixed pattern |
 | Later, optional | edge outline (depth and normal) | ~1 ms |
@@ -922,6 +924,21 @@ triangles (limit 450k). The ms per frame the tool prints is not a real measureme
 
 A screenshot of the 12-lane office before and after differs in 10 pixels of 1,024,000 (day) and 5 (night). At 12 lanes
 the scene now has 23 meshes for objects, 13 for characters and 6 for architecture (before: 100, 143, 6).
+
+**Draw calls, after the polish pass** (merged onto step 5; same command): the Japandi pieces add object types, and
+each new type is one more batch, so one call per material in each pass. At 12 lanes the objects are 36 meshes
+instead of 23, and the calls 109 with a shadow redraw instead of 83 (13 more meshes, drawn twice).
+
+| Lanes | Objects | Characters | Calls with shadow redraw / without | Triangles with / without |
+| --- | --- | --- | --- | --- |
+| 4 | 36 | 5 | 69 / 35 | 45k / 22k |
+| 12 | 103 | 13 | 109 / 55 | 112k / 56k |
+| 24 | 165 | 25 | 129 / 65 | 185k / 93k |
+
+`--only idle` on the test house after the merge: still for 3 s, 0 renders; a walk and sit, 77 renders and 77 shadow
+redraws; still again, 1; an `attach()`, 1 render and 1 shadow redraw. Pieces on cut walls hide in batches too: in
+the 12-lane office 15 of its 25 wall pieces hide from the default view (17 turned half way round), a pick or hover
+there never names them, and a doc palette recolours the batches.
 
 **Tests**: `bun test packages/world docs/engine/compare test/client/modules.test.ts test/client/world-package.test.ts`
 gives 288 pass, 0 fail (phase 1: 157; phase 1.5: 225). The package has 212 tests (phase 1: 94; phase 1.5: 162).
