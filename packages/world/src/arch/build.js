@@ -16,7 +16,8 @@ const LAND_DROP = 0.03; // the land round the lot sits this much lower: the lot'
 // Bottoms are never seen (they stand on the ground or a slab), so they are not emitted: no hidden coplanar faces.
 const box = (part, size, at, color, extra = {}) => ({ shape: "box", part, size, at, m: IDENTITY, color, finish: "matte", omit: ["-y"], ...extra });
 
-// faces: per-face colour and pattern by the box's local face ("+x", "-x", "+y", "-y", "+z", "-z").
+// faces: per-face colour and pattern by the box's local face ("+x", "-x", "+y", "-y", "+z", "-z"). A wall finish's
+// bands cut its walls and posts into stretches, one box each (see banded).
 /** @stability stable */
 export function buildArchitecture(lot, catalog, cut = new Set()) {
   const prims = [];
@@ -45,21 +46,23 @@ export function buildArchitecture(lot, catalog, cut = new Set()) {
   // walls
   const heightOf = (k) => (cut.has(k) ? FLOOR_Y + KERB_H : FLOOR_Y + WALL_H);
   const posts = new Map(); // vertex → { h, faces }
-  const side = (x, z, wall) => { const f = finish(indoor(x, z) ? wall.finish : wall.outside); return { color: f.color, pattern: f.pattern }; };
+  const side = (x, z, wall) => finish(indoor(x, z) ? wall.finish : wall.outside);
   for (const [k, wall] of lot.walls) {
     const { axis, x, z } = parseEdge(k);
     const [[ax, az], [bx, bz]] = edgeTiles(k);
     const top = heightOf(k);
     const sa = side(ax, az, wall), sb = side(bx, bz, wall);
-    // the faces toward tile a (north or west) and toward tile b (south or east)
-    const faces = axis === "h" ? { "-z": sa, "+z": sb, "+y": { color: "cap" } } : { "-x": sa, "+x": sb, "+y": { color: "cap" } };
+    // the finishes toward tile a (north or west) and toward tile b (south or east)
+    const fins = axis === "h" ? { "-z": sa, "+z": sb } : { "-x": sa, "+x": sb };
     const owner = `wall:${k}`;
     // along: position along the edge from its start; span [a0, a1] along, [y0, y1] up
     const piece = (part, a0, a1, y0, y1) => {
       if (a1 - a0 < 1e-6 || y1 - y0 < 1e-6) return;
       const mid = (a0 + a1) / 2;
-      if (axis === "h") prims.push(box(part, [a1 - a0, y1 - y0, T], [x + mid, y0, z], "plaster", { owner, faces }));
-      else prims.push(box(part, [T, y1 - y0, a1 - a0], [x, y0, z + mid], "plaster", { owner, faces }));
+      banded(fins, y0, y1, (b0, b1, extra) => {
+        if (axis === "h") prims.push(box(part, [a1 - a0, b1 - b0, T], [x + mid, b0, z], "plaster", { owner, ...extra }));
+        else prims.push(box(part, [T, b1 - b0, a1 - a0], [x, b0, z + mid], "plaster", { owner, ...extra }));
+      });
     };
     const o = wall.opening;
     if (!o) piece("wall", HALF, 1 - HALF, 0, top);
@@ -87,14 +90,33 @@ export function buildArchitecture(lot, catalog, cut = new Set()) {
     const [vx, vz] = key.split(",").map(Number);
     // each face of a post looks at two tiles; it takes the interior finish if either is indoors
     const look = (tiles) => side(...(tiles.find(([x, z]) => indoor(x, z)) ?? tiles[0]), v.wall);
-    const faces = {
+    const fins = {
       "-x": look([[vx - 1, vz - 1], [vx - 1, vz]]), "+x": look([[vx, vz - 1], [vx, vz]]),
       "-z": look([[vx - 1, vz - 1], [vx, vz - 1]]), "+z": look([[vx - 1, vz], [vx, vz]]),
-      "+y": { color: "cap" },
     };
-    prims.push(box("post", [T, v.h, T], [vx, 0, vz], "plaster", { owner: `post:${key}`, faces }));
+    banded(fins, 0, v.h, (b0, b1, extra) => prims.push(box("post", [T, b1 - b0, T], [vx, b0, vz], "plaster", { owner: `post:${key}`, ...extra })));
   }
   return prims;
+}
+
+// The style a finish shows at height y: the band covering it (bands count up from the floor top), else its own.
+const styleAt = (f, y) => {
+  const b = f.bands?.find((b) => y < FLOOR_Y + b.to);
+  return b ? { color: b.color, pattern: b.pattern ?? "plain" } : { color: f.color, pattern: f.pattern };
+};
+
+// A wall piece or post from y0 to y1, cut at every band height of its side finishes (fins: face → finish) inside
+// that span. make(b0, b1, extra) emits one box per stretch, whose faces show the band covering it. Only the top
+// stretch has a top (the cap); the faces between stretches are left out, and the foot darkening counts from y0.
+function banded(fins, y0, y1, make) {
+  const cuts = new Set(Object.values(fins).flatMap((f) => (f.bands ?? []).map((b) => FLOOR_Y + b.to)));
+  const ys = [y0, ...[...cuts].filter((y) => y > y0 + 1e-6 && y < y1 - 1e-6).sort((a, b) => a - b), y1];
+  for (let i = 0; i + 1 < ys.length; i++) {
+    const mid = (ys[i] + ys[i + 1]) / 2, top = i + 2 === ys.length;
+    const faces = Object.fromEntries(Object.entries(fins).map(([face, f]) => [face, styleAt(f, mid)]));
+    if (top) faces["+y"] = { color: "cap" };
+    make(ys[i], ys[i + 1], { faces, ...(ys.length > 2 ? { base: y0 } : {}), ...(top ? {} : { omit: ["-y", "+y"] }) });
+  }
 }
 
 // A placed object's parts in world space.

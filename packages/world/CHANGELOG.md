@@ -4,6 +4,20 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ## [Unreleased]
 
+### Added
+
+- A wall finish may declare `bands`: `[{ to, color, pattern? }]` from the floor up, for a skirting, battens or a
+  rail under the plaster. `to` is metres above the floor top, each higher than the last and below `WALL_H`. Above
+  the last band the finish's own colour and pattern show. `buildArchitecture` cuts each wall piece and post at the
+  band heights of either side, so a stretch's face shows the band on its side; the faces between stretches are
+  left out and the cap stays on top. A cut wall shows the bands under `KERB_H`. This is new in the world format;
+  `api.txt` did not change.
+- The pattern `battens`: upright timber battens about 4 cm wide with dark gaps.
+- `checkPack` names a bad band (`finish.bands`: not a list, not ascending, out of range, no colour, or on a floor
+  finish), an unknown band colour (`color.token`) and an unknown band pattern (`finish.pattern`).
+- A primitive may carry `base`, the height its foot darkening counts from. The stretches of a cut wall carry the
+  wall's foot, so the darkening does not start again at each band.
+
 ### Changed
 
 - `lintCoplanar` skips two faces in one plane when their bounding boxes are apart, before it clips them. The
