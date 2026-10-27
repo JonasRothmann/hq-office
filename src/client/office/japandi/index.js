@@ -2,7 +2,7 @@
 // finishes, one file per piece, with the colours in look/palette.js for day and night. Original shapes, built from
 // boxes and cylinders. Append new objects at the end of both lists, one import per line.
 import { definePack } from "@hq/world/model";
-import { PALETTE } from "./look/palette.js";
+import { PALETTE, OVERRIDES } from "./look/palette.js";
 import oak from "./oak.js";
 import stone from "./stone.js";
 import terrazzo from "./terrazzo.js";
@@ -31,10 +31,21 @@ import shoji from "./shoji.js";
 import teaCorner from "./tea-corner.js";
 import workbench from "./workbench.js";
 import clock from "./clock.js";
+import sign from "./sign.js";
+import corkboard from "./corkboard.js";
+import printTall from "./print-tall.js";
+import printWide from "./print-wide.js";
+import radiator from "./radiator.js";
+import diningTable from "./dining-table.js";
+import bike from "./bike.js";
+import dogBed from "./dog-bed.js";
+import recordPlayer from "./record-player.js";
+import loungeChair from "./lounge-chair.js";
 
 export default definePack({
   id: "japandi",
   palette: PALETTE,
+  overrides: OVERRIDES,
   objects: [
     oak,
     stone,
@@ -64,5 +75,15 @@ export default definePack({
     teaCorner,
     workbench,
     clock,
+    sign,
+    corkboard,
+    printTall,
+    printWide,
+    radiator,
+    diningTable,
+    bike,
+    dogBed,
+    recordPlayer,
+    loungeChair,
   ],
 });
