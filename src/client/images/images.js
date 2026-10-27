@@ -280,7 +280,7 @@ async function showShelf(menu, slug) {
     const r = await (await fetch(`/api/rooms/${encodeURIComponent(slug)}`)).json();
     box._items = r.artifactList ?? [];
     box._room = r.title;
-    setHTML(box, `<button type="button" class="aback" data-shelf-back>‹ ${esc(r.title)}</button>${[...box._items].reverse().map((a) => `<button type="button" class="aitem" data-shelf-item="${a.id}">${a.kind === "file" ? FILE : a.kind === "image" ? PHOTO : LINK}<span>${esc(a.title)}</span><small>${esc(a.kind === "claude-artifact" ? "artifact" : a.kind)}</small></button>`).join("")}`);
+    setHTML(box, `<button type="button" class="aback" data-shelf-back>‹ ${esc(r.title)}</button>${[...box._items].reverse().map((a) => `<button type="button" class="aitem" data-shelf-item="${esc(a.id)}">${a.kind === "file" ? FILE : a.kind === "image" ? PHOTO : LINK}<span>${esc(a.title)}</span><small>${esc(a.kind === "claude-artifact" ? "artifact" : a.kind)}</small></button>`).join("")}`);
   } catch { setHTML(box, `<div class="none">The shelf did not load.</div>`); }
   place(menu, menu.closest(".attach").querySelector(".aplus"));
 }

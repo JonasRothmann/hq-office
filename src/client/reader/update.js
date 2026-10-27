@@ -52,7 +52,7 @@ function render() {
   setHTML(part("lcards"), linkCards(itemOf(`update:${u.id}`)?.links));
   // The owner's replies to it, oldest first, and whether HQ has each one.
   const mine = (S.notes ?? []).map((n) => ({ n, r: n.text.match(REF) })).filter(({ r }) => r && r[1] === "u" && Number(r[2]) === u.id).sort((a, b) => a.n.at - b.n.at);
-  setHTML(part("replies"), mine.length ? `<div class="k">YOUR REPLIES</div>${mine.map(({ n, r }) => `<article class="msg you" data-msg="n${n.id}"><div class="meta"><span class="who">YOU</span><span class="tag">${clock(n.at)}</span><span class="seen${n.acked_at ? " ok" : ""}">${n.acked_at ? "HQ HAS IT" : "NOT PICKED UP YET"}</span></div><div class="text md">${markdown(n.text.slice(r[0].length), true)}</div></article>`).join("")}` : "");
+  setHTML(part("replies"), mine.length ? `<div class="k">YOUR REPLIES</div>${mine.map(({ n, r }) => `<article class="msg you" data-msg="n${esc(n.id)}"><div class="meta"><span class="who">YOU</span><span class="tag">${clock(n.at)}</span><span class="seen${n.acked_at ? " ok" : ""}">${n.acked_at ? "HQ HAS IT" : "NOT PICKED UP YET"}</span></div><div class="text md">${markdown(n.text.slice(r[0].length), true)}</div></article>`).join("")}` : "");
   setHTML(part("ithread"), threadHtml("update", u.id));
   setHTML(part("tobar"), u.lane ? toHtml("update", u.id, u.lane) : "");
   if (compFor !== u.id) {

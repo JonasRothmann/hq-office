@@ -6,7 +6,7 @@ export function linkify(s) {
   return esc(s)
     .replace(/\[image: ([^\]\s]+)\]/g, (m, p) => { const f = p.split("/").pop(); return `<a href="/uploads/${f}" target="_blank" rel="noopener"><img class="thumb" src="/uploads/${f}" alt=""></a>`; })
     .replace(/https?:\/\/[^\s<)]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u.length > 60 ? u.slice(0, 57) + "…" : u}</a>`)
-    .replace(/(^|[\s(])#(\d{4,5})\b/g, (m, p, n) => (CONFIG.githubRepo ? `${p}<a href="https://github.com/${CONFIG.githubRepo}/pull/${n}" target="_blank" rel="noopener">#${n}</a>` : m));
+    .replace(/(^|[\s(])#(\d{4,5})\b/g, (m, p, n) => (CONFIG.githubRepo ? `${p}<a href="https://github.com/${esc(CONFIG.githubRepo)}/pull/${n}" target="_blank" rel="noopener">#${n}</a>` : m));
 }
 // Long messages show their first part and a MORE button. Which ones are open is remembered by key, so re-renders keep it.
 const LONG = 280;

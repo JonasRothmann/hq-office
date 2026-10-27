@@ -18,7 +18,7 @@ export function renderSecrets() {
     </div>`).join("");
   const rows = liveSecrets().map((x) => `<div class="sitem" data-secret-row="${esc(x.name)}">
       <b>${esc(x.name)}</b><span class="tag">${esc(x.by.toUpperCase())}</span><span class="sk">SET ${clock(x.setAt)}</span>
-      <span class="left" data-exp="${x.expiresAt}"></span>
+      <span class="left" data-exp="${esc(x.expiresAt)}"></span>
       <button class="btn-s" type="button" data-secret-rm="${esc(x.name)}">DELETE</button>
     </div>`).join("");
   setHTML($("secretList"), lost + rows || `<div class="hint">No secrets. Name one, give it minutes and paste the value. HQ reads it with <code>hud secret get NAME | &lt;command&gt;</code> until it expires. A restart of the plugin hands them over; a crash loses them, and they show here as lost.</div>`);

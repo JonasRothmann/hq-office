@@ -22,7 +22,7 @@ function commentsHtml(id, list) {
   const older = list.length - SHOWN;
   const all = opened.has(id);
   const shown = all || older <= 0 ? list : list.slice(-SHOWN);
-  const more = older > 0 ? `<button class="lmore" type="button" data-ledger-more="${id}">${all ? "LESS" : `MORE (${older})`}</button>` : "";
+  const more = older > 0 ? `<button class="lmore" type="button" data-ledger-more="${esc(id)}">${all ? "LESS" : `MORE (${older})`}</button>` : "";
   return `<div class="lcom">${more}${shown.map((c) => `<div class="lc"><span class="lat">${hhmm(c.at)}</span>${linkify(c.text)}</div>`).join("")}</div>`;
 }
 
