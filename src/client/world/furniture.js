@@ -1,5 +1,5 @@
-// Furniture from primitives: the office (desk, chair, monitor, lamp, lantern, shoji, rug, plants, shelf, poster), the
-// HQ suite, the break area and the courts. Everything is in a room's own frame: back wall at z = 0, door side at z = d.
+// Furniture from primitives: a team room's desks (desk, chair, monitor, lamp) and its own things (lantern, shoji, rug,
+// plants, shelves, poster), the HQ suite, the break area and the courts. Everything is in a room's own frame: back wall at z = 0, door side at z = d.
 import { THREE, Kit, roomMaterial } from "./kit.js";
 import { toWorld } from "./plan.js";
 import { rug as rugTexture, poster as posterTexture, screen as screenTexture, glow } from "./textures.js";
@@ -8,16 +8,15 @@ import { hash, pick } from "./look.js";
 export const DESK_H = 0.57;
 export const SEAT_H = 0.35;
 
-// The parts of an office the world changes at run time, and the points people use.
-//   desk      local centre of the desk           seat    where a seated worker's hips go, facing the desk (-z)
-//   stand     where a waiting worker stands       hud     where the desk HUD hangs
-export const OFFICE_SPOTS = {
-  desk: new THREE.Vector3(2, 0, 0.5),
-  seat: new THREE.Vector3(2, 0, 1.12),
-  stand: new THREE.Vector3(3.35, 0, 1.25),
-  hud: new THREE.Vector3(2, 3.2, 0.7),
-  poster: new THREE.Vector3(3.4, 1.22, 0.08),
+// The points of a desk in its own frame (the desk's centre on the floor at the origin, its worker on the +z side
+// facing -z):   seat: a seated worker's hips   hud: the desk HUD's anchor. A waiting worker stands beside the desk on
+// the island's outer side (deskStand).
+export const DESK_SPOTS = {
+  seat: new THREE.Vector3(0, 0, 0.62),
+  hud: new THREE.Vector3(0, 2.45, 0.55),
 };
+export const deskStand = (out) => new THREE.Vector3(out * 1.0, 0, 0.42);
+const DESK_W = 1.4, DESK_D = 0.72;
 
 function frameOf(room) {
   const w = toWorld(room, 0, 0);
@@ -171,76 +170,90 @@ function pool(L) {
   return m;
 }
 
-// One office. Returns its group (placed in the world) and the parts the world drives.
-export function buildOffice(room, L, light) {
-  const group = frameOf(room);
-  group.name = `office:${room.lane}`;
+// One desk of a team room, in its own frame: desk, chair, monitor, lamp and a few things of its lane's own. out: the
+// side of the island that faces the room's wall (+1 or -1 in the desk's x), where the lamp stands. Returns the group
+// (the world places it) and the parts the world drives.
+export function buildDesk(lane, out, L, light) {
+  const group = new THREE.Group();
+  group.name = `desk:${lane}`;
   const kit = new Kit();
-  const seed = hash(room.lane);
-  desk(kit, L, 2, 0.5);
-  monitor(kit, L, 2, 0.32);
-  deskLamp(kit, L, 1.32, 0.3);
-  chair(kit, L, 2, 1.27, 0);
-  kit.box(0.22, 0.03, 0.3, "#f4f1ea", 1.55, DESK_H, 0.62, { ry: 0.2 }); // a notebook
+  const seed = hash(lane);
+  desk(kit, L, 0, 0, DESK_W, DESK_D);
+  // a low oak screen along the shared edge, between the facing pair
+  kit.box(DESK_W - 0.08, 0.2, 0.025, L.woodEdge, 0, DESK_H, -DESK_D / 2 + 0.015);
+  monitor(kit, L, 0, -0.17);
+  const lampX = out * 0.52;
+  deskLamp(kit, L, lampX, -0.2);
+  chair(kit, L, 0, 0.77, 0);
+  const mug = pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3);
   const extra = seed % 3;
   if (extra === 0) {
-    // a laptop on a stand, open toward the chair
-    kit.box(0.08, 0.1, 0.18, L.steel, 2.62, DESK_H, 0.4, { rx: 0 });
-    kit.box(0.32, 0.015, 0.22, "#b9bcc2", 2.62, DESK_H + 0.1, 0.4, { rx: -0.25 });
-    kit.box(0.32, 0.2, 0.012, "#b9bcc2", 2.62, DESK_H + 0.12, 0.29, { rx: 0.2 });
-    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 1.2, DESK_H, 0.62, { seg: 8 });
+    kit.box(0.22, 0.03, 0.3, "#f4f1ea", -lampX * 0.95, DESK_H, 0.1, { ry: 0.2 }); // a notebook
   } else if (extra === 1) {
-    // a second screen, turned in
-    kit.box(0.16, 0.012, 0.12, L.steel, 2.6, DESK_H, 0.36);
-    kit.box(0.03, 0.14, 0.03, L.steel, 2.6, DESK_H, 0.34);
-    kit.rbox(0.46, 0.3, 0.03, L.screenFrame, 2.6, DESK_H + 0.12, 0.36, 0.008, { ry: -0.45 });
-    kit.box(0.42, 0.26, 0.005, "#30384a", 2.6 - 0.007, DESK_H + 0.14, 0.38, { ry: -0.45 });
-    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 1.2, DESK_H, 0.62, { seg: 8 });
+    // a laptop beside the screen, open toward the chair
+    kit.box(0.3, 0.015, 0.2, "#b9bcc2", -lampX, DESK_H, 0.06);
+    kit.box(0.3, 0.19, 0.012, "#b9bcc2", -lampX, DESK_H + 0.01, -0.04, { rx: -0.25 });
   } else {
     // headphones and a small plant
-    kit.box(0.16, 0.05, 0.05, L.steel, 2.6, DESK_H, 0.6, { ry: 0.3 });
-    kit.cyl(0.05, 0.07, L.plant.pot, 2.62, DESK_H, 0.3, { seg: 8 });
-    kit.sphere(0.07, L.plant.leaf, 2.62, DESK_H + 0.12, 0.3, { sy: 0.8 });
-    kit.cyl(0.04, 0.09, pick(["#f4f1ea", "#c8553d", "#2f3a33", "#e2b867"], seed, 3), 2.55, DESK_H, 0.42, { seg: 8 });
+    kit.box(0.16, 0.05, 0.05, L.steel, -lampX * 0.9, DESK_H, 0.16, { ry: 0.3 });
+    kit.cyl(0.05, 0.07, L.plant.pot, -lampX * 1.05, DESK_H, -0.2, { seg: 8 });
+    kit.sphere(0.07, L.plant.leaf, -lampX * 1.05, DESK_H + 0.12, -0.2, { sy: 0.8 });
   }
-  plant(kit, L, 4.55, 0.48, true, seed % 7);
-  shoji(kit, L, 0.3, 0.75, Math.PI / 2);
-  shelf(kit, L, 0.27, 2.35, 1.2, Math.PI / 2);
-  plant(kit, L, 0.35, 3.45, false, seed % 5);
-  const lx = 4.5, lz = 3.35;
-  lantern(kit, L, lx, lz);
-  const stat = kit.mesh(roomMaterial({ room: light }));
-  group.add(stat);
+  kit.cyl(0.04, 0.09, mug, lampX * 0.75, DESK_H, 0.18, { seg: 8 });
+  group.add(kit.mesh(roomMaterial({ room: light })));
 
-  const rug = rugMesh(L, 2.3, 1.7, light);
-  rug.position.set(2, 0.006, 1.6);
-  group.add(rug);
-
-  const screenGeo = new THREE.PlaneGeometry(0.58, 0.34);
-  const screen = new THREE.Mesh(screenGeo, new THREE.MeshBasicMaterial({ map: screenTexture("off", null) }));
-  screen.position.set(2, DESK_H + 0.12 + 0.2, 0.32 + 0.0185);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.34), new THREE.MeshBasicMaterial({ map: screenTexture("off", null) }));
+  screen.position.set(0, DESK_H + 0.12 + 0.2, -0.17 + 0.0185);
   group.add(screen);
-
-  const shade = lampShadeMesh(1.32, 0.3);
+  const shade = lampShadeMesh(lampX, -0.2);
   group.add(shade);
+  const lightPool = pool(L);
+  lightPool.scale.set(0.5, 1, 0.55);
+  lightPool.position.set(0, 0.012, 0.35);
+  group.add(lightPool);
+  return { group, screen, shade, pool: lightPool, seed, stand: deskStand(out) };
+}
+
+// A team room's own things, once per room, in its frame (back wall at z = 0, door at the front right): a tatami rug
+// under the desk island, a low shelf under the poster on the back wall, a shoji screen and a shelf on the west wall,
+// plants in three corners, a paper lantern by the door. Its desks are built apart (buildDesk).
+export function buildTeamRoom(room, L, light) {
+  const group = frameOf(room);
+  group.name = room.id;
+  const kit = new Kit();
+  const seed = hash(`${room.id}:${room.team ?? ""}`);
+  const { w, d } = localSize(room);
+  shelf(kit, L, w / 2, 0.24, 1.6, 0, true);
+  plant(kit, L, w - 0.45, 0.45, true, seed % 7);
+  plant(kit, L, 0.45, 0.45, true, (seed >> 3) % 7);
+  shoji(kit, L, 0.3, 2.3, Math.PI / 2);
+  shelf(kit, L, 0.25, 3.7, 1.2, Math.PI / 2, true);
+  plant(kit, L, 0.45, d - 0.45, false, seed % 5);
+  const lx = w - 0.45, lz = d - 0.5;
+  lantern(kit, L, lx, lz);
+  group.add(kit.mesh(roomMaterial({ room: light })));
+
+  const rug = rugMesh(L, 3.9, 2.9, light);
+  rug.position.set(w / 2, 0.006, 2.5);
+  group.add(rug);
   const glowM = lanternGlowMesh(L, lx, lz);
   group.add(glowM);
 
-  const wallPoster = posterMesh(room.index * 3 + 1);
-  wallPoster.position.copy(OFFICE_SPOTS.poster);
+  const wallPoster = posterMesh(room.index * 3 + 1, 0.7, 0.92);
+  wallPoster.position.set(w / 2, 1.0, 0.08);
   group.add(wallPoster);
-  // when the back wall is cut, the poster leans on the floor against the kerb
-  const leanPoster = posterMesh(room.index * 3 + 1, 0.48, 0.66);
-  leanPoster.position.set(3.45, 0, 0.16);
-  leanPoster.rotation.x = -0.22;
+  // when the back wall is cut, a smaller print leans on the shelf instead
+  const leanPoster = posterMesh(room.index * 3 + 1, 0.4, 0.54);
+  leanPoster.position.set(w / 2 + 0.3, 0.62, 0.14);
+  leanPoster.rotation.x = -0.2;
   leanPoster.visible = false;
   group.add(leanPoster);
 
   const lightPool = pool(L);
-  lightPool.position.x = 2; lightPool.position.z = 1.3;
+  lightPool.scale.set(0.6, 1, 0.6);
+  lightPool.position.set(lx - 0.4, 0.012, lz - 0.4);
   group.add(lightPool);
-
-  return { group, stat, screen, shade, lantern: glowM, wallPoster, leanPoster, pool: lightPool, seed };
+  return { group, lantern: glowM, wallPoster, leanPoster, pool: lightPool };
 }
 
 // The HQ suite: HQ's desk, the owner's desk, a low table on the tatami, a board, plants.

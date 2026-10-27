@@ -39,7 +39,7 @@ beforeAll(async () => {
   await page.s("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
   await page.s("Page.addScriptToEvaluateOnNewDocument", { source: FREEZE });
   await page.s("Page.navigate", { url: `${server.base}/#t=${DAY}` });
-  for (let i = 0; i < 600 && !(await page.evaluate("!!window.__hq && __hq.ready() && window.__world?.offices?.length === 4").catch(() => false)); i++) await Bun.sleep(100);
+  for (let i = 0; i < 600 && !(await page.evaluate("!!window.__hq && __hq.ready() && window.__world?.desks?.length === 4").catch(() => false)); i++) await Bun.sleep(100);
   await page.evaluate("document.fonts.ready.then(() => true)");
   await page.evaluate(`__hq.advance(20, ${STEP})`); // the first frames: state, the camera settling
 }, 120_000);

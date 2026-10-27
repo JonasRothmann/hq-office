@@ -41,12 +41,13 @@ function capBox(kit, w, y, hex) {
   else kit.box(T + 0.03, 0.035, len, hex, w.x, y, w.z + 0.5);
 }
 
-// The office back-wall tile that gets a window (local x 3..4), when that wall faces outdoors.
+// The back-wall tiles that get a window (a team room: local x 1..2 and 5..6, either side of the poster), when that wall
+// faces outdoors.
 function windowKeys(p) {
   const keys = new Set();
   for (const r of p.rooms) {
-    if (r.kind !== "office" && r.kind !== "hq" && r.kind !== "break") continue;
-    const spots = r.kind === "office" ? [4.5] : r.kind === "hq" ? [1.5, 5.5] : [1.5, 3.5];
+    if (r.kind !== "team" && r.kind !== "hq" && r.kind !== "break") continue;
+    const spots = r.kind === "team" ? [1.5, 5.5] : r.kind === "hq" ? [1.5, 5.5] : [1.5, 3.5];
     for (const lx of spots) {
       const p0 = toWorld(r, lx, 0);
       const back = r.back ?? "n";
@@ -100,7 +101,7 @@ export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   group.add(slab.mesh(keep(roomMaterial({ room: outdoor })), { cast: false }));
   for (const r of p.rooms) {
     if (r.kind === "court") continue;
-    const spec = L.floor[r.kind] ?? L.floor.corridor;
+    const spec = L.floor[r.kind === "team" ? "office" : r.kind] ?? L.floor.corridor;
     const kit = new Kit();
     kit.plane(r.w, r.d, "#ffffff", r.x + r.w / 2, 0.001, r.z + r.d / 2);
     const mesh = kit.mesh(keep(roomMaterial({ map: surface(spec), room: lightOf(r.id) })), { uv: true, cast: false });

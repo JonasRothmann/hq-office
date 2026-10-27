@@ -50,7 +50,7 @@ async function shoot(n: number, only?: string) {
       await s("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
       await s("Page.navigate", { url: "about:blank" });
       await s("Page.navigate", { url: `${server.base}/` });
-      await until(`window.__world?.offices?.length === ${n} && document.querySelectorAll(".ask").length >= 2 && document.fonts.status === "loaded"`);
+      await until(`window.__world?.desks?.length === ${n} && document.querySelectorAll(".ask").length >= 2 && document.fonts.status === "loaded"`);
       // a few seconds for the camera to settle and the frames to come
       await until(`window.__world.inspect().frames > 20`);
       await Bun.sleep(2500);

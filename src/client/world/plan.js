@@ -1,24 +1,40 @@
-// The office plan, pure (no three.js): lanes in; rooms, walls, doors and the growth stage out, with stable places.
+// The office plan, pure (no three.js): lanes in; team rooms of up to four desks, walls, doors and the growth stage out,
+// with stable places.
 //
 // Units are metres and one tile is one metre. x runs east, z runs south; a room is a rect of whole tiles.
-// Stages (spec section 5): 1 studio (1-3 lanes), 2 floor (4-8), 3 wings (9-16), 4 campus (17+).
+// A team (a top-level lane and everyone under it in the lane tree) shares a room; a team of more than four opens
+// another room next to its first. Lanes with no tree fill rooms of four in the order they appear.
+// Stages (spec section 5), by team rooms: 1 studio (1 room), 2 floor (2-4), 3 wings (5-8), 4 campus (9+).
 
-export const OFFICE = { w: 5, d: 4 };
+export const ROOM = { w: 7, d: 5 };
+export const SEATS = 4;
 export const SUITE = { w: 7, d: 5 };
+export const BREAK_W = 5;
 export const CORRIDOR = 2;
 export const COURT = 4;
-export const WING_MAX = 5;
+export const WING_MAX = 4;
 export const WALL_H = 2.95;
 export const KERB_H = 0.35;
 export const STAGES = ["", "studio", "floor", "wings", "campus"];
 
-const INDOOR = new Set(["office", "hq", "corridor", "break"]);
+// The four desks of a team room in its own frame (back wall at z = 0): two facing pairs, an island in the middle.
+// x, z: the desk's centre; ry: the desk's turn (at 0 its worker sits on the +z side and faces -z, toward the back
+// wall); out: which side of the island (in the desk's own x) is the room's wall, where its worker stands to wave.
+// The back pair fills first: those workers face the door, and the camera at the default view.
+export const DESKS = [
+  { x: 2.8, z: 2.14, ry: Math.PI, out: 1 },
+  { x: 4.2, z: 2.14, ry: Math.PI, out: -1 },
+  { x: 2.8, z: 2.86, ry: 0, out: -1 },
+  { x: 4.2, z: 2.86, ry: 0, out: 1 },
+];
+
+const INDOOR = new Set(["team", "hq", "corridor", "break"]);
 // Rooms with something in them: a wall that would hide one of these is cut. A corridor alone does not cut a wall.
-const CONTENT = new Set(["office", "hq", "break"]);
+const CONTENT = new Set(["team", "hq", "break"]);
 const OPEN = (a, b) => (a.kind === "corridor" || a.kind === "break") && (b.kind === "corridor" || b.kind === "break");
 
-export function stageFor(n) {
-  return n <= 3 ? 1 : n <= 8 ? 2 : n <= 16 ? 3 : 4;
+export function stageFor(rooms) {
+  return rooms <= 1 ? 1 : rooms <= 4 ? 2 : rooms <= 8 ? 3 : 4;
 }
 
 // A lane's team: its top-level ancestor among the lanes (a lane with no parent, or whose parent is HQ, is its own team).
@@ -32,90 +48,121 @@ export function teamOf(name, byName, hq = "hq") {
   return name;
 }
 
-// The order of offices. Within one stage it only grows: a lane keeps its slot, a removed lane leaves a vacant slot,
-// a new lane is appended. A stage change starts over from the live lanes, grouped by team.
-function slotsFor(live, byName, stage, prev, hq) {
-  const team = (n) => teamOf(n, byName, hq);
-  if (prev && prev.stage === stage) {
-    const liveSet = new Set(live.map((l) => l.name));
-    const slots = prev.slots.map((s) => ({ lane: s.lane, team: liveSet.has(s.lane) ? team(s.lane) : s.team, vacant: !liveSet.has(s.lane) }));
-    const known = new Set(slots.map((s) => s.lane));
-    for (const l of live) if (!known.has(l.name)) slots.push({ lane: l.name, team: team(l.name), vacant: false });
-    // a lane that left and came back takes its old slot again
-    return slots;
-  }
-  const teams = [];
-  const byTeam = new Map();
+// Each live lane's team key: its team's name when the team has two lanes or more, else null (a lane on its own, which
+// shares a room of four with the other lanes on their own).
+function teamKeys(live, byName, hq) {
+  const team = new Map(live.map((l) => [l.name, teamOf(l.name, byName, hq)]));
+  const size = new Map();
+  for (const t of team.values()) size.set(t, (size.get(t) ?? 0) + 1);
+  return new Map([...team].map(([lane, t]) => [lane, size.get(t) > 1 ? t : null]));
+}
+
+// The seating from scratch: teams in the order their first lane appeared, each in rooms of four; the lanes on their own
+// fill shared rooms of four, in the order they appear. A seating is [{ team, seats: [{ lane, vacant }] }].
+function seatFresh(live, keys) {
+  const groups = new Map();
   for (const l of live) {
-    const t = team(l.name);
-    if (!byTeam.has(t)) { byTeam.set(t, []); teams.push(t); }
-    byTeam.get(t).push(l.name);
+    const k = keys.get(l.name);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(l.name);
   }
-  return teams.flatMap((t) => byTeam.get(t).map((lane) => ({ lane, team: t, vacant: false })));
+  const rooms = [];
+  for (const [team, names] of groups) {
+    for (let i = 0; i < names.length; i += SEATS) rooms.push({ team, seats: names.slice(i, i + SEATS).map((lane) => ({ lane, vacant: false })) });
+  }
+  return rooms;
+}
+
+// The seating after the last one: every lane keeps its desk; a lane that left leaves its desk empty; a new lane takes
+// a free desk in a room where its team sits, else in a room opened for its team (or for lanes on their own), else an
+// empty room, else a new room at the end. A lane that comes back takes its old desk again.
+function seatAfter(prev, live, keys, team) {
+  const liveSet = new Set(live.map((l) => l.name));
+  const rooms = prev.map((r) => ({ team: r.team, seats: r.seats.map((s) => ({ lane: s.lane, vacant: !liveSet.has(s.lane) })) }));
+  const seated = new Map();
+  rooms.forEach((r, i) => r.seats.forEach((s) => seated.set(s.lane, i)));
+  const freeSeat = (r) => r.seats.length < SEATS || r.seats.some((s) => s.vacant);
+  const sit = (r, lane) => {
+    const i = r.seats.findIndex((s) => s.vacant);
+    if (i >= 0) r.seats[i] = { lane, vacant: false };
+    else r.seats.push({ lane, vacant: false });
+  };
+  for (const l of live) {
+    const back = seated.get(l.name);
+    if (back !== undefined) {
+      const s = rooms[back].seats.find((s) => s.lane === l.name);
+      if (s) { s.vacant = false; continue; }
+    }
+    const k = keys.get(l.name), t = team.get(l.name);
+    const room = rooms.find((r) => freeSeat(r) && r.seats.some((s) => !s.vacant && team.get(s.lane) === t))
+      ?? rooms.find((r) => freeSeat(r) && r.team === k)
+      ?? rooms.find((r) => r.seats.every((s) => s.vacant));
+    if (room) {
+      if (room.seats.every((s) => s.vacant)) { room.team = k; room.seats = []; }
+      sit(room, l.name);
+      seated.set(l.name, rooms.indexOf(room));
+    } else {
+      rooms.push({ team: k, seats: [{ lane: l.name, vacant: false }] });
+      seated.set(l.name, rooms.length - 1);
+    }
+  }
+  return rooms;
 }
 
 const rect = (id, kind, x, z, w, d, extra = {}) => ({ id, kind, x, z, w, d, ...extra });
 
-// An office whose back wall is on side `back` ("n" or "s"); its door is on the opposite side.
-const office = (slot, i, x, z, back) => rect(`office:${slot.lane}`, "office", x, z, OFFICE.w, OFFICE.d, {
-  lane: slot.lane, team: slot.team, vacant: slot.vacant, index: i, back,
-  door: back === "n" ? { side: "s", at: 3, width: 1 } : { side: "n", at: 1, width: 1 },
+// A team room whose back wall is on side `back` ("n" or "s"); its door is on the opposite side, right of the island.
+const teamRoom = (seating, i, x, z, back) => rect(`room:${i}`, "team", x, z, ROOM.w, ROOM.d, {
+  team: seating.team, index: i, back,
+  seats: seating.seats.map((s) => ({ ...s })),
+  lanes: seating.seats.filter((s) => !s.vacant).map((s) => s.lane),
+  door: back === "n" ? { side: "s", at: 5, width: 1 } : { side: "n", at: 1, width: 1 },
 });
 
-// Wings: one wing per team, split at WING_MAX, numbered in the order they were opened (so a new wing never moves an
-// older one).
-function wingsOf(slots) {
-  const wings = [];
-  const open = new Map();
-  slots.forEach((s, i) => {
-    let w = open.get(s.team);
-    if (!w || w.slots.length >= WING_MAX) { w = { team: s.team, slots: [] }; wings.push(w); open.set(s.team, w); }
-    w.slots.push({ slot: s, i });
-  });
-  return wings;
-}
-
-function layout(stage, slots) {
+function layout(stage, seating) {
   const rooms = [];
-  const n = slots.length;
+  const n = seating.length;
   if (stage === 1) {
-    const len = Math.max(n * OFFICE.w, 3);
-    rooms.push(rect("hq", "hq", -SUITE.w, 0, SUITE.w, SUITE.d, { back: "n", door: { side: "e", at: 4, width: 1 } }));
-    rooms.push(rect("hall", "corridor", 0, OFFICE.d, len, CORRIDOR));
-    slots.forEach((s, i) => rooms.push(office(s, i, i * OFFICE.w, 0, "n")));
+    // the HQ suite and one team room side by side, a hall along their fronts
+    rooms.push(rect("hq", "hq", -SUITE.w, 0, SUITE.w, SUITE.d, { back: "n", door: { side: "s", at: 5, width: 1 } }));
+    rooms.push(rect("hall", "corridor", -SUITE.w, ROOM.d, SUITE.w + ROOM.w, CORRIDOR));
+    seating.forEach((s, i) => rooms.push(teamRoom(s, i, i * ROOM.w, 0, "n")));
   } else if (stage === 2) {
+    // a corridor with team rooms on both sides, the suite at its west end, the break area at its east end
     const cols = Math.ceil(n / 2);
-    rooms.push(rect("hq", "hq", -SUITE.w, 2, SUITE.w, SUITE.d, { back: "n", door: { side: "e", at: 2, width: 2 } }));
-    rooms.push(rect("hall", "corridor", 0, OFFICE.d, cols * OFFICE.w, CORRIDOR));
-    rooms.push(rect("break", "break", cols * OFFICE.w, 0, 5, OFFICE.d * 2 + CORRIDOR, { back: "n" }));
-    slots.forEach((s, i) => {
+    rooms.push(rect("hq", "hq", -SUITE.w, ROOM.d + CORRIDOR - SUITE.d, SUITE.w, SUITE.d, { back: "n", door: { side: "e", at: SUITE.d - CORRIDOR, width: CORRIDOR } }));
+    rooms.push(rect("hall", "corridor", 0, ROOM.d, cols * ROOM.w, CORRIDOR));
+    rooms.push(rect("break", "break", cols * ROOM.w, 0, BREAK_W, ROOM.d * 2 + CORRIDOR, { back: "n" }));
+    seating.forEach((s, i) => {
       const col = i >> 1;
-      rooms.push(i % 2 === 0 ? office(s, i, col * OFFICE.w, 0, "n") : office(s, i, col * OFFICE.w, OFFICE.d + CORRIDOR, "s"));
+      rooms.push(i % 2 === 0 ? teamRoom(s, i, col * ROOM.w, 0, "n") : teamRoom(s, i, col * ROOM.w, ROOM.d + CORRIDOR, "s"));
     });
   } else {
-    const wings = wingsOf(slots);
+    // wings: rows of up to WING_MAX team rooms, each along its own corridor off a central hall, courts between them;
+    // a campus has two columns of wings, across a court from each other
+    const wings = [];
+    for (let i = 0; i < n; i += WING_MAX) wings.push(seating.slice(i, i + WING_MAX).map((s, k) => ({ s, i: i + k })));
     const cols = stage === 4 ? 2 : 1;
-    const pitch = OFFICE.d + CORRIDOR + COURT; // one wing and the court after it
-    const colW = CORRIDOR + WING_MAX * OFFICE.w + COURT;
+    const pitch = ROOM.d + CORRIDOR + COURT; // one wing and the court after it
+    const colW = CORRIDOR + WING_MAX * ROOM.w + COURT;
     rooms.push(rect("hq", "hq", -SUITE.w, -SUITE.d, SUITE.w, SUITE.d, { back: "n", door: { side: "s", at: 5, width: 2 } }));
-    rooms.push(rect("break", "break", -SUITE.w, 0, SUITE.w - CORRIDOR, OFFICE.d + CORRIDOR, { back: "w" }));
+    rooms.push(rect("break", "break", -SUITE.w, 0, SUITE.w - CORRIDOR, ROOM.d + CORRIDOR, { back: "w" }));
     for (let c = 0; c < cols; c++) {
       const hallX = c * colW - CORRIDOR;
       const inCol = wings.filter((_, j) => j % cols === c);
       if (!inCol.length) continue;
-      const end = (inCol.length - 1) * pitch + OFFICE.d + CORRIDOR;
+      const end = (inCol.length - 1) * pitch + ROOM.d + CORRIDOR;
       rooms.push(rect(`hall:${c}`, "corridor", hallX, 0, CORRIDOR, end));
-      // a campus: the second building stands across a gravel court from the first
       if (c > 0) rooms.push(rect(`court:col${c}`, "court", hallX - COURT, 0, COURT, end));
     }
     wings.forEach((w, j) => {
       const c = j % cols, r = Math.floor(j / cols);
       const x0 = c * colW, z0 = r * pitch;
-      rooms.push(rect(`wing:${j}`, "corridor", x0, z0 + OFFICE.d, w.slots.length * OFFICE.w, CORRIDOR, { team: w.team }));
-      w.slots.forEach(({ slot, i }, k) => rooms.push(office(slot, i, x0 + k * OFFICE.w, z0, "n")));
+      rooms.push(rect(`wing:${j}`, "corridor", x0, z0 + ROOM.d, w.length * ROOM.w, CORRIDOR));
+      w.forEach(({ s, i }, k) => rooms.push(teamRoom(s, i, x0 + k * ROOM.w, z0, "n")));
       // the court between this wing and the next one down: as long as the longer of the two, so it never sticks out
       const below = wings[j + cols];
-      if (below) rooms.push(rect(`court:${j}`, "court", x0, z0 + OFFICE.d + CORRIDOR, Math.max(w.slots.length, below.slots.length) * OFFICE.w, COURT));
+      if (below) rooms.push(rect(`court:${j}`, "court", x0, z0 + ROOM.d + CORRIDOR, Math.max(w.length, below.length) * ROOM.w, COURT));
     });
   }
   return rooms;
@@ -162,17 +209,28 @@ function wallsOf(rooms, tiles) {
 }
 
 // lanes: [{ name, parent, status }] in the order they appeared. prev: the plan this one follows, for stable places.
+// Within a stage the seating only changes where it must (see seatAfter); when the rooms in use call for another stage,
+// the plan is laid out again from the live lanes, grouped by team.
 export function plan(lanes, prev = null, opts = {}) {
   const hq = opts.hq ?? "hq";
   const byName = new Map(lanes.map((l) => [l.name, l]));
   const live = lanes.filter((l) => l.name !== hq);
-  const stage = stageFor(live.length);
-  const slots = slotsFor(live, byName, stage, prev, hq);
-  const rooms = layout(stage, slots);
+  const keys = teamKeys(live, byName, hq);
+  const team = new Map(live.map((l) => [l.name, teamOf(l.name, byName, hq)]));
+  const inUse = (s) => s.filter((r) => r.seats.some((x) => !x.vacant)).length;
+  let seating = prev?.seating ? seatAfter(prev.seating, live, keys, team) : null;
+  let stage = seating ? stageFor(inUse(seating)) : 0;
+  if (!seating || stage !== prev.stage) {
+    seating = seatFresh(live, keys);
+    stage = stageFor(seating.length);
+  }
+  const rooms = layout(stage, seating);
   const tiles = tileMap(rooms);
   const { walls, bounds } = wallsOf(rooms, tiles);
-  const offices = rooms.filter((r) => r.kind === "office");
-  return { stage, stageName: STAGES[stage], slots, rooms, walls, bounds, offices, hq: rooms.find((r) => r.kind === "hq") };
+  const teamRooms = rooms.filter((r) => r.kind === "team").sort((a, b) => a.index - b.index);
+  // one desk per seat, in the room's order and the seats' order
+  const desks = teamRooms.flatMap((r) => r.seats.map((s, seat) => ({ lane: s.lane, vacant: s.vacant, room: r.id, seat, team: team.get(s.lane) ?? r.team })));
+  return { stage, stageName: STAGES[stage], seating, rooms, teamRooms, desks, walls, bounds, hq: rooms.find((r) => r.kind === "hq") };
 }
 
 // The camera's side for a rotation: the signs of its x and z offset from what it looks at (azimuth 45° + rot·90°).
@@ -213,13 +271,16 @@ export function toWorld(room, lx, lz) {
   }
 }
 
-// Where the desk is in an office, in its own frame, and the point the desk HUD hangs from.
-export const DESK = { x: 2, z: 0.62, w: 1.7, d: 0.72 };
-export const HUD_POINT = { x: 2, y: 2.25, z: 1.0 };
+// A desk's place in the world: its centre and its turn (the room's turn plus the desk's own).
+export function deskPlace(room, seat) {
+  const d = DESKS[seat];
+  const w = toWorld(room, d.x, d.z);
+  return { x: w.x, z: w.z, ry: w.ry + d.ry, out: d.out };
+}
 
-// What changed between two plans: offices that are new (to rise) and whether the rooms moved at all.
+// What changed between two plans: desks that are new (to rise) and whether the rooms or the seating moved at all.
 export function diff(prev, next) {
-  const before = new Set(prev?.offices.map((o) => o.id) ?? []);
-  const sig = (p) => p?.rooms.map((r) => `${r.id}@${r.x},${r.z},${r.w},${r.d},${r.vacant ? 1 : 0}`).join("|") ?? "";
-  return { added: next.offices.filter((o) => !before.has(o.id)).map((o) => o.lane), moved: sig(prev) !== sig(next) };
+  const before = new Set(prev?.desks.filter((d) => !d.vacant).map((d) => d.lane) ?? []);
+  const sig = (p) => p ? p.rooms.map((r) => `${r.id}@${r.x},${r.z},${r.w},${r.d}`).join("|") + "/" + p.desks.map((d) => `${d.lane}@${d.room}:${d.seat}${d.vacant ? "-" : ""}`).join("|") : "";
+  return { added: next.desks.filter((d) => !d.vacant && !before.has(d.lane)).map((d) => d.lane), moved: sig(prev) !== sig(next) };
 }

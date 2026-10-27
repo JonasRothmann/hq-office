@@ -50,7 +50,7 @@ beforeAll(async () => {
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
-  await until(`window.__world?.offices?.length === 2`);
+  await until(`window.__world?.desks?.length === 2`);
 }, 120_000);
 
 afterAll(async () => {

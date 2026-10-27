@@ -1,11 +1,12 @@
-// The world's entry: mountWorld(canvas, { theme, hq, insets }) builds the offices for the lanes and keeps them drawn.
+// The world's entry: mountWorld(canvas, { theme, hq, insets }) builds the team rooms and desks for the lanes and keeps
+// them drawn.
 import { THREE, roomLight, MAX_ROOMS } from "./kit.js";
-import { plan as makePlan, cameraSide, toWorld, KERB_H, WALL_H } from "./plan.js";
+import { plan as makePlan, diff, cameraSide, toWorld, deskPlace, KERB_H, WALL_H } from "./plan.js";
 import { lookFor, STATUS } from "./look.js";
 import { View } from "./camera.js";
 import { createScene } from "./scene.js";
 import { buildRooms } from "./rooms.js";
-import { buildOffice, buildSuite, buildBreak, OFFICE_SPOTS, SUITE_SPOTS } from "./furniture.js";
+import { buildDesk, buildTeamRoom, buildSuite, buildBreak, DESK_SPOTS, SUITE_SPOTS } from "./furniture.js";
 import { Worker } from "./people.js";
 import { Balls } from "./balls.js";
 import { route } from "./walk.js";
@@ -13,10 +14,11 @@ import { screen as screenTexture, glow } from "./textures.js";
 import { bindWorld, runFrame } from "./api.js";
 import { emit } from "../core/bus.js";
 
-const RISE_MS = 800;   // a new office rises from the floor; a removed lane's office folds away as long
+const RISE_MS = 800;   // a new lane's desk rises from the floor
 const TURN_MS = 650;   // a 90° turn: the walls go down to the kerbs, the cutaway swaps, they come up again
 const LOW = KERB_H / WALL_H;
-const BALL_CENTRE = new THREE.Vector3(2, 0, 1.1);
+const BALL_CENTRE = new THREE.Vector3(0, 0, 0.62); // round a desk's chair, in the desk's frame
+const SUITE_BALLS = new THREE.Vector3(2, 0, 1.1);
 const LIT = new Set(["moving", "needs_you", "blocked", "hq_turn", "waiting", "done", "stale"]);
 const WARM = new THREE.Color(1.0, 0.8, 0.55);
 // Frames a second per PERFORMANCE choice; POWER SAVER draws only when something changes or moves.
@@ -35,7 +37,6 @@ export function mountWorld(canvas, opts = {}) {
   let lanes = [], vitals = {}, p = null;
   let built = null;
   const rising = new Map();  // lane -> start time
-  const folding = new Map(); // lane -> start time
   let hqName = opts.hq ?? "hq", hqStatus = "moving";
   let selected = null;
   let mode = "smooth", paused = false, dirty = true, frames = 0;
@@ -63,35 +64,48 @@ export function mountWorld(canvas, opts = {}) {
     sc.scene.remove(built.root);
     built.rooms.dispose();
     built.root.traverse((o) => { o.geometry?.dispose(); if (o.material && !Array.isArray(o.material)) o.material.dispose(); });
-    for (const o of built.offices.values()) o.worker?.dispose();
+    for (const d of built.desks.values()) d.worker?.dispose();
     built = null;
   }
 
-  // Builds every room for the plan. added: lanes whose office rises; folded: lanes whose office folds away.
-  function build(added = [], folded = []) {
+  // Builds every room and desk for the plan. added: lanes whose desk rises.
+  function build(added = []) {
     teardown();
-    rising.clear(); folding.clear();
+    rising.clear();
     for (const c of roomArray.value) c.setRGB(0, 0, 0);
     outdoor.value.set(L.moon ?? "#000000");
-    built = { root: new THREE.Group(), lights: new Map(), slots: new Map(), offices: new Map(), suite: null, lounge: null, rooms: null, cuts: null, wallIndex: new Map(), taken: new Map() };
+    built = { root: new THREE.Group(), lights: new Map(), slots: new Map(), teams: new Map(), desks: new Map(), suite: null, lounge: null, rooms: null, cuts: null, wallIndex: new Map(), taken: new Map() };
     built.root.name = "world";
     for (const r of p.rooms) lightOf(r.id);
     built.rooms = buildRooms(p, L, lightOf, roomArray, indexOf, outdoor);
     built.root.add(built.rooms.group);
     p.walls.forEach((w, i) => built.wallIndex.set(`${w.dir}:${w.x}:${w.z}`, i));
     const now = performance.now();
-    for (const room of p.offices) {
-      const o = buildOffice(room, L, lightOf(room.id));
-      o.room = room;
-      if (!room.vacant) {
-        o.worker = new Worker(room.lane, L, lightOf(room.id));
-        o.group.add(o.worker.root);
-        o.worker.place({ seat: OFFICE_SPOTS.seat, stand: OFFICE_SPOTS.stand, faceDesk: Math.PI });
-        o.worker.setSelected(room.lane === selected);
-      } else if (folded.includes(room.lane)) folding.set(room.lane, now);
-      else o.group.visible = false; // a lane that left: its office stands empty, floor and walls only
-      built.root.add(o.group);
-      built.offices.set(room.lane, o);
+    const roomOf = new Map(p.teamRooms.map((r) => [r.id, r]));
+    for (const room of p.teamRooms) {
+      const t = buildTeamRoom(room, L, lightOf(room.id));
+      t.room = room;
+      built.root.add(t.group);
+      built.teams.set(room.id, t);
+    }
+    // each desk stands in the world on its own (not in its room's group), so its frame is the one its worker,
+    // its balls and addToWorld use
+    for (const desk of p.desks) {
+      const room = roomOf.get(desk.room);
+      const at = deskPlace(room, desk.seat);
+      const d = buildDesk(desk.lane, at.out, L, lightOf(room.id));
+      d.group.position.set(at.x, 0, at.z);
+      d.group.rotation.y = at.ry;
+      d.room = room; d.lane = desk.lane; d.vacant = desk.vacant;
+      if (!desk.vacant) {
+        // a lane that left leaves its desk empty, with no worker and the screen dark, until the next re-plan
+        d.worker = new Worker(desk.lane, L, lightOf(room.id));
+        d.group.add(d.worker.root);
+        d.worker.place({ seat: DESK_SPOTS.seat, stand: d.stand, faceDesk: Math.PI });
+        d.worker.setSelected(desk.lane === selected);
+      }
+      built.root.add(d.group);
+      built.desks.set(desk.lane, d);
     }
     if (p.hq) {
       const s = buildSuite(p.hq, L, lightOf(p.hq.id));
@@ -106,7 +120,7 @@ export function mountWorld(canvas, opts = {}) {
     if (br) { built.lounge = buildBreak(br, L, lightOf(br.id)); built.lounge.room = br; built.root.add(built.lounge.group); }
     sc.scene.add(built.root);
     sc.setLights(L, p.bounds);
-    for (const lane of added) if (built.offices.has(lane)) { rising.set(lane, now); built.offices.get(lane).group.scale.y = 0.01; }
+    for (const lane of added) if (built.desks.has(lane)) { rising.set(lane, now); built.desks.get(lane).group.scale.y = 0.01; }
     applyCuts();
     built.rooms.setWallScale(wallScale);
     built.root.updateMatrixWorld(true);
@@ -124,7 +138,7 @@ export function mountWorld(canvas, opts = {}) {
       const i = built.wallIndex.get(k);
       return i === undefined ? true : built.cuts[i];
     };
-    for (const o of [...built.offices.values(), built.suite, built.lounge]) {
+    for (const o of [...built.teams.values(), built.suite, built.lounge]) {
       if (!o?.wallPoster) continue;
       const cut = wallAt(o.room, o.wallPoster.position.x);
       o.wallPoster.visible = !cut;
@@ -135,7 +149,8 @@ export function mountWorld(canvas, opts = {}) {
 
   const laneOf = (name) => lanes.find((l) => l.name === name);
 
-  function light(o, status, vacant) {
+  // A desk, the suite or the break area lit for a status; a team room for the brightest of its desks.
+  function light(o, status, vacant, roomLit = true) {
     const night = L.night;
     const lit = !vacant && LIT.has(status);
     const red = status === "needs_you" || status === "blocked";
@@ -151,6 +166,7 @@ export function mountWorld(canvas, opts = {}) {
       o.pool.material.map = glow(red ? "rgba(255,110,110,0.55)" : "rgba(255,214,150,0.55)");
       o.pool.material.needsUpdate = true;
     }
+    if (!roomLit) return;
     const u = lightOf(o.room.id);
     if (night) u.value.copy(WARM).multiplyScalar(lit ? L.light.room : 0.07);
     else u.value.setRGB(0, 0, 0);
@@ -158,14 +174,17 @@ export function mountWorld(canvas, opts = {}) {
 
   // fresh: just built, so a worker who should be in the break area is put there, not walked there.
   function applyStatus(fresh = false) {
-    for (const [lane, o] of built.offices) {
+    const roomLit = new Map();
+    for (const [lane, d] of built.desks) {
       const l = laneOf(lane);
-      const st = o.room.vacant ? "gone" : l?.status ?? "parked";
-      light(o, st, o.room.vacant);
-      if (!o.worker) continue;
-      o.worker.setStatus(st, l?.blocking ?? 0);
-      errand(o, st === "done", fresh);
+      const st = d.vacant ? "gone" : l?.status ?? "parked";
+      light(d, st, d.vacant, false);
+      if (!d.vacant && LIT.has(st)) roomLit.set(d.room.id, "moving");
+      if (!d.worker) continue;
+      d.worker.setStatus(st, l?.blocking ?? 0);
+      errand(d, st === "done", fresh);
     }
+    for (const [id, t] of built.teams) light(t, roomLit.get(id) ?? "parked", false);
     if (built.suite) {
       light(built.suite, hqStatus, false);
       built.suite.worker.setStatus(hqStatus);
@@ -179,9 +198,9 @@ export function mountWorld(canvas, opts = {}) {
 
   // A done worker walks to the break area and stands there with a mug; when its lane moves on, it walks back.
   function errand(o, wantBreak, fresh) {
-    const w = o.worker, lane = o.room.lane, lounge = built.lounge;
+    const w = o.worker, lane = o.lane, lounge = built.lounge;
     if (!lounge) return;
-    const seat = o.group.localToWorld(OFFICE_SPOTS.seat.clone());
+    const seat = o.group.localToWorld(DESK_SPOTS.seat.clone());
     if (wantBreak && !w.out) {
       const used = new Set(built.taken.values());
       const i = lounge.spots.findIndex((_, k) => !used.has(k));
@@ -211,19 +230,19 @@ export function mountWorld(canvas, opts = {}) {
   function applyVitals() {
     const now = performance.now();
     const seen = new Set();
-    for (const [lane, o] of built.offices) {
+    for (const [lane, d] of built.desks) {
       const v = vitals[lane];
       seen.add(lane);
-      if (!v || o.room.vacant) { balls.drop(lane, now); continue; }
-      o.group.updateMatrixWorld(true);
-      balls.set(lane, v.subagents ?? [], o.group.matrixWorld, BALL_CENTRE, now);
+      if (!v || d.vacant) { balls.drop(lane, now); continue; }
+      d.group.updateMatrixWorld(true);
+      balls.set(lane, v.subagents ?? [], d.group.matrixWorld, BALL_CENTRE, now);
     }
-    // HQ's subagents hop round its desk in the suite (the suite's desk stands where an office's does)
+    // HQ's subagents hop round its desk in the suite, on a wider ring
     const hv = vitals[hqName];
     if (built.suite && hv) {
       seen.add(hqName);
       built.suite.group.updateMatrixWorld(true);
-      balls.set(hqName, hv.subagents ?? [], built.suite.group.matrixWorld, BALL_CENTRE, now);
+      balls.set(hqName, hv.subagents ?? [], built.suite.group.matrixWorld, SUITE_BALLS, now, 1.25);
     }
     for (const lane of balls.desks.keys()) if (!seen.has(lane)) balls.drop(lane, now);
     dirty = true;
@@ -233,19 +252,13 @@ export function mountWorld(canvas, opts = {}) {
   function setLanes(next, nextVitals = vitals) {
     lanes = next.filter((l) => l.name !== hqName).map((l) => ({ name: l.name, parent: l.parent ?? null, status: l.status ?? "hq_turn", blocking: l.blocking ?? 0 }));
     vitals = nextVitals ?? {};
-    const live = (q) => new Set(q?.offices.filter((o) => !o.vacant).map((o) => o.lane) ?? []);
-    const before = live(p);
     const np = makePlan(lanes, p, { hq: hqName });
-    const sig = (q) => q?.rooms.map((r) => `${r.id}@${r.x},${r.z},${r.w},${r.d},${r.vacant ? 1 : 0}`).join("|") ?? "";
-    const first = !p, moved = sig(p) !== sig(np);
+    const first = !p, { added, moved } = diff(p, np);
     p = np;
     if (moved || !built) {
-      const after = live(np);
-      const added = first ? [] : [...after].filter((n) => !before.has(n));
-      const folded = first ? [] : [...before].filter((n) => !after.has(n));
-      build(added, folded);
+      build(first ? [] : added);
       if (view.fitting || first) view.fit(p.bounds, first);
-      emit("world:layout", p.offices.filter((o) => !o.vacant).map((o) => o.lane));
+      emit("world:layout", p.desks.filter((d) => !d.vacant).map((d) => d.lane));
     } else {
       applyStatus();
       applyVitals();
@@ -272,7 +285,7 @@ export function mountWorld(canvas, opts = {}) {
   function setSelected(lane) {
     selected = lane;
     if (!built) return;
-    for (const [name, o] of built.offices) o.worker?.setSelected(name === lane);
+    for (const [name, d] of built.desks) d.worker?.setSelected(name === lane);
     dirty = true;
   }
 
@@ -299,7 +312,7 @@ export function mountWorld(canvas, opts = {}) {
 
   function fit() { if (p) { view.fit(p.bounds); dirty = true; } }
 
-  // Centre on some lanes' desks (the mean of their offices).
+  // Centre on some lanes' desks (the mean of their anchors).
   function focusLanes(names, now = false) {
     const pts = names.map((n) => deskAnchor(n)).filter(Boolean);
     if (!pts.length) return;
@@ -309,10 +322,10 @@ export function mountWorld(canvas, opts = {}) {
   }
 
   function deskAnchor(lane) {
-    const o = lane === hqName ? built?.suite : built?.offices.get(lane);
-    if (!o || o.room.vacant) return null;
+    const o = lane === hqName ? built?.suite : built?.desks.get(lane);
+    if (!o || o.vacant) return null;
     o.group.updateMatrixWorld(true);
-    return o.group.localToWorld((lane === hqName ? SUITE_SPOTS.hud : OFFICE_SPOTS.hud).clone());
+    return o.group.localToWorld((lane === hqName ? SUITE_SPOTS.hud : DESK_SPOTS.hud).clone());
   }
 
   function project(v3) {
@@ -324,26 +337,26 @@ export function mountWorld(canvas, opts = {}) {
 
   function addToWorld(obj, lane) {
     if (!built) return false;
-    const o = lane ? (lane === hqName ? built.suite : built.offices.get(lane)) : null;
+    const o = lane ? (lane === hqName ? built.suite : built.desks.get(lane)) : null;
     (o ? o.group : sc.scene).add(obj);
     dirty = true;
     return true;
   }
 
-  // Picking: a worker (wherever it is) or anything in an office selects its lane.
+  // Picking: a worker (wherever it is) or anything on a lane's desk selects its lane.
   const ray = new THREE.Raycaster();
   function pick(clientX, clientY) {
     if (!built) return null;
     const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1), view.camera);
-    const targets = [...built.offices.values()].flatMap((o) => (o.group.visible ? [o.group] : []));
-    for (const o of built.offices.values()) if (o.worker?.out) targets.push(o.worker.root);
+    const targets = [...built.desks.values()].flatMap((d) => (d.vacant ? [] : [d.group]));
+    for (const d of built.desks.values()) if (d.worker?.out) targets.push(d.worker.root);
     if (built.suite) targets.push(built.suite.group);
     for (const h of ray.intersectObjects(targets, true)) {
       if (h.object.name === "balls" || !h.object.visible) continue;
       for (let o = h.object; o; o = o.parent) {
         if (o.name.startsWith("worker:")) return o.name.slice(7);
-        if (o.name.startsWith("office:")) return o.name.slice(7);
+        if (o.name.startsWith("desk:")) return o.name.slice(5);
         if (o.name === "hq") return hqName;
       }
     }
@@ -418,30 +431,25 @@ export function mountWorld(canvas, opts = {}) {
       built?.rooms.setWallScale(wallScale);
     }
     for (const [lane, at] of rising) {
-      const o = built.offices.get(lane), k = (now - at) / RISE_MS;
-      o.group.scale.y = 0.01 + ease(k) * 0.99;
+      const d = built.desks.get(lane), k = (now - at) / RISE_MS;
+      d.group.scale.y = 0.01 + ease(k) * 0.99;
       if (k >= 1) rising.delete(lane);
-    }
-    for (const [lane, at] of folding) {
-      const o = built.offices.get(lane), k = (now - at) / RISE_MS;
-      o.group.scale.y = Math.max(0.01, 1 - ease(k));
-      if (k >= 1) { o.group.visible = false; folding.delete(lane); }
     }
   }
 
-  const walking = () => built && [...built.offices.values()].some((o) => o.worker?.walking);
+  const walking = () => built && [...built.desks.values()].some((d) => d.worker?.walking);
 
   function tick(now, dt) {
     if (paused) return;
     updateHover();
     const moving = view.update(dt);
-    const busy = moving || turn || rising.size || folding.size || walking();
+    const busy = moving || turn || rising.size || walking();
     // POWER SAVER: an office where nothing changed and nothing moves draws no frame
     if (mode === "saver" && !busy && !dirty) return;
     if (built) {
       animate(now);
       const t = now / 1000;
-      for (const o of built.offices.values()) o.worker?.update(t, dt, view.az - o.group.rotation.y);
+      for (const d of built.desks.values()) d.worker?.update(t, dt, view.az - d.group.rotation.y);
       built.suite?.worker.update(t, dt, view.az - built.suite.group.rotation.y);
     }
     balls.update(now);
@@ -459,8 +467,10 @@ export function mountWorld(canvas, opts = {}) {
     const side = cameraSide(view.rotation);
     const cam = view.camera.position;
     return {
-      offices: p ? p.offices.filter((o) => !o.vacant).map((o) => o.lane) : [],
-      vacant: p ? p.offices.filter((o) => o.vacant).map((o) => o.lane) : [],
+      // the team rooms in the order they opened, with the lanes at their desks; every lane with a desk; empty desks
+      rooms: p ? p.teamRooms.map((r) => ({ id: r.id, team: r.team, lanes: [...r.lanes] })) : [],
+      desks: p ? p.desks.filter((d) => !d.vacant).map((d) => d.lane) : [],
+      vacant: p ? p.desks.filter((d) => d.vacant).map((d) => d.lane) : [],
       stage: p?.stageName ?? null,
       rotation: view.rotation,
       cameraSide: side,
@@ -479,10 +489,11 @@ export function mountWorld(canvas, opts = {}) {
     };
   }
 
-  // The four sides of a lane's office: their middle, whether each wall tile of the side is cut down to the kerb, and
-  // whether the side is an outer wall of the building.
-  function officeWalls(lane) {
-    const room = p?.offices.find((o) => o.lane === lane);
+  // The four sides of a team room (by its id, or the room of a lane's desk): their middle, whether each wall tile of
+  // the side is cut down to the kerb, and whether the side is an outer wall of the building.
+  function roomWalls(idOrLane) {
+    const id = p?.teamRooms.some((r) => r.id === idOrLane) ? idOrLane : p?.desks.find((d) => d.lane === idOrLane)?.room;
+    const room = p?.teamRooms.find((r) => r.id === id);
     if (!room || !built?.cuts) return null;
     const sides = {
       n: { mid: { x: room.x + room.w / 2, z: room.z }, of: (w) => w.dir === "x" && w.z === room.z },
@@ -499,7 +510,7 @@ export function mountWorld(canvas, opts = {}) {
 
   // A lane's worker on the canvas, in CSS pixels: its chest, and what it is doing.
   function workerOf(lane) {
-    const o = lane === hqName ? built?.suite : built?.offices.get(lane);
+    const o = lane === hqName ? built?.suite : built?.desks.get(lane);
     const w = o?.worker;
     if (!w) return null;
     w.root.updateMatrixWorld(true);
@@ -510,7 +521,7 @@ export function mountWorld(canvas, opts = {}) {
   const api = {
     setLanes, setHq, setTheme, setSelected, setPerformance, setPaused, rotate, zoom, fit, focusLanes, renderNow,
     setInsets: (i) => { view.setInsets(i); dirty = true; },
-    deskAnchor, project, addToWorld, pick, inspect, officeWalls, workerOf,
+    deskAnchor, project, addToWorld, pick, inspect, roomWalls, workerOf,
     get view() { return view; },
     get plan() { return p; },
     get renderer() { return sc.renderer; },

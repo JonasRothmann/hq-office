@@ -15,21 +15,21 @@ export class Balls {
     this.mesh.frustumCulled = false;
     this.mesh.name = "balls";
     this.max = max;
-    this.desks = new Map(); // lane -> { frame: Matrix4 (office), centre, balls: [{ key, family, born, gone }] }
+    this.desks = new Map(); // lane -> { frame: Matrix4 (the desk), centre, reach, balls: [{ key, family, born, gone }] }
     this.m = new THREE.Matrix4();
     this.c = new THREE.Color();
   }
 
-  // subagents: the lane's vitals' [{ id, model, family }] (or a count). frame: the office group's world matrix;
-  // centre: a local point.
-  set(lane, subagents, frame, centre, now) {
+  // subagents: the lane's vitals' [{ id, model, family }] (or a count). frame: the desk group's world matrix;
+  // centre: a local point; reach: how far they range across (metres), small enough to stay off the next desk.
+  set(lane, subagents, frame, centre, now, reach = 0.75) {
     const list = Array.isArray(subagents) ? subagents : Array.from({ length: Math.max(0, subagents | 0) }, () => ({ model: "" }));
     const want = list.slice(0, MAX_PER_DESK).map((s, i) => {
       const family = modelFamily(s.model, s.family);
       return { key: s.id ?? `${family}:${i}`, family };
     });
     const d = this.desks.get(lane) ?? { balls: [] };
-    d.frame = frame; d.centre = centre;
+    d.frame = frame; d.centre = centre; d.reach = reach;
     const keys = new Set(want.map((w) => w.key));
     for (const b of d.balls) if (!keys.has(b.key) && !b.gone) b.gone = now;
     const have = new Set(d.balls.filter((b) => !b.gone).map((b) => b.key));
@@ -56,7 +56,7 @@ export class Balls {
         // a slow walk round an ellipse in front of the desk, hopping as it goes
         const a = t * 0.55 + (i / Math.max(1, d.balls.length)) * Math.PI * 2 + b.seed;
         const hop = Math.abs(Math.sin(t * 4.2 + b.seed * 3));
-        p.set(d.centre.x + Math.cos(a) * 1.25, R + hop * 0.26, d.centre.z + 0.35 + Math.sin(a) * 0.55);
+        p.set(d.centre.x + Math.cos(a) * d.reach, R + hop * 0.26, d.centre.z + 0.2 + Math.sin(a) * d.reach * 0.45);
         p.applyMatrix4(d.frame);
         const grow = Math.min(1, (now - b.born) / 300);
         const fade = b.gone ? 1 - (now - b.gone) / FADE_MS : 1;

@@ -85,7 +85,7 @@ function start() {
   ctl.setAttribute("aria-label", "Office view");
   ctl.innerHTML = `<button class="btn" type="button" data-turn="-1" title="Turn left (Q)" aria-label="Turn left"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 6.5A4.5 4.5 0 1 1 4.6 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1.5 3.8 3 6.7l2.9-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
     + `<button class="btn" type="button" data-turn="1" title="Turn right (E)" aria-label="Turn right"><svg viewBox="0 0 14 14" aria-hidden="true" style="transform:scaleX(-1)"><path d="M3 6.5A4.5 4.5 0 1 1 4.6 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1.5 3.8 3 6.7l2.9-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
-    + `<button class="btn" type="button" data-fit title="Fit every office (0)">FIT</button>`;
+    + `<button class="btn" type="button" data-fit title="Fit the whole office (0)">FIT</button>`;
   ctl.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -97,15 +97,16 @@ function start() {
   // For tests and for looking: what the world shows, read-only.
   Object.defineProperty(window, "__world", {
     value: Object.freeze({
-      get offices() { return world.inspect().offices; },
+      get rooms() { return world.inspect().rooms; },
+      get desks() { return world.inspect().desks; },
       get stage() { return world.inspect().stage; },
       get rotation() { return world.inspect().rotation; },
       inspect: () => world.inspect(),
-      walls: (lane) => world.officeWalls(lane),
+      walls: (room) => world.roomWalls(room),
       worker: (lane) => world.workerOf(lane),
     }),
   });
 }
 
 if (canvas && webgl()) start();
-else Object.defineProperty(window, "__world", { value: Object.freeze({ offices: [], stage: null, rotation: 0, unavailable: true }) });
+else Object.defineProperty(window, "__world", { value: Object.freeze({ rooms: [], desks: [], stage: null, rotation: 0, unavailable: true }) });

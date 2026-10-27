@@ -1,5 +1,5 @@
 // The world's one door for other areas (spec section 6): THREE, frame hooks, desk anchors, projection, parenting.
-// Bus events: "world:ready", "world:select" (lane name), "world:layout" (lane names in their offices).
+// Bus events: "world:ready", "world:select" (lane name), "world:layout" (the names of the lanes at desks).
 import { THREE } from "./kit.js";
 
 export { THREE };
@@ -17,7 +17,7 @@ export function onFrame(fn) {
   return () => frames.delete(fn);
 }
 
-// A THREE.Vector3 in world space above the lane's desk, or null when the lane has no office.
+// A THREE.Vector3 in world space above the lane's desk, or null when the lane has no desk.
 export function deskAnchor(lane) {
   return world?.deskAnchor(lane) ?? null;
 }
@@ -28,7 +28,8 @@ export function project(v3) {
   return world.project(v3);
 }
 
-// Parent an object to a lane's office group (its own frame: back wall at z = 0), or to the world when lane is null.
+// Parent an object to a lane's desk group (its own frame: the desk's centre on the floor at the origin, the worker's
+// chair toward +z), or to the world when lane is null. The desk is the lane's own; its room is shared by its team.
 export function addToWorld(obj, lane) {
   return world?.addToWorld(obj, lane) ?? false;
 }
