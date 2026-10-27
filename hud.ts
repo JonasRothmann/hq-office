@@ -17,6 +17,9 @@
 //   hud item ID add TEXT         add an item to an open question
 //   hud lane NAME [--title T] [--machine M] [--pane P] [--issue OPE-1] [--pr 123] [--phase running|waiting|parked|done] [--note N]
 //           [--parent OTHER]      the lane it reports to; --parent hq (or "") puts it straight under HQ
+//           [--model M] [--effort E] [--subagents N] [--context USED[/MAX]]   the lane's vitals for its desk HUD, e.g.
+//                                 --model claude-opus-5-5 --effort high --subagents 3 --context 412k/1M; a report wins
+//                                 over what the lane's transcript says until the transcript changes
 //   hud rm-lane NAME     its reports move up to the lane it reported to (or HQ)
 //   hud tree [--json]    the lanes under HQ, each with its level name and status
 //   hud withdraw ID [--reason R]
@@ -81,6 +84,48 @@ function dueAt(hhmm?: string) {
   return d.getTime();
 }
 
+// A token count as people write it: 412000, 412k, 1M, 1.5m.
+function tokenCount(text: string, flag: string): number {
+  const m = text.trim().match(/^(\d+(?:\.\d+)?)([km]?)$/i);
+  if (!m) {
+    console.error(`${flag}: give a token count such as 412000, 412k or 1M, not "${text}"`);
+    process.exit(2);
+  }
+  return Math.round(Number(m[1]) * ({ "": 1, k: 1e3, m: 1e6 } as Record<string, number>)[m[2].toLowerCase()]);
+}
+
+// hud lane's vitals flags as the body of POST /api/lanes/:name/vitals, or null when none is given. Checked here,
+// before anything is sent, so a bad value changes nothing.
+function vitalsOf(flags: Record<string, string[]>, one: (k: string) => string | undefined) {
+  if (!["model", "effort", "subagents", "context"].some((k) => k in flags)) return null;
+  const body: Record<string, string | number> = {};
+  const model = one("model"), effort = one("effort");
+  if (model) body.model = model;
+  if (effort) body.effort = effort;
+  if ("subagents" in flags) {
+    const n = Number(one("subagents"));
+    if (!/^\d+$/.test(one("subagents") ?? "") || !Number.isSafeInteger(n)) {
+      console.error(`--subagents: give a whole number, not "${one("subagents")}"`);
+      process.exit(2);
+    }
+    body.subagents = n;
+  }
+  if ("context" in flags) {
+    const [used, max, extra] = (one("context") ?? "").split("/");
+    if (extra !== undefined || !used) {
+      console.error(`--context: give USED or USED/MAX, such as 412k/1M, not "${one("context")}"`);
+      process.exit(2);
+    }
+    body.contextUsed = tokenCount(used, "--context");
+    if (max !== undefined) body.contextMax = tokenCount(max, "--context");
+  }
+  if (!Object.keys(body).length) {
+    console.error("--model and --effort need a value");
+    process.exit(2);
+  }
+  return body;
+}
+
 const [cmd, ...argv] = process.argv.slice(2);
 const { flags, rest, one } = parse(argv);
 
@@ -137,7 +182,8 @@ switch (cmd) {
     }
     break;
   }
-  case "lane":
+  case "lane": {
+    const vitals = vitalsOf(flags, one);
     await call("POST", "/api/lanes", {
       name: rest[0],
       title: one("title"),
@@ -150,7 +196,12 @@ switch (cmd) {
       parent: one("parent"),
     });
     console.log(`lane ${rest[0]}`);
+    if (vitals) {
+      await call("POST", `/api/lanes/${encodeURIComponent(rest[0])}/vitals`, vitals);
+      console.log(`vitals ${Object.entries(vitals).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+    }
     break;
+  }
   case "tree": {
     const { lanes } = await call("GET", "/api/state");
     const view = lanes.map((l: any) => ({ name: l.name, parent: l.parent, depth: l.depth, level: l.level, status: l.status, path: l.path }));
