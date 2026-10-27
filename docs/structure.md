@@ -123,11 +123,12 @@ an existing table is still a careful by-hand migration; the files only make new 
   reached from `main.js` or a feature's `index.js`, every file opens with a comment.
 - `test/client/page.test.ts`: in Chrome at 1440x900, no console errors, no page scroll, an answer and a note reach
   the server, the tabs, the worker card, settings and sound respond.
-- `test/client/world-plan.test.ts`: the office's plan (rooms, walls, cutaway, growth stages), pure, no browser.
+- `test/client/world-plan.test.ts`: the office's plan (team rooms of four, stable desks, walls, cutaway, growth
+  stages), pure, no browser.
 - `test/client/world.test.ts`: in Chrome with WebGL on SwiftShader (`startChrome({ webgl: true })` from
-  `scripts/room-hash.ts`): one office per lane at 1, 4, 9 and 18 lanes, the canvas draws, the walls nearest the camera
-  are low and recomputed after a turn, clicking a worker opens its card and Esc closes it, and the office rests while a
-  room covers it. Run it with `bun test --timeout 90000 test/client/world.test.ts`.
+  `scripts/room-hash.ts`): one desk per lane in team rooms at 1, 4, 9 and 18 lanes, a team of six in two rooms, the
+  canvas draws, the walls nearest the camera are low and recomputed after a turn, clicking a worker opens its card and
+  Esc closes it, and the office rests while a room covers it. Run it with `bun test --timeout 90000 test/client/world.test.ts`.
 
 The split was also run on a copy of another lane's branch (a new page section, new routes, a new root module and
 its tests): it placed the new work in its own module, file and route file, and the branch's tests passed. The

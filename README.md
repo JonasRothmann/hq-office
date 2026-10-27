@@ -1,6 +1,6 @@
 # HQ Office
 
-HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, with a light Nordic-Japanese look: every lane (one agent working one task) is a worker in its own office, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
+HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, with a light Nordic-Japanese look: every lane (one agent working one task) is a worker at a desk in its team's room, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
 
 ## Requirements
 
@@ -125,11 +125,11 @@ A crash, a kill or a stop and start loses the values. The server keeps each secr
 
 Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name). The worker card shows a lane's level and its chain up to HQ.
 
-Every lane has its own office, and HQ has a suite. The office grows with the number of lanes: a studio for 1 to 3, a floor with a break area for 4 to 8, wings for 9 to 16 and a campus beyond that. From 9 lanes on, the offices of a top-level team share a wing. A new lane's office rises and a removed lane's office folds away.
+Every lane has its own desk, and a team shares a room: a top-level lane and everyone under it in the lane tree sit together, four desks to a room, and a bigger team opens another room next to its first. Lanes with no tree fill rooms of four in the order they appear. HQ has a suite. The office grows by rooms, never by one bigger floor: a studio with one team room (1 to 4 lanes), a floor with a break area for 2 to 4 rooms, wings for 5 to 8 rooms and a campus beyond that. A lane keeps its desk while it exists; a new lane's desk rises in its team's room and a removed lane's desk stands empty until the office is next laid out.
 
 Workers show their status by pose: seated and typing when working, standing beside the desk with a raised hand and a red badge when waiting on you, arms folded with an amber badge when HQ is up, leaning back with a blue badge when waiting on CI, walking to the break area with a mug when done, asleep at the desk when stale. A lane with an empty chair is parked or gone. Running subagents are small balls hopping round the desk, coloured by model family (Opus violet, Sonnet teal, Haiku amber).
 
-Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit offices glow.
+Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit rooms glow.
 
 ## The desk HUD
 

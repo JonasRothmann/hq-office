@@ -40,7 +40,7 @@ server with a throwaway data dir, with a screenshot saved under `docs/screens/`.
 | --- | --- | --- |
 | F1 | A three.js scene fills the whole window behind everything. Every panel is HTML over it. The page has no page scroll. | Browser |
 | F2 | Panels are frosted glass (blur and saturation of what is behind, a light inner edge, a soft shadow), dense like Linear: 13 px text, 28 to 32 px rows. Light and dark themes, following the system unless the owner picks one. The 3D office relights for each: day and night. | Browser (both themes) |
-| F3 | Every lane has its own office: its own floor, walls, desk, chair, poster, plant. More lanes add more offices along corridors; the floor never just gets bigger. | Browser at 1, 4, 9 and 18 lanes |
+| F3 | Every lane has its own desk (desk, chair, monitor, lamp) in a team room of up to four desks with its own floor, walls, poster, plants and shelves. A team (a top-level lane and everyone under it) shares a room and opens another next to its first past four; lanes with no tree fill rooms of four. More lanes add more rooms along corridors; the floor never just gets bigger. (Revised after the first build: D12.) | Browser at 1, 4, 9 and 18 lanes (1, 1, 3 and 5 rooms), and a team of six in two rooms |
 | F4 | Walls cut away: the two walls nearer the camera are low (a 0.4 m kerb), the two far walls are full height. Rotating the view in 90° steps recomputes which walls are low. | Browser |
 | F5 | Interior: light oak floors and desks, off-white walls, black steel legs, paper lanterns, shoji screens, low plants, tatami-style rugs, original posters. Reads as a small Scandinavian and Japanese startup. | Browser, owner's eye |
 | F6 | Each desk has a HUD readable at a glance: lane name and status, model, effort, number of running subagents, and context in use as a bar with a number. | Browser |
@@ -54,7 +54,7 @@ server with a throwaway data dir, with a screenshot saved under `docs/screens/`.
 
 | # | Outcome | Check |
 | --- | --- | --- |
-| D1 | `bun test` passes. Tests that hashed the old pixel room are replaced by tests of the new room (scene draws, one office per lane, walls cut, HUD per desk). | Test |
+| D1 | `bun test` passes. Tests that hashed the old pixel room are replaced by tests of the new room (scene draws, one desk per lane in team rooms, walls cut, HUD per desk). | Test |
 | D2 | `docs/STATUS.md` says what was built, what was decided, and what the owner should look at first. | File |
 | D3 | One draft PR on the fork. Nothing pushed to upstream, nothing merged. | `gh` |
 
@@ -94,7 +94,7 @@ furniture, walls that drop away so you look into rooms like a doll's house. Our 
 Nordic and Japanese startup, not a suburban house.
 
 - **Camera.** Orthographic, 45° azimuth, 30° elevation (the exact 2:1 of the original; see `docs/research/sims1-look.md`). Pan by drag, zoom by wheel or pinch within limits,
-  rotate in 90° steps (Q and E, or buttons). It eases to fit all offices when lanes come and go.
+  rotate in 90° steps (Q and E, or buttons). It eases to fit all rooms when lanes come and go.
 - **Light.** Day: a warm key light with soft shadows, a cool sky fill, gentle ambient. Night (dark theme): a dim blue
   ambient; desk lamps, monitors and lanterns carry the light.
 - **Materials.** Flat-shaded or very lightly lit standard materials, no textures larger than 256 px, posters drawn on
@@ -107,7 +107,7 @@ Nordic and Japanese startup, not a suburban house.
 
 | Token | Day | Night | Use |
 | --- | --- | --- | --- |
-| floor-oak | #d9b98c | #6b5a45 | office floors |
+| floor-oak | #d9b98c | #6b5a45 | team room floors |
 | floor-corridor | #e8e4dc | #3a3b40 | corridors |
 | wall | #f3efe7 | #4a4a52 | wall faces |
 | wall-cap | #c9b28f | #6e6250 | the top of the cut wall |
@@ -170,18 +170,30 @@ Status colours as above, at 12% alpha for fills.
 Like Game Dev Tycoon, the company moves into bigger premises as it grows, and like the brief asks, growth means more
 rooms, never one bigger floor.
 
-- **Office.** A 5 m by 4 m cell with its own floor, four walls and a door to the corridor. One lane per office.
-- **HQ suite.** A 7 m by 5 m office at the head of the plan for HQ and the owner's own desk.
-- **Stages,** by lane count:
-  1. Studio (1 to 3): HQ suite and a short hall with offices on one side.
-  2. Floor (4 to 8): a corridor with offices on both sides, and a break area (kitchen counter, sofa) where done
-     workers go.
-  3. Wings (9 to 16): one wing per top-level team in the lane tree, each its own corridor off a central hall.
-  4. Campus (17 and more): more wings in a grid, with courtyards (gravel, a maple) between them.
-- **Stable places.** A lane keeps its office while it exists. Offices are assigned in the order lanes appear,
-  grouped by team; a stage change re-lays the plan once and animates it.
-- **Arrival.** A new office rises from the floor over 800 ms; a removed lane's office dims and empties, then folds
-  away on the next stage change.
+- **Team room.** A 7 m by 5 m room with its own floor, four walls, a door to the corridor and two windows in the
+  back wall. It holds up to four desks as two facing pairs, an island in the middle of the room: the back pair's
+  workers face the door (and the camera at the default view), so they fill first. Each desk has its own chair,
+  monitor and lamp, and a few things of its lane's own (a notebook, a laptop, headphones, a mug); the room has one
+  set of the rest: a tatami rug under the island, a poster over a low shelf on the back wall, a shoji screen and a
+  shelf on the west wall, plants, a paper lantern by the door. A waiting worker stands beside its desk on the
+  island's outer side.
+- **Teams.** A team is a top-level lane (its parent is empty or HQ) and everyone under it in the lane tree. A team
+  shares a room; past four lanes it opens another room next to its first. Lanes with no tree (a top-level lane with
+  nobody under it) fill shared rooms of four in the order they appear. So the rooms mirror the lane tree.
+- **HQ suite.** A 7 m by 5 m room at the head of the plan for HQ and the owner's own desk.
+- **Stages,** by team rooms (1 to 4 lanes is one room):
+  1. Studio (1 room): the HQ suite and one team room side by side, a hall along their fronts.
+  2. Floor (2 to 4 rooms): a corridor with team rooms on both sides, the suite at one end and a break area (kitchen
+     counter, sofa) where done workers go at the other.
+  3. Wings (5 to 8 rooms): rows of up to four team rooms, each along its own corridor off a central hall, with
+     courtyards (gravel, a maple) between them; the break area beside the hall.
+  4. Campus (9 rooms and more): two columns of wings across a court from each other.
+- **Stable places.** A lane keeps its desk while it exists. A new lane takes a free desk in a room where its team
+  sits, else in a room opened for its team (or for lanes with no tree), else in a room left empty, else in a new
+  room at the end. A lane that comes back takes its old desk again. When the rooms in use call for another stage,
+  the plan is laid out again from the live lanes, grouped by team, in the order they appear.
+- **Arrival.** A new lane's desk rises from the floor over 800 ms; a removed lane's desk empties (no worker, screen
+  dark) and folds away at the next re-plan.
 
 ## 6. Code layout
 
@@ -204,8 +216,8 @@ export const THREE;                       // the vendored module
 export function onFrame(fn) {}            // fn(now, dt) after the scene updates, before render
 export function deskAnchor(lane) {}       // THREE.Vector3 above the lane's desk, or null
 export function project(v3) {}            // { x, y, visible } in CSS pixels
-export function addToWorld(obj, lane) {}  // parent an object to a lane's office group
-// bus: "world:ready", "world:select" (lane name), "world:layout" (lane names in their offices)
+export function addToWorld(obj, lane) {}  // parent an object to a lane's desk group (not its shared room)
+// bus: "world:ready", "world:select" (lane name), "world:layout" (the names of the lanes at desks)
 ```
 
 The old canvas room (`src/client/room/`) and its pixel tests are retired in the same change.

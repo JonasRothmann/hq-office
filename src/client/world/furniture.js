@@ -242,18 +242,13 @@ export function buildTeamRoom(room, L, light) {
   const wallPoster = posterMesh(room.index * 3 + 1, 0.7, 0.92);
   wallPoster.position.set(w / 2, 1.0, 0.08);
   group.add(wallPoster);
-  // when the back wall is cut, a smaller print leans on the shelf instead
-  const leanPoster = posterMesh(room.index * 3 + 1, 0.4, 0.54);
-  leanPoster.position.set(w / 2 + 0.3, 0.62, 0.14);
-  leanPoster.rotation.x = -0.2;
-  leanPoster.visible = false;
-  group.add(leanPoster);
 
   const lightPool = pool(L);
   lightPool.scale.set(0.6, 1, 0.6);
   lightPool.position.set(lx - 0.4, 0.012, lz - 0.4);
   group.add(lightPool);
-  return { group, lantern: glowM, wallPoster, leanPoster, pool: lightPool };
+  // when the back wall is cut the poster goes with it (a print leaning on the shelf would show the camera its back)
+  return { group, lantern: glowM, wallPoster, leanPoster: null, pool: lightPool };
 }
 
 // The HQ suite: HQ's desk, the owner's desk, a low table on the tatami, a board, plants.

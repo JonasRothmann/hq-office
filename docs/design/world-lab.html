@@ -191,16 +191,25 @@ const ui = q.get("ui") !== "0";
 document.documentElement.dataset.theme = theme;
 if (!ui) document.body.classList.add("noui");
 
-// Fake lanes: names, teams of four or five past eight lanes, and statuses that show every pose.
+// Fake lanes: names, a lane tree, and statuses that show every pose. Up to four lanes have no tree (one room of four);
+// past four, teams of the sizes in ?teams= (default 6,3,1,4,2,1,5: a team of six that opens a second room, small
+// teams, lanes on their own that share a room), repeated as needed. ?teams=0 gives no tree at all.
 const NAMES = ["birch", "cedar", "atlas", "dune", "ember", "fjord", "grove", "harbor", "iris", "juniper", "kelp", "linden", "maple", "nori", "oak", "pine", "quill", "reed", "sora", "tide", "umber", "vale", "willow", "yuzu"];
 const CYCLE = ["moving", "needs_you", "hq_turn", "waiting", "moving", "done", "moving", "parked", "needs_you", "moving", "stale", "waiting"];
 const custom = (q.get("statuses") ?? "").split(",").filter(Boolean);
+const sizes = (q.get("teams") ?? "6,3,1,4,2,1,5").split(",").map(Number).filter((s) => s > 0);
+const leadOf = [];
+for (let i = 0, k = 0; i < n; k++) {
+  const size = n > 4 && sizes.length ? sizes[k % sizes.length] : 1;
+  for (let j = 0; j < size && i < n; j++, i++) leadOf.push(j ? i - j : -1);
+}
+const laneName = (i) => NAMES[i % NAMES.length] + (i >= NAMES.length ? `-${i}` : "");
 const lanes = [{ name: "hq", status: "moving" }];
 for (let i = 0; i < n; i++) {
-  const team = n > 8 ? Math.floor(i / 5) * 5 : -1;
+  const team = leadOf[i] >= 0 ? leadOf[i] : i;
   const status = custom[i] ?? CYCLE[i % CYCLE.length];
   // a lane that works while one of its questions blocks it: the second working lane
-  lanes.push({ name: NAMES[i % NAMES.length] + (i >= NAMES.length ? `-${i}` : ""), parent: team >= 0 && i !== team ? NAMES[team] : null, status, blocking: status === "needs_you" || i === 4 ? 1 : 0 });
+  lanes.push({ name: laneName(i), parent: i !== team ? laneName(team) : null, status, blocking: status === "needs_you" || i === 4 ? 1 : 0 });
 }
 // Vitals in the server's shape (S.vitals[lane]): model, family, effort, context used and max, running subagents.
 const MODELS = ["claude-opus-4-5", "claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"];

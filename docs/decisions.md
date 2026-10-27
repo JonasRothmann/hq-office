@@ -85,3 +85,22 @@ The hero, the hero's hat, the seasons and event rooms, the weather and the Offic
 drawn by the pixel room. They are retired with it rather than ported, so the first 3D version is about the brief
 (offices per lane, desk HUDs, subagents, waiting versus working). Their saved settings stay in the settings table,
 untouched, so they can come back as 3D features without a migration.
+
+## D12. Team rooms, not a room per lane
+
+The owner looked at the first build and said lanes do not need their own rooms. With a 5 m by 4 m office per lane,
+twelve lanes made a campus of small cells: the camera had to pull back so far that the workers were a few pixels
+tall, and most of the floor was empty rooms. The plan now seats lanes at desks in team rooms of four (7 m by 5 m, two
+facing pairs), one team per room, a second room for a team past four, and lanes with no tree sharing rooms of four.
+
+- **Readable figures.** Twelve lanes are three rooms instead of twelve offices, so the view fits a third of the floor
+  and every worker and desk chip is larger on screen. Growth still means more rooms, never one bigger floor; the
+  stages count rooms.
+- **A Sims-house feel.** A few lived-in rooms with people working side by side reads like a household in the
+  reference; a row of identical one-person cells read like a storage unit.
+- **Rooms that mirror the lane tree.** A top-level lane and everyone under it sit together, so the office shows
+  who works with whom at a glance, which a room per lane never did.
+
+What a lane owns is now its desk: `deskAnchor(lane)`, `addToWorld(obj, lane)`, the subagent balls and picking all
+key on the desk, not the room. `window.__world` lists `rooms` (`{ id, team, lanes }`) and `desks` instead of
+`offices`.
