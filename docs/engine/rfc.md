@@ -1,0 +1,582 @@
+# RFC: `@hq/world`, an engine for Sims-like 3D worlds
+
+Status: phase 1 (design and a thin proof). Date: 2026-10-27. Proof: `packages/world/`. Shots: `docs/engine/shots/`.
+
+The 3D office grew lane by lane in `src/client/world/`. Layout, props, people, cutaway and rendering are tangled,
+placement is hard-coded per room kind, and two defects the owner reported (the turn bobs, the view flickers) come from
+that tangle. This RFC proposes a small engine for building lots the way a Sims-like game does, as an isolated package
+the app uses through one public entry. The HQ office becomes the first world built on it.
+
+Contents: 1 Goals. 2 The package boundary (decision D16). 3 Layers. 4 Public API. 5 World files. 6 The two defects.
+7 Rendering quality and cost. 8 Agent DX. 9 Alternatives. 10 Migration. 11 Phase 1 proof. 12 Phase 2.
+
+## 1. Goals and non-goals
+
+Goals:
+
+- Lots on a 1 m tile grid: floors per tile, walls on tile edges, doors and windows as wall openings, rooms found from
+  the walls, objects placed by catalog id, tile and facing, and characters that walk, sit and use things.
+- The Sims 1 view (`docs/research/sims1-look.md`): orthographic, 30° pitch (2:1 tile diamonds), yaw 45° + n·90°,
+  three zooms (22.6, 45.3, 90.5 px/m), walls 2.95 m with a 0.35 m kerb when cut, walls up / cutaway / down.
+- A picture that holds still: no shimmer when panning, no bob when turning, no z-fighting, no frame cap judder.
+- Agents can build worlds and objects in minutes, check them without a browser, and see them headlessly.
+
+Non-goals: a general game engine, physics, terrain, multiple storeys (the model leaves room for a `level` field),
+networking, a scripting VM, an editor UI, skinned meshes, loading third-party model files. Lanes, asks, HQ and the
+bus are app concepts and never appear in the package.
+
+## 2. The package boundary (D16)
+
+The owner asked for the 3D world to be its own isolated package that the app uses. "Isolated" means, at minimum:
+
+1. Its own folder with its own `package.json` (name, `exports`, three.js as a peer and nothing else), README, AGENTS
+   guide, tests, lab and shot CLI.
+2. It imports nothing from the app. A package test fails if any package file imports a path outside the package, or
+   a bare name other than `three` (plus `node:`/`bun:` builtins in tools and tests).
+3. The app reaches it only through the public entries named in `exports`. An app test fails on any deep import.
+4. No build step. The browser resolves it through the import map, and three.js stays one shared copy.
+5. It knows nothing about lanes, asks, the bus or HQ. It speaks lots, rooms, objects, slots, characters, actions and
+   events.
+
+### 2.1 Draft: three package shapes
+
+**A. One package, engine and content.** `packages/world/` holds the engine, the Japandi catalog, the office layout
+generator and the outside generator.
+
+**B. An engine package; HQ content stays in the app.** `packages/world/` is generic. The Japandi catalog, the office
+layout from the lane tree and the outside generator stay in the app under `src/client/world/`, written against the
+public API.
+
+**C. An engine package plus content-pack packages.** `packages/world/` is generic; `packages/world-japandi/` and
+`packages/world-outside/` are packages of their own that register catalog entries and generators.
+
+### 2.2 Critique of the draft
+
+- A puts the office's look inside the engine. Every new chair is an engine change, a content lane edits the engine's
+  folder, and "the package knows nothing about HQ" is false the day the office generator moves in. Rejected.
+- C is the cleanest on paper. In practice each pack needs a `package.json`, an import-map line in
+  `public/index.html` (a shared file), a route, a boundary test and an exports test. A lane that wants one new rug
+  touches four shared places. With one consumer, that ceremony buys nothing yet.
+- B is right for now, but as drafted it has gaps a sceptical reviewer would find:
+  1. *Where do objects register?* A global registry makes import order matter and lets two packs claim `desk` without
+     anyone noticing until the wrong desk renders.
+  2. *Can the package's shot CLI and lab see app content?* If not, agents building the office cannot use the tools
+     the package ships.
+  3. *What stops an app pack from reaching into `render/materials.js` when it wants a helper?* Agents take the
+     shortest path; a deep import will appear the first week.
+  4. *The engine needs some objects for its own tests, lab and examples.* Where do they live without turning the
+     engine into A?
+  5. *Two copies of three.js* (one via the import map, one via a relative path in the package) break `instanceof`
+     and double the download.
+  6. *Global side effects.* The fix for the shadow flicker patches a shader chunk. Done globally, the engine would
+     change how the app's other three.js code renders.
+
+### 2.3 Revision: B with a pack contract (chosen)
+
+- **One engine package**, `packages/world/`, named `@hq/world`. Generic, no HQ words.
+- **Content comes in packs.** A pack is a module that default-exports `definePack({ id, objects, finishes, palette })`.
+  Each object is one file that default-exports `defineObject({...})`. A pack imports only public entries
+  (`@hq/world/model` for the pure define functions). A pack can live anywhere: in the app, in another package, or in
+  the engine's own `packs/` folder.
+- **No global registry.** A world names the packs it uses; `createCatalog(packs)` builds a catalog per world. Ids are
+  namespaced by pack (`starter/desk`, `japandi/desk`). A duplicate id is an error that names both packs.
+  Answers gap 1.
+- **The starter pack** (`packages/world/packs/starter/`) holds the engine's own test and example objects: floor,
+  wall finishes, door, window, desk, chair, plant, lamp. It is capped at about a dozen generic objects and is not
+  where HQ content goes. Answers gap 4.
+- **Objects need no imports.** `build(k, params)` receives the kit, which records primitives as data. Everything an
+  object can do (boxes, cylinders, palette tokens, anchors) is on `k`. There is no helper worth deep-importing.
+  Answers gap 3; the app and package boundary tests catch the rest.
+- **Tools take any root.** `tools/shot.ts`, `tools/check.ts` and the lab serve a root folder (default: the current
+  directory) plus the package at `/@hq/world/` with their own import map, so a world file in the app renders the same
+  as an example in the package. Answers gap 2.
+- **three.js is a peer.** Every package file imports the bare name `three`. The app's import map maps it once; the
+  package's tools map it to the copy they find (`--three`, `HQ_WORLD_THREE`, `node_modules/three`, or the host's
+  vendored copy). Answers gap 5.
+- **No global mutation.** Shader patches go through each engine material's `onBeforeCompile`; a package test fails if
+  any file assigns to `ShaderChunk`. Answers gap 6.
+- **Promotion path to C.** When a second consumer appears, an app pack moves to `packages/world-<name>/` unchanged,
+  because it already imports only public entries.
+
+### 2.4 Layout
+
+```
+packages/world/
+  package.json          @hq/world, "type": "module", exports ".", "./model", "./packs/starter"; peer three 0.186.x
+  README.md             what it is, how to run the lab, the CLI and the tests
+  AGENTS.md             the guide for agents: add an object, a room, a world, a pack
+  CHANGELOG.md          the public API's history
+  src/
+    index.js            "@hq/world": everything, browser (imports three)
+    model/index.js      "@hq/world/model": the pure half (no three.js), Bun and browser
+    model/              world doc, validation, rooms, lot building, problems
+    catalog/            defineObject, definePack, createCatalog, the primitive kit
+    nav/                grid A*, slot reservation, action plans
+    anim/               rig and clips as data, sampling and blending
+    camera/             the Sims camera rig: pure state and maths
+    arch/               architecture as primitives: floors, walls, openings, cutaway
+    lint/               coplanar lint
+    render/             three.js: renderer, lights and shadows, materials, meshes, characters, picking
+    world/              createWorld: the composition a world author uses
+  packs/starter/        the starter pack: index.js plus one file per object
+  examples/             tiny-house.world.js
+  lab/index.html        loads any world file: ?world=/path/to/x.world.js
+  tools/                serve.ts, shot.ts, proof.ts, catalog.ts, check.ts, chrome.ts
+  test/                 bun tests, pure (no three.js, no browser)
+```
+
+### 2.5 How the app serves it
+
+- **Import map** (`public/index.html`, a shared file; a one-line change in its own commit): add
+  `"@hq/world": "/packages/world/src/index.js"` and `"@hq/world/model": "/packages/world/src/model/index.js"` beside
+  `"three"`. Exact entries, no trailing-slash prefix, so a browser cannot resolve a deep import either.
+- **A route file** (`src/server/routes/packages.ts`, new, so no shared file changes): serves `.js` files under
+  `packages/<name>/src/` and `packages/<name>/packs/` only, with the same no-cache and etag rules as `clientFile`.
+  Tests, tools, examples and the lab are not served by the app.
+- **Autoreload** (`src/server/page.ts`, shared): open pages reload when `src/client` or `public` changes. Package
+  edits do not trigger it until `page.ts` also watches `packages/`. That is a two-line change, named here and left
+  for phase 2, when the app first imports the package.
+- **Bun side**: nothing in the app server imports the package in phase 1. When it needs `@hq/world/model` (say, to
+  validate a world on the server), the root `package.json` gets `"workspaces": ["packages/*"]`; no dependency is
+  added.
+
+### 2.6 How `modules.test.ts` treats it
+
+`test/client/modules.test.ts` walks `src/client` only, so package files are never checked as page modules. An app
+import of `@hq/world` resolves through the import map to `packages/world/src/index.js`; the test reads that file's
+exports lazily (the one-line change in this phase), so the link check works across the boundary. The package
+checks its own links in `packages/world/test/links.test.ts` with the same rules. The new
+`test/client/world-package.test.ts` checks the boundary from the app side: no import from app code (`src/`,
+`scripts/`, `test/`, `bin/`) resolves into `packages/world/` except through an `exports` entry, and the import map's
+`@hq/world*` entries equal the package's `exports`.
+
+### 2.7 Versioning and stability
+
+- `packages/world/package.json` starts at `0.1.0`. While `0.x`, a minor bump may break the API; a patch never does.
+- The public API is exactly the named exports of the `exports` entries plus the world-file format. A package test
+  compares those names to `packages/world/api.txt`. Removing or renaming an export fails the test until `api.txt`
+  and `CHANGELOG.md` change in the same commit, which makes a breaking change a visible decision.
+- Exports carry `@stability stable` or `@stability experimental` in their JSDoc. `world.three` (the raw scene and
+  renderer) is experimental and may change in any minor.
+- World files carry `format: 1`. A future `format: 2` reads `format: 1` through a migration in `model/`; old world
+  files never stop loading silently.
+
+### 2.8 How a world author adds a content pack without touching the engine
+
+1. Make a folder anywhere (`src/client/office/packs/japandi/`). Add one file per object, each
+   `export default defineObject({...})`, importing `defineObject` from `@hq/world/model`.
+2. Add `index.js`: `export default definePack({ id: "japandi", objects: [desk, chair, ...] })`.
+3. List the pack in the world: `defineWorld({ packs: [japandi], ... })`.
+4. `bun packages/world/tools/check.ts path/to/x.world.js` validates the world and lints every object; `tools/shot.ts`
+   renders it. No engine file changes.
+
+### 2.9 What an agent gets wrong, and what catches it
+
+| Mistake | Caught by |
+| --- | --- |
+| Adds `sofa.js` but forgets to list it in the pack's `index.js` | `checkPack` (and the pack test): "packs/x/sofa.js is not in index.js; add `import sofa from "./sofa.js"` and list it in objects" |
+| Builds geometry outside its footprint | validation: "starter/desk: box 'top' reaches x = 0.61, past the footprint's 0.5; widen footprint to [2, 1] or shrink the box" |
+| Puts a rug or poster flat on another surface | coplanar lint: names both parts and says "lift one by at least 2 mm or give it 1 cm thickness" |
+| Thinks `y` is the box's centre | the kit documents y as the bottom; lint and footprint errors print the box's real extents |
+| Uses centimetres | sizes over 6 m and footprints that are not whole tiles are errors |
+| Places a door where there is no wall | "opening 2 (starter/door) at tile (6,2) side e: no wall on that edge; the nearest wall edges are (6,1) e, (6,3) e" |
+| Places a chair across a wall or on a desk | "objects[4] starter/chair covers tile (3,2), already used by desk-1; free tiles next to it: (3,3), (4,2)" |
+| Mistypes an id | "unknown type starter/chiar; did you mean starter/chair?" |
+| Leaves a room without a door | "room 'study' cannot be reached from outside; add an opening on one of its walls, for example ..." |
+| Deep-imports `render/materials.js` from the app | `test/client/world-package.test.ts` |
+| Imports app code from the package | `packages/world/test/boundary.test.ts` |
+| Patches `ShaderChunk` | `boundary.test.ts` (no global three.js mutation) |
+
+## 3. The layers
+
+Each layer depends only on the layers above it in this list. Everything above `render` is pure (no three.js) and
+runs in Bun tests.
+
+| Layer | Pure | Knows | Does not know |
+| --- | --- | --- | --- |
+| `model` | yes | the world doc, tiles, edges, rooms, placement, problems | geometry, three.js |
+| `catalog` | yes | object definitions, packs, the primitive kit | where objects are placed |
+| `arch` | yes | floors, walls and openings as primitives; the cutaway rule | three.js |
+| `nav` | yes | walkable tiles, A*, slots, reservations, action plans | animation, drawing |
+| `anim` | yes | the rig, clips as keyframes, sampling, blending | meshes |
+| `camera` | yes | the Sims camera rig: state, easing, pose, projection, pixel snap | three.js |
+| `lint` | yes | coplanar faces in a primitive list | where they came from |
+| `render` | no | three.js: renderer, lights, shadows, materials, meshes, characters | the world doc's rules |
+| `world` | no | composition: builds a world view from a world file; the frame loop; events | lanes, HQ |
+| `ui` (in `render` and `world`) | no | projection for overlays, picking, hover | the app's DOM |
+
+The key decision is that **geometry is data until the last step**. Architecture and objects produce primitive lists
+(`{ shape: "box", size, at, rot, color, finish, part }`) in pure code. `render` turns them into merged three.js
+geometry. So the coplanar lint, footprint checks and golden "what is built" tests all run in Bun in milliseconds,
+on exactly what will be drawn.
+
+### 3.1 model
+
+- A lot is `w × d` tiles of 1 m. `x` runs east, `z` runs south, `y` is up. Tile `(x, z)` covers `[x, x+1) × [z, z+1)`.
+- Floors paint rectangles of tiles with a floor finish. A floored tile stands on a slab whose top is `FLOOR_Y = 0.06`
+  above the ground (a foundation), so floor and ground never share a plane.
+- Walls are paths along grid lines (`[[1,1],[7,1],[7,6]]`), expanded into unit edges. An edge is named by a tile and a
+  side: `{ at: [x, z], side: "n" | "e" | "s" | "w" }`; internally `h:x,z` (along x) or `v:x,z` (along z).
+- Openings (doors, windows) sit on one wall edge, named the same way.
+- Rooms are found, not declared: a flood fill over tiles that crosses edges without walls. A region that touches the
+  lot's border is outdoors; every other region is a room. Rooms get stable ids from their first tile
+  (`room:x,z`) unless a `rooms: [{ at, id, name }]` label names them.
+- Objects: `{ id, type, at: [x, z], facing: "n" | "e" | "s" | "w" }`. `at` is the north-west tile of the footprint
+  after turning. `facing` is where the object's front points (a chair's front is where the knees point).
+- Characters: `{ id, at, facing, look }`. Starting actions: `acts: [{ who, do, target, slot }]`.
+- Validation returns `Problem[]`: `{ code, severity: "error" | "warning", path, message, fix }`. Every message names
+  what is wrong, where (a JSON path and a tile), and a concrete fix, often with coordinates.
+
+### 3.2 catalog
+
+`defineObject` takes:
+
+```js
+defineObject({
+  id: "chair",                       // the pack adds its prefix: "starter/chair"
+  kind: "object",                    // "object" | "opening" | "floor" | "wall"
+  footprint: [1, 1],                 // tiles, w × d before turning
+  height: 0.9,                       // for picking and the lint's bounds
+  blocks: true,                      // its tiles block walking (a rug does not)
+  tags: ["seat"],
+  slots: { seat: { at: [0, -0.05], facing: "s", stand: [[0, 1], [1, 0], [-1, 0]], clip: "sit" } },
+  anchors: { above: [0, 1.4, 0] },   // named points for overlays and attachments
+  instance: true,                    // hint: many of these; draw instanced
+  lod: { far: "box" },               // hint: at the far zoom draw its bounding box
+  build(k, p) { k.box("seat", [0.44, 0.06, 0.42], [0, 0.42, 0], "fabric"); ... },
+});
+```
+
+The kit `k` records primitives: `k.box(part, size, at, color, opts)`, `k.cyl(...)`, `k.glow(...)` (emissive), with
+`y` the bottom of the part, in the object's local frame (origin at the footprint's centre on the floor, front +z).
+Colours are palette tokens (`"wood"`, `"fabric"`, `"leaf"`) or hex. Openings define `width`, `sill`, `head`,
+`passable` and build their frame in the edge's frame. Floor and wall finishes are `{ color, pattern }`.
+
+### 3.3 nav
+
+- A walk grid from the lot: a tile is free unless an object with `blocks` covers it. Moving between neighbours
+  crosses an edge only if it has no wall or a passable opening; diagonals need both orthogonal moves open.
+- A* with octile distance; paths are smoothed by dropping collinear tiles.
+- Slots: an object's `slots` give where a character stands (`stand`, tile offsets tried in order), where it ends up
+  (`at`), which way it faces and which clip it plays. `reserve(objectId, slot, who)` makes a slot exclusive.
+- `planAct(lot, nav, character, { do: "sit", target: "chair-1" })` returns steps:
+  `walk(path) → turn(facing) → enter(slot, clip) → loop(clip)`; the world runs them.
+
+### 3.4 anim
+
+The rig is data: joints with parents and rest offsets (hips, spine, head, two arms with elbows, two legs with knees).
+A clip is keyframes per joint (`[t, rx, ry, rz]`), an optional root offset, and `loop`. Clips in phase 1: `idle`,
+`walk`, `sit-down`, `sit`, `type`, `wave`, `lean-back`, `drink`. `samplePose(clip, t)` and
+`blendPose(a, b, w)` are pure; `render` applies a pose to a jointed mesh. Clip changes cross-fade over 0.2 s.
+
+### 3.5 camera
+
+The Sims camera, pure. State: `focus` (a ground point), `rot` (an integer), `az` (current azimuth), `zoom` (0, 1, 2)
+and `ppm` (current pixels per metre). Rules:
+
+- The camera orbits the focus at a fixed pitch of 30° and a fixed distance. Its height is
+  `focus.y + D·sin 30°` at every frame, and the focus projects to the same screen point at every frame.
+- A turn animates only the azimuth, along the arc, with an ease-in-out over 0.35 s. It never moves the focus and
+  never changes the zoom. Fitting is done once (on load or on request), for the worst of the four rotations, so a
+  turn never needs a refit.
+- Zoom has three steps; between them the camera eases in log space, focus fixed.
+- Panning moves the focus on the ground plane, clamped to the lot.
+- At rest, the rendered focus is snapped so the whole picture lands on whole device pixels: the focus's screen
+  coordinates are rounded to `1 / (ppm · dpr)` metres along screen x and `1 / (ppm · dpr · sin 30°)` along the
+  ground's screen y. The logical focus keeps the exact value, so drags accumulate correctly. A pan then moves the
+  picture by whole pixels, and a static scene renders identically, shifted.
+- `project(pose, point)` and `unproject(pose, screen)` (to the ground plane) are pure, so overlays, picking of tiles
+  and the tests use the same maths as the renderer.
+
+### 3.6 arch and the cutaway
+
+`buildArchitecture(lot, cut)` returns primitives with no overlapping coplanar faces, by construction:
+
+- Every grid vertex that a wall touches gets a post `T × T` (`T = 0.15`). Every wall edge is a box of length
+  `1 − T` between its posts. Segments and posts touch only face to face, never overlap. A post is as tall as the
+  tallest wall beside it.
+- The wall box's top face is the cap (its own colour); there is no separate cap box lying on the wall.
+- Each side of a wall takes the finish of the space it faces: a room's interior finish or the exterior finish.
+- An opening splits its segment into pieces around the hole. Frames are 2 cm deeper than the wall so their faces are
+  never in the wall's planes.
+- Floors are slabs from the ground to `FLOOR_Y`; the ground is a single plane at `y = 0`. Slab and wall bottoms are
+  not emitted (never seen, and coplanar with the ground in the opposite direction).
+
+`cutaway(lot, { mode, rot, focus })` returns the set of cut edges:
+
+- `up`: none. `down`: every edge (walls drop to the kerb, 0.35 m).
+- `cutaway`: an edge is cut when the tile behind it, seen from the camera, is indoors (the near walls of every room),
+  or when a full wall there would hide a room within `2.95 / tan 30° / √2 ≈ 3.6 m` behind it. With `focus` set to a
+  room id, only walls in front of that room are cut (per-room focus).
+- During a turn, the cut set is the union of the old and the new rotation's sets, and the new set alone when the turn
+  ends. Walls never scale; each edge is either full or kerb height, and the mesh is rebuilt (cached per key).
+
+### 3.7 render
+
+- `WebGLRenderer({ antialias: true })`: MSAA on the default framebuffer, `outputColorSpace` sRGB,
+  `NeutralToneMapping` (keeps flat albedo hues), DPR capped at 2.
+- Light rig: hemisphere (sky/ground) + ambient + one directional sun with shadows. `setTime("hh:mm")` moves the sun
+  and blends its colour through day `#FFFFFF`, sunset `#D96D32`, dusk `#575757` and night `#3E5898`.
+- Shadows: one 2048² map. The shadow camera is orthographic, fitted to the lot's bounds in light space, and its
+  centre is snapped to whole shadow texels, so a sun that moves (time of day) or a lot that grows never makes the
+  shadows swim. The map redraws only when a caster moves (`autoUpdate = false`, `needsUpdate` on change).
+- The PCF filter is patched per material (via `onBeforeCompile`, never globally) to rotate its taps by a fixed angle
+  instead of `interleavedGradientNoise(gl_FragCoord.xy)`, with radius 1.5 texels. The penumbra is then fixed to the
+  world, not to the screen.
+- Materials: one Lambert material per finish class (matte, glow, glass), vertex colours from palette tokens, flat
+  shading. Each theme (light, dark) is a palette.
+- Meshes: architecture merged per finish class; each placed object one merged mesh per finish class (so it can be
+  picked and highlighted); `instance: true` objects with four or more copies draw as `InstancedMesh` (phase 2).
+- Characters: a jointed mesh per character from the rig; casts real shadows (no blob decal lying on the floor).
+
+### 3.8 world
+
+`createWorld(canvas, world, opts)` validates the world (throws with every problem), builds the catalog, the lot, the
+nav grid, the architecture for the current cutaway, the object meshes and the characters, and starts the frame loop.
+The loop renders on every animation frame while anything changes (camera moving, a character acting, a drag,
+a time change) and draws nothing while the view is still. No frame cap applies during interaction; an optional
+`idleFps` limits only ambient animation (characters idling) when nothing else moves.
+
+## 4. The public API
+
+All of it is plain JS with JSDoc typedefs in `src/types.js`. `@hq/world/model` is the pure subset; `@hq/world`
+re-exports it and adds the browser half.
+
+```js
+/** @typedef {[number, number]} Tile                         x, z in whole tiles */
+/** @typedef {"n"|"e"|"s"|"w"} Side */
+/** @typedef {{ code: string, severity: "error"|"warning", path: string, message: string, fix: string }} Problem */
+
+/** @typedef {object} WorldDoc
+ *  @property {1} format
+ *  @property {string} id
+ *  @property {string[]} packs                                 pack ids
+ *  @property {{ w: number, d: number }} lot
+ *  @property {{ rect: [number, number, number, number], finish: string }[]} floors
+ *  @property {{ path: Tile[], finish?: string, outside?: string }[]} walls
+ *  @property {{ type: string, at: Tile, side: Side }[]} openings
+ *  @property {{ at: Tile, id: string, name?: string }[]} [rooms]
+ *  @property {{ id: string, type: string, at: Tile, facing?: Side }[]} objects
+ *  @property {{ id: string, at: Tile, facing?: Side, look?: object }[]} characters
+ *  @property {{ who: string, do: string, target?: string, slot?: string }[]} [acts] */
+
+/** @typedef {{ doc: WorldDoc, packs: Pack[] }} World */
+/** @typedef {{ id: string, objects: ObjectDef[], palette?: Record<string, string> }} Pack */
+/** @typedef {{ shape: "box"|"cyl", part: string, size: number[], at: number[], rot?: number, color: string,
+ *              finish?: "matte"|"glow"|"glass", owner?: string }} Primitive */
+```
+
+`@hq/world/model` (pure, stable unless marked):
+
+| Export | Signature |
+| --- | --- |
+| `defineWorld` | `(spec) → World` |
+| `defineObject` | `(def) → ObjectDef` |
+| `definePack` | `({ id, objects, palette }) → Pack` |
+| `createCatalog` | `(packs) → Catalog` (`get`, `has`, `list(filter)`, `problems`) |
+| `validateWorld` | `(world) → Problem[]` |
+| `checkPack` | `(pack) → Problem[]` (footprint, slots, coplanar parts) |
+| `buildLot` | `(world, catalog) → Lot` (tiles, edges, rooms, placed objects with world slots) |
+| `detectRooms` | `(doc) → Room[]` |
+| `toJSON` / `fromJSON` | `(world) → string`, `(json, packs) → World` |
+| `createNav` | `(lot) → Nav` (`path`, `reserve`, `release`, `walkable`) |
+| `planAct` | `(lot, nav, character, act) → Step[]` |
+| `cutaway` | `(lot, { mode, rot, focus }) → Set<string>` |
+| `buildArchitecture` | `(lot, cut, palette) → Primitive[]` |
+| `lintCoplanar` | `(primitives) → Pair[]` |
+| `RIG`, `CLIPS`, `samplePose`, `blendPose` | the rig and clips as data (experimental) |
+| `createCamera`, `stepCamera`, `cameraPose`, `project`, `unproject` | the camera rig |
+| `WALL_H`, `KERB_H`, `WALL_T`, `FLOOR_Y`, `PITCH`, `ZOOMS` | the numbers |
+
+`@hq/world` adds:
+
+```js
+/** createWorld(canvas, world, { theme, time, walls, rot, zoom, clock: "raf"|"manual", idleFps }) → WorldView
+ *  WorldView:
+ *   camera: { rotate(dir), zoom(step), pan(dxPx, dyPx), focusOn(x, z), fit(), pose(), state }
+ *   setWalls(mode, focusRoom?), setTheme("light"|"dark"), setTime("14:00")
+ *   act(characterId, act) → Promise<void>          walk to a slot and use it
+ *   pick(clientX, clientY) → { kind: "object"|"character"|"tile", id?, tile } | null
+ *   hover(clientX, clientY)                          highlights what pick would return
+ *   project([x, y, z]) → { x, y, visible }           CSS px, snapped to device pixels
+ *   anchor(entityId, name) → [x, y, z] | null        a named point of an object or character
+ *   attach(object3d, entityId)                       parent app objects to an entity (experimental)
+ *   on("frame"|"pick"|"hover"|"act"|"camera", fn) → off
+ *   advance(ms)                                       with clock "manual": step and render (tests, shots)
+ *   three: { renderer, scene, camera }              experimental escape hatch
+ *   dispose() */
+```
+
+## 5. World files
+
+A world is a JS module that default-exports `defineWorld({...})`. Its data is plain JSON (so `toJSON` round-trips
+it); the module form exists so a world can import its packs and use small helpers:
+
+```js
+// examples/tiny-house.world.js: two rooms and a door, a desk, a chair and one character who sits down.
+import { defineWorld, rect } from "@hq/world/model";
+import starter from "@hq/world/packs/starter";
+
+export default defineWorld({
+  format: 1, id: "tiny-house", packs: [starter],
+  lot: { w: 14, d: 11 },
+  floors: [{ rect: [2, 2, 10, 7], finish: "starter/oak" }],
+  walls: [{ path: rect(2, 2, 10, 7), finish: "starter/plaster", outside: "starter/siding" }, { path: [[7, 2], [7, 9]] }],
+  openings: [{ type: "starter/door", at: [6, 5], side: "e" }, { type: "starter/door", at: [4, 8], side: "s" }, ...],
+  rooms: [{ at: [3, 3], id: "study" }, { at: [8, 3], id: "lounge" }],
+  objects: [{ id: "desk-1", type: "starter/desk", at: [3, 3], facing: "s" }, ...],
+  characters: [{ id: "ada", at: [9, 7], facing: "n" }],
+  acts: [{ who: "ada", do: "sit", target: "chair-1" }],
+});
+```
+
+JSON or a JS DSL? JSON alone cannot import packs or compute a rectangle, and agents write JS fluently. A full DSL
+(`house.room(...).door(...)`) hides the data and makes validation messages point at code instead of paths. The
+module-with-data form keeps both: validation paths like `objects[3].at` point into the literal an agent wrote.
+
+## 6. The two defects in the current code
+
+### 6.1 "Rotating feels wrong: everything moves up and down"
+
+The camera's world height is in fact constant: `camera.js:107-111` puts it at `target.y + sin(PITCH)·d`. What moves
+up and down is the picture:
+
+1. **The walls squash and rise during every turn.** `world.js:18` (`TURN_MS`) and `world.js:423-431` scale every
+   upper wall group from full height down to the kerb and back up (`rooms.js:186` `setWallScale`), and the cut caps
+   sink with them. Every wall in view moves vertically for 650 ms. This is the largest vertical motion on screen.
+2. **A turn re-fits the view.** `camera.js:33-36` calls `fit()` on every turn while the view is fitting (the
+   default). `fit()` (`camera.js:67-90`) picks a new focus (the centre of the box including walls 2.95 m up, solved
+   back to the ground, `camera.js:85-88`) and a new zoom (`camera.js:82`) per rotation, because a non-square plan
+   projects to a different size at each azimuth. So the room zooms and slides during a turn.
+3. **The focus travels on a chord while the azimuth travels on the arc.** `camera.js:97-99` eases the azimuth and
+   lerps the focus in a straight line by the same factor. Halfway through, the focus is about 29 % of the offset off
+   the arc (1 − cos 45°), which shows as a vertical slide of the whole office.
+
+The engine fixes all three by design (3.5, 3.6): walls never scale, a turn never refits or moves the focus, and only
+the azimuth moves. The proof logs the camera height and the focus's screen position per frame.
+
+### 6.2 "Everything's very flickery when I move around"
+
+Checked against a read-only diagnosis (verified here in the vendored three.js), most likely first:
+
+1. **Screen-fixed shadow dither.** `scene.js:13` uses `PCFShadowMap`; in r186 its five Vogel taps are rotated by
+   `interleavedGradientNoise(gl_FragCoord.xy)` (in `three.module.min.js`, `shadowmap_pars_fragment`), with
+   `radius = 4` (`scene.js:22`) spreading them ±4 texels. The noise is fixed to the screen while the room moves
+   under it, so every penumbra crawls during a pan, and MSAA cannot help. `blurSamples` (`scene.js:23`) applies to
+   VSM only.
+2. **The frame cap stays on during interaction.** `world.js:25` caps at 30 fps (15 balanced), applied by
+   `scene.js:51-63`. On a 120 Hz display each frame is held for four refreshes while the cursor moves: strobing.
+   Panning sets the focus directly (`camera.js:62`), so the steps are visible.
+3. **Coplanar faces.** Window frame sides are `T` deep (`rooms.js:153`, `rooms.js:158`), so their front and back
+   faces lie in the wall's planes. During a turn the squashed uppers (`rooms.js:186`) are pressed into the kerbs
+   (`rooms.js:131`) on the same planes. Wall ends are extended by half a thickness (`rooms.js:19-20`), so an end
+   face lies in the crossing wall's face, lit with a different room light (`rooms.js:117-122`). Depth precision is
+   otherwise fine (ortho, near 0.1, far 440: about 0.03 mm per step), so the 1-14 mm offsets of floors, rugs and
+   pools are safe.
+4. **The camera is never on the pixel grid.** `camera.js:61` and `camera.js:116-119` place the frustum at any
+   sub-pixel offset, so every edge and texture is resampled differently each frame of a pan. Thin parts (keyboards,
+   0.5-2 px wide) blink in and out. The desk HUD chips are rounded to whole CSS pixels
+   (`src/client/desk-hud/index.js:135`) over that sub-pixel canvas, so they wobble against it by a device pixel.
+5. Smaller: posters float until the cut swaps (`world.js:425-427`); the shadow map redraws every frame though
+   nothing moves (`people.js:14`); the light sum (1.8 + 0.8 + 1.2) with no tone mapping clips.
+
+Each one is impossible by construction in the engine: the shadow taps are world-fixed (3.7), the loop has no cap
+during interaction (3.8), the architecture has no overlapping coplanar faces and the lint fails the build if any
+appear (3.6, 8), and the camera snaps to device pixels at rest (3.5). The proof measures it: two frames during a pan
+are compared after undoing the known whole-pixel shift.
+
+## 7. Rendering quality and cost
+
+Costs are estimates for a 2020-era laptop GPU (Apple M1 or Intel Iris Xe) at 1440×900 CSS px, DPR 2.
+
+| Part | Choice | Cost |
+| --- | --- | --- |
+| Anti-aliasing | MSAA 4× on the default framebuffer | ~free on tile-based Apple GPUs; 10-20 % fill on Iris Xe |
+| Resolution | DPR capped at 2 | ×4 pixels vs DPR 1; the main GPU cost of everything below |
+| Tone mapping | Neutral, exposure 1 | free (in the material shader) |
+| Lights | ambient + hemisphere + 1 directional | < 0.3 ms |
+| Shadows | 2048² PCF, 5 taps, world-fixed rotation, lot-fitted, texel-snapped, redrawn only on change | ~0.5-1 ms per redraw; 5 taps per pixel otherwise |
+| Contact darkening | baked vertex shade at wall bases and under objects | free |
+| Materials | Lambert, vertex colours, ≤ 4 classes | one program each |
+| Draw calls | architecture 3-4; one per object per class; instancing for repeated objects | tiny house ~30; HQ at 12 lanes ~60 with instancing |
+| Frame loop | render on change at display rate; nothing when still | 0 when idle |
+| Later, optional | half-resolution SAO or GTAO | 2-6 ms; has its own noise, so only with a world-fixed pattern |
+| Later, optional | edge outline (depth and normal) | ~1 ms |
+
+The order of work is: stable first (no shimmer, no z-fighting, no judder), then soft (shadow radius, contact
+darkening), then rich (time of day, lamps, AO) only if a laptop keeps 60 fps while panning.
+
+## 8. Agent DX
+
+- **A world file an agent can write and check.** `bun packages/world/tools/check.ts <world>` prints every problem
+  with its fix and exits non-zero on errors. It also runs the coplanar lint on the world as built, for every rotation
+  and wall mode.
+- **Errors that name the fix** (2.9), each with a stable `code` so tests and agents can match on it.
+- **A headless shot CLI.** `bun packages/world/tools/shot.ts <world> --rot 0..3 --zoom 0..2 --theme light|dark
+  --time 14:00 --walls up|cutaway|down --out x.jpg`. It serves the root and the package, opens the lab in headless
+  Chrome on SwiftShader (the same approach as `scripts/room-hash.ts`, reimplemented in `tools/chrome.ts` because the
+  package may not import the app), steps the world with a manual clock and writes the frame.
+- **A catalog listing.** `bun packages/world/tools/catalog.ts [pack-path...]` lists every object: id, kind,
+  footprint, slots, anchors, tags.
+- **Tests that check meaning, not pixels**: model validation, room detection, nav (every room reachable), the
+  camera (height constant during a turn, focus fixed on screen, zoom unchanged, pan lands on whole pixels), the
+  coplanar lint (zero pairs in the tiny house in every rotation and wall mode; a seeded window frame fails), packs
+  (every file listed, ids namespaced, parts inside footprints), the boundary, and the API surface.
+- **Golden images, later.** Phase 2 adds `tools/proof.ts` results as golden numbers (pan residual, camera height)
+  rather than golden pixels, which SwiftShader under load makes noisy.
+- **README and AGENTS guide** in the package teach: add an object (one file, list it, check, shot), a room (walls,
+  a door, a label), a world (copy the example), and a pack.
+- **Conventions for parallel agents.** One file per object. A pack's `index.js` and `api.txt` are append-only lists.
+  Ids are namespaced by pack, so two packs never collide. Catalogs are built per world, so registration order never
+  matters. A lane that changes the engine says so up front; a lane that adds content touches only its pack.
+
+## 9. Alternatives considered
+
+1. **ECS (entities, components, systems) instead of a model plus a scene graph.** An ECS shines with thousands of
+   entities and many systems over them. A lot has dozens of objects and a handful of characters; the hard parts are
+   the grid, the walls, rooms and validation, which are relational data, not components. An ECS would spread one
+   object's rules over several systems and make "why is this chair here" harder to answer. Chosen: a plain data
+   model (the doc and the derived lot), pure functions over it, and a thin scene graph built from it.
+2. **Building three.js objects directly in `build()` (as the current kit does)** instead of recording primitives.
+   Simpler for one renderer, but the lint, footprint checks and golden tests would need a browser, and agents would
+   reach for three.js internals. Recording primitives costs one conversion step and keeps the whole model testable
+   in Bun.
+3. **Pure JSON worlds instead of JS modules.** Safer to load, trivially serialisable, but packs must then be found by
+   name through a resolver, and every rectangle is four numbers typed by hand. Chosen: JS modules whose data is
+   JSON; `toJSON`/`fromJSON` cover storage and exchange.
+4. **A global object registry instead of per-world catalogs.** Simpler to call, but order-dependent and collision
+   prone under parallel lanes. Rejected (2.2).
+
+## 10. Migration: the HQ office as a world on the engine
+
+The office becomes an app-side generator that turns the lane tree into a world doc, plus an app-side pack, plus a thin
+adapter that keeps today's `api.js` contract. Nothing in `src/client/world/` changes until two lanes now editing it
+(the Japandi interior and the city outside) have merged.
+
+| Today | Becomes | Kept, moved or deleted |
+| --- | --- | --- |
+| `plan.js` (lanes → rooms, desks, walls, doors) | `src/client/office/plan.js`: lanes → a `WorldDoc` (rooms as wall paths, desks as objects with ids `desk:<lane>`, workers as characters `lane:<name>`) | logic kept, output changed to the doc |
+| `plan.js` `wallCuts`, `cameraSide` | engine `cutaway` | deleted |
+| `walk.js` (BFS) | engine `nav` | deleted |
+| `camera.js` | engine `camera` | deleted |
+| `scene.js` | engine `render` | deleted |
+| `rooms.js` (walls, floors, windows) | engine `arch` + pack finishes and openings | deleted |
+| `kit.js`, `textures.js` | engine kit and materials; textures as finish patterns | kit deleted, texture drawing moved into the pack's finishes |
+| `furniture.js`, `look.js` | `src/client/office/packs/japandi/` (one file per object, palette in the pack) | content kept, reshaped into `defineObject` files |
+| `people.js` | engine characters (rig, clips) + `look` per character from the lane name | poses become clips (`work` → `type`, `lean` → `lean-back`, `mug` → `drink`, `raise` → `wave`) |
+| `balls.js` (subagent balls) | app-side, attached with `world.attach(mesh, "desk:<lane>")` and moved in `world.on("frame")` | kept, app-side |
+| `api.js` (`deskAnchor`, `project`, `addToWorld`, `onFrame`, `world:*` events) | `src/client/office/adapter.js`: `deskAnchor(lane) = world.anchor("desk:" + lane, "hud")`, `project = world.project`, `addToWorld(obj, lane) = world.attach(obj, "desk:" + lane)`, `onFrame = world.on("frame")`; `world:select`/`hover` emitted on the bus from `world.on("pick"/"hover")`, mapping entity ids back to lanes; `world:layout` from the plan | contract kept, implementation replaced |
+| `world.js` | `src/client/office/index.js`: mount, theme, insets, keys, buttons | kept in spirit, much shorter |
+| `outside/` (gen.js, build.js) | an app-side generator that adds ground objects around the lot, or a `packages/world-outside/` pack when a second world wants it | the generator kept; its drawing moves to objects |
+| The desk HUD | positions from `world.project(anchor)`, rounded to `1/dpr` (the engine's projection is pixel-snapped) | kept, rounding changed |
+
+The engine needs three things the proof does not have before the office can move: instancing for repeated objects,
+per-room light at night, and `attach`/`anchor` on characters as well as objects.
+
+## 11. Phase 1 proof
+
+See section 11 results below (filled in after the proof ran).
+
+## 12. Phase 2
+
+See the end of this document.
