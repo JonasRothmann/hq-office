@@ -499,7 +499,8 @@ export function mountWorld(canvas, opts = {}) {
     const moving = view.update(dt);
     const busy = moving || turn || rising.size || walking();
     // POWER SAVER: an office where nothing changed and nothing moves draws no frame
-    if (mode === "saver" && !busy && !dirty) return;
+    // (the land's cars and water are not busy, but a fade between two lands is: it must finish)
+    if (mode === "saver" && !busy && !dirty && !outside?.inspect().fading) return;
     if (built) {
       animate(now);
       const t = now / 1000;
