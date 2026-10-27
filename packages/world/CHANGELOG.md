@@ -4,6 +4,25 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
 
 ## [Unreleased]
 
+### Changed (breaking: the next release is 0.3.0)
+
+- Zoom has 13 stops instead of three. `ZOOMS` is a geometric ladder from 16 to 128 px per metre, each stop about
+  2^(1/4) (19 %) closer than the last, and `cam.zoom` (and `camera.state.zoom`, `inspect().zoom`, the `zoom` option of
+  `createWorld` and the driver) is an index into it. The old three steps are stops 2, 6 and 10, at the same px per
+  metre. The new export `ZOOM_STOPS` names them: `{ far: 2, mid: 6, near: 10 }`. A caller that passed 0, 1 or 2
+  passes `ZOOM_STOPS.far`, `.mid` or `.near`. The default zoom of `createCamera` is `mid`.
+- `fitCamera` and `camera.fitBox` pick the closest stop of the whole ladder that fits at every rotation, so fits are
+  tighter.
+- `zoomCamera(cam, step, at)` and `camera.zoom(step, at)` take an optional viewport point in CSS px: the ground
+  point under it stays under it through the zoom, and the focus is clamped to the bounds as a pan's is. Without
+  `at` the zoom centres on the focus, as before. A zoom mid-zoom retargets from the scale it has reached; a turn
+  mid-zoom keeps its target stop and the focus it ends on. A zoom to the stop it already has does nothing.
+- `bindInput` zooms toward the cursor. Wheel deltas add up, and each 100 px (about one mouse notch) is one stop; a
+  pinch (a wheel event with `ctrlKey`) takes one stop per 17.3, so it keeps up with the fingers. One event moves at
+  most one stop. The 220 ms throttle is gone.
+- The lab takes `?zoom=far|mid|near` or an index, and `+`, `=` and `-` zoom by one stop. `shot.ts --zoom` takes the
+  same.
+
 ### Added
 
 - The engine's own colours can be recoloured. `definePack({ overrides: { light, dark } })` names engine tokens (the

@@ -21,7 +21,8 @@ import { createCamera, stepCamera, rotateCamera, zoomCamera, panCamera, fitCamer
  * @typedef {object} DriverOptions
  * @property {{ w: number, h: number, dpr?: number }} [size]     CSS px the camera draws, and device px per CSS px
  * @property {number} [rot]
- * @property {number} [zoom]            0..2; default: the nearest step that fits the lot at every rotation
+ * @property {number} [zoom]            a stop, an index into ZOOMS; default: the closest stop that fits the lot at
+ *                                      every rotation
  * @property {"up"|"cutaway"|"down"} [walls]
  * @property {string|null} [focusRoom]
  * @property {{ x: number, y: number }} [offset]
@@ -166,7 +167,8 @@ export function createDriver(world, opts = {}) {
 
     // The camera. None of these refits: only fit() and fitBox() pick a zoom, and only when called.
     rotate(dir) { rotateCamera(cam, dir); invalidate(); },
-    zoom(step) { zoomCamera(cam, step); invalidate(); },
+    /** To stop `step` of ZOOMS; with `at` (CSS px on the view), the ground point under it stays under it. */
+    zoom(step, at) { zoomCamera(cam, step, at); invalidate(); },
     pan(dx, dy) { panCamera(cam, dx, dy); invalidate(); },
     focusOn(x, z, { ease = true } = {}) { if (ease) focusCamera(cam, [x, z]); else { cam.moving = null; cam.focus = [x, z]; } invalidate(); },
     fitBox(b, { ease = true } = {}) { fitCamera(cam, b, { ease }); invalidate(); },

@@ -54,7 +54,7 @@ to the folder you stand in, and the tools work from any folder. World and pack f
 4. Check it: `bun <engine>/tools/check.ts <your-pack>/index.js`. It names any part past the footprint, a slot outside
    it, any size that looks like centimetres, any flat parts lying in one plane (they z-fight; parts that share a
    name are told apart as `'shelf' #2`, in build order), and any file missing from `index.js`.
-5. See it: put it in a world and run `bun <engine>/tools/shot.ts <your-world>.world.js --zoom 2 --out x.jpg`, then
+5. See it: put it in a world and run `bun <engine>/tools/shot.ts <your-world>.world.js --zoom near --out x.jpg`, then
    look at the image.
 
 Flat things lying on other things (rugs, posters, keyboards) must be boxes at least 1 cm thick that stand on the
@@ -184,7 +184,7 @@ Check and look, from any folder (here, the one that holds `den/`; paths are rela
 
 ```sh
 bun <engine>/tools/check.ts den/cozy/index.js den/den.world.js --map
-bun <engine>/tools/shot.ts den/den.world.js --zoom 2 --advance 8000 --out den.jpg
+bun <engine>/tools/shot.ts den/den.world.js --zoom near --advance 8000 --out den.jpg
 ```
 
 `check.ts` prints `pack cozy (...): ok`, `world den (...): ok`, then the map:

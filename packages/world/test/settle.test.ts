@@ -1,7 +1,7 @@
 // The end of every motion is drawn: the frame that finishes a turn, a zoom, a fitBox or a focusOn is drawn at the
 // snapped pose, and a clip's cross-fade is drawn to its end, so a still view always shows where things came to rest.
 import { expect, test } from "bun:test";
-import { fromJSON, cameraPose, CLIPS, samplePose } from "@hq/world/model";
+import { fromJSON, cameraPose, CLIPS, samplePose, ZOOM_STOPS } from "@hq/world/model";
 import { createDriver } from "../src/view/driver.js";
 import house from "./fixtures/house.world.js";
 
@@ -29,7 +29,18 @@ for (const walls of ["up", "down", "cutaway"]) test(`turn with walls ${walls}: t
 
 test("zoom: the final, snapped pose is drawn", () => {
   const { d, rec } = mk();
-  d.zoom(d.cam.zoom === 2 ? 1 : 2); run(d, 2000, rec);
+  d.zoom(d.cam.zoom === ZOOM_STOPS.near ? ZOOM_STOPS.mid : ZOOM_STOPS.near); run(d, 2000, rec);
+  expect(JSON.parse(rec.pose).snapped).toBe(true);
+  expect(rec.pose).toBe(nowPose(d));
+});
+
+test("zoom toward the cursor, retargeted twice mid-zoom: the final, snapped pose is drawn", () => {
+  const { d, rec } = mk();
+  const z = d.cam.zoom;
+  d.zoom(z + 1, [300, 250]); run(d, 60, rec);
+  d.zoom(z + 2, [310, 240]); run(d, 60, rec);
+  d.zoom(z + 3, [320, 230]); run(d, 2000, rec);
+  expect(d.cam.zoom).toBe(z + 3);
   expect(JSON.parse(rec.pose).snapped).toBe(true);
   expect(rec.pose).toBe(nowPose(d));
 });
