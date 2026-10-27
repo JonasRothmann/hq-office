@@ -42,7 +42,7 @@ try {
 
   // 1. the turn
   if (want("turn")) {
-  await tab.load(url({ rot: 0, zoom: 1 }));
+  await tab.load(url({ rot: 0, zoom: "mid" }));
   report.turn = await tab.evaluate(`(() => {
     const w = __lab.world; w.advance(0);
     const r = __lab.strip(6, (i) => {
@@ -63,14 +63,14 @@ try {
   const configs = [["engine", ""], ["engine, shadow radius 4", "&shadowRadius=4"], ["no pixel snap", "&noSnap=1"],
     ["screen-space shadow dither, radius 4", "&screenNoise=1&shadowRadius=4"], ["old: no snap + screen dither + radius 4", "&noSnap=1&screenNoise=1&shadowRadius=4"]] as const;
   for (const [name, flags] of configs) {
-    await tab.load(url({ rot: 0, zoom: 2, focusOn: "5,5" }, flags));
+    await tab.load(url({ rot: 0, zoom: "near", focusOn: "5,5" }, flags));
     report.pan[name] = await tab.evaluate(`(() => { __lab.world.advance(0); __lab.panDiff(7.37, 3.11); return __lab.panDiff(7.37, 3.11); })()`);
   }
   }
 
   // 3. the wall modes, and per-room focus
   if (want("walls")) {
-  await tab.load(url({ rot: 0, zoom: 1 }));
+  await tab.load(url({ rot: 0, zoom: "mid" }));
   const walls = await tab.evaluate(`(() => {
     const w = __lab.world; w.advance(0);
     const modes = [["up"], ["cutaway"], ["down"], ["cutaway", "lounge"]];
@@ -84,7 +84,7 @@ try {
 
   // 4. a character walks to the chair and sits down
   if (want("walk")) {
-  await tab.load(url({ rot: 0, zoom: 2, focusOn: "6.5,5.5" }));
+  await tab.load(url({ rot: 0, zoom: "near", focusOn: "6.5,5.5" }));
   const walk = await tab.evaluate(`(() => {
     const w = __lab.world; w.advance(0);
     const times = [0, 1200, 2400, 3600, 4800, 7000];
@@ -99,12 +99,12 @@ try {
 
   // 5. night, everyone seated
   if (want("night")) {
-  await tab.load(url({ rot: 0, zoom: 1, theme: "dark", time: "21:30" }));
+  await tab.load(url({ rot: 0, zoom: "mid", theme: "dark", time: "21:30" }));
   await tab.evaluate("__lab.world.advance(7000)");
   writeFileSync(join(out, "night.jpg"), await tab.screenshot("jpeg"));
 
   // the day view, full size, for reference
-  await tab.load(url({ rot: 0, zoom: 1 }));
+  await tab.load(url({ rot: 0, zoom: "mid" }));
   await tab.evaluate("__lab.world.advance(7000)");
   writeFileSync(join(out, "day.jpg"), await tab.screenshot("jpeg"));
   }
@@ -116,7 +116,7 @@ try {
     const cases: [string, number, string][] = [["full", 1, ""], ["full", 1.5, ""], ["full", 2, ""], ["fractional", 1, `&box=${box}&at=${at}`], ["fractional", 1.5, `&box=${box}&at=${at}`], ["fractional", 2, `&box=${box}&at=${at}`], ["fractional, old sizing", 1.5, `&box=${box}&at=${at}&oldSizing=1`]];
     for (const [what, dpr, flags] of cases) {
       const t = await openTab(chrome.cdp, { w: W, h: H, dpr });
-      await t.load(url({ rot: 0, zoom: 2, focusOn: "5,5" }, flags));
+      await t.load(url({ rot: 0, zoom: "near", focusOn: "5,5" }, flags));
       const size = await t.evaluate(`(async () => { __lab.world.advance(0); await __lab.frames(3); __lab.world.render(); await __lab.frames(2); return __lab.sizing(); })()`);
       const a = decodePng(await t.screenshot("png"));
       const shift = await t.evaluate(`(async () => { const s = __lab.panShift(7.37, 3.11); await __lab.frames(2); return s; })()`);
@@ -141,7 +141,7 @@ try {
 
   // 7. idle: the real clock; count what the world draws while still, while walking, and still again
   if (want("idle")) {
-    await tab.load(labUrl(server.port, worldUrl, { rot: 0, zoom: 1 }).replace("manual=1&", ""));
+    await tab.load(labUrl(server.port, worldUrl, { rot: 0, zoom: "mid" }).replace("manual=1&", ""));
     report.idle = await tab.evaluate(`(async () => {
       const w = __lab.world, wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
       const seated = () => w.character("ada").step === "loop" && !w.sim.ecs.has("ada", "queue");
@@ -164,7 +164,7 @@ try {
   if (want("perf")) {
     report.perf = [];
     for (const w of worlds ?? [world]) {
-      await tab.load(labUrl(server.port, "/" + relative(root, w), { rot: 0, zoom: 0 }));
+      await tab.load(labUrl(server.port, "/" + relative(root, w), { rot: 0, zoom: "far" }));
       const r = await tab.evaluate(`(() => {
         const w = __lab.world;
         w.advance(0);

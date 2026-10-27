@@ -1,11 +1,13 @@
 // The 3D office on the page: the world drawn on #world behind the panels, fitted to the area right of the question
 // column and under the status pill, driven by the state (lanes, vitals, HQ), the theme and the owner's settings.
 // A click on a worker or a desk selects its lane like a click on its name anywhere else (card/card.js select()).
+// The OFFICE setting picks the renderer: the classic one (world.js) or the @hq/world engine (office-view/view.js, D18).
+// Both answer the same calls, so everything below drives either one.
 import { on } from "../core/bus.js";
 import { S, CONFIG } from "../core/state.js";
 import { select, selected } from "../card/card.js";
 import { effectiveTheme } from "../theme/index.js";
-import { settings } from "../settings/prefs.js";
+import { settings, localSettings } from "../settings/prefs.js";
 
 const canvas = document.getElementById("world");
 const narrow = matchMedia("(max-width: 1150px)");
@@ -22,13 +24,17 @@ function webgl() {
 let world = null;
 
 // The free part of the canvas, in CSS pixels: right of the question column and below the status pill. On a narrow
-// screen the canvas is a strip above the page and only its foot is covered (by the pill).
+// screen the canvas is a strip above the page and only its foot is covered (by the pill). The new office also keeps
+// right of the reader while it is open (D17 left this for the engine, D18); the classic one lets it float over.
 function insets() {
   if (narrow.matches) return { left: 0, top: 0, right: 0, bottom: 28 };
   const c = canvas.getBoundingClientRect();
   const desk = document.querySelector(".desk")?.getBoundingClientRect();
   const top = document.querySelector(".top")?.getBoundingClientRect();
-  return { left: desk ? Math.max(0, desk.right - c.left) : 0, top: top ? Math.max(0, top.bottom - c.top) : 0, right: 0, bottom: 0 };
+  const reader = office === "new" ? document.getElementById("reader") : null;
+  const open = reader && !reader.hidden ? reader.getBoundingClientRect() : null;
+  const right = Math.max(desk?.right ?? 0, open?.width ? open.right : 0);
+  return { left: Math.max(0, right - c.left), top: top ? Math.max(0, top.bottom - c.top) : 0, right: 0, bottom: 0 };
 }
 
 // HQ's desk in the suite: asleep while the server finds no HQ it can type into, else what its own lane says.
@@ -50,9 +56,23 @@ function render(S) {
 // The land grows from the owner's name, until REROLL picks another seed.
 const seedOf = (s) => s.outsideSeed || CONFIG.owner || "hq";
 
+// Which renderer draws the office: ?office=new or ?office=classic for this page, else the OFFICE setting. A browser
+// with no copy of the settings waits for the server's (they come with the first state) before it picks.
+const asked = ["new", "classic"].find((o) => o === new URLSearchParams(location.search).get("office")) ?? null;
+let office = null;
+function settled(fn) {
+  if (asked || S || Object.keys(localSettings()).length) { fn(); return; }
+  const off = on("state", () => { off(); fn(); });
+}
+
+// One canvas holds one renderer: when OFFICE changes (here or on another page), the page reloads, unless its address
+// chose the renderer.
+on("settings", (s) => { if (office && !asked && s.office !== office) location.reload(); });
+
 // The world's module (and three.js with it) is fetched only here, so a page without the world never loads it.
 async function start() {
-  const { mountWorld } = await import("./world.js");
+  office = asked ?? settings.office;
+  const mountWorld = office === "new" ? (await import("../office-view/view.js")).mountOffice : (await import("./world.js")).mountWorld;
   const first = S;
   const hq = first ? hqOf(first) : { name: "hq" };
   world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets(), outside: settings.outside, outsideSeed: seedOf(settings) });
@@ -61,7 +81,7 @@ async function start() {
   world.setPaused(document.documentElement.classList.contains("roomopen")); // a room opened before this module ran
   const refit = () => world.setInsets(insets());
   const ro = new ResizeObserver(refit);
-  for (const sel of [".desk", ".top"]) { const el = document.querySelector(sel); if (el) ro.observe(el); }
+  for (const sel of [".desk", ".top", "#reader"]) { const el = document.querySelector(sel); if (el) ro.observe(el); }
   addEventListener("resize", refit);
   narrow.addEventListener("change", refit);
   render(first);
@@ -115,7 +135,7 @@ async function start() {
 }
 
 // ?world=off: the panels only, and three.js is never fetched (for tests and work on the panels).
-if (canvas && new URLSearchParams(location.search).get("world") !== "off" && webgl()) start();
+if (canvas && new URLSearchParams(location.search).get("world") !== "off" && webgl()) settled(start);
 else {
   document.documentElement.dataset.world = "off";
   Object.defineProperty(window, "__world", { value: Object.freeze({ rooms: [], desks: [], stage: null, rotation: 0, unavailable: true }) });

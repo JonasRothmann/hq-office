@@ -13,6 +13,7 @@
 @hq/world WALL_T
 @hq/world WorldError
 @hq/world ZOOMS
+@hq/world ZOOM_STOPS
 @hq/world analyse
 @hq/world blendPose
 @hq/world buildArchitecture
@@ -77,6 +78,7 @@
 @hq/world/model WALL_T
 @hq/world/model WorldError
 @hq/world/model ZOOMS
+@hq/world/model ZOOM_STOPS
 @hq/world/model analyse
 @hq/world/model blendPose
 @hq/world/model buildArchitecture

@@ -9,7 +9,7 @@ import { FLOOR_Y, tileKey } from "../model/grid.js";
 import { buildPrims } from "../catalog/define.js";
 import { floorAt as floorOf } from "../sim/motion.js";
 import { buildArchitecture } from "../arch/build.js";
-import { cameraPose, project as projectPose, unproject } from "../camera/rig.js";
+import { cameraPose, project as projectPose, unproject, wheelSteps } from "../camera/rig.js";
 import { createDriver } from "../view/driver.js";
 import { canvasSize } from "../view/size.js";
 import { createStage } from "../render/stage.js";
@@ -30,12 +30,15 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  * @property {"up"|"cutaway"|"down"} [walls]
  * @property {string|null} [focusRoom]       cut only the walls in front of this room
  * @property {number} [rot]
- * @property {number} [zoom]                 0..2; default: the nearest step that fits the lot at every rotation
+ * @property {number} [zoom]                 a stop, an index into ZOOMS (ZOOM_STOPS names three); default: the closest
+ *                                           stop that fits the lot at every rotation
  * @property {"raf"|"manual"} [clock]        manual: nothing moves until advance(ms) (tests, shots)
  * @property {number} [idleFps]              draw clips looping in place (breathing, typing) this often while nothing
  *                                           else moves; default 0: a still view draws nothing
  * @property {{ w: number, h: number, dpr?: number }} [size]   default: the canvas's own box, in device pixels
  * @property {{ x: number, y: number }} [offset]   where the view's centre sits, CSS px from the canvas centre
+ * @property {{ left: number, top: number, right: number, bottom: number }} [insets]   CSS px of the canvas that the
+ *                                           host's panels cover: the view centres in the rest, and fits into it
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
  * @property {import("../view/scenery.js").Scenery|null} [scenery]   the land round the lot (default: the world's own
@@ -71,7 +74,7 @@ export function createWorld(canvas, world, opts = {}) {
   }
   const s0 = measure(null);
 
-  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
+  const driver = createDriver(world, { size: s0, rot: opts.rot, zoom: opts.zoom, walls: opts.walls, focusRoom: opts.focusRoom, offset: opts.offset, insets: opts.insets, snap: !debug.noSnap, idleFps: opts.idleFps, systems: opts.systems, emit });
   const { sim, cam } = driver;
   let theme = opts.theme === "dark" ? "dark" : "light";
   let time = opts.time ?? (theme === "dark" ? "21:00" : "14:00");
@@ -395,13 +398,16 @@ export function createWorld(canvas, world, opts = {}) {
     get nav() { return driver.nav; },
     camera: {
       rotate(dir) { driver.rotate(dir); emit("camera", { rot: cam.rot }); },
-      zoom(step) { driver.zoom(step); },
+      /** To stop `step` of ZOOMS, eased. With `at` ([x, y] CSS px on the canvas) the ground under it stays under it. */
+      zoom(step, at) { driver.zoom(step, at); },
       pan(dx, dy) { driver.pan(dx, dy); },
       /** Centre on a ground point, eased unless { ease: false }. */
       focusOn(x, z, o) { driver.focusOn(x, z, o); },
-      /** Centre on a box ({ minX, minZ, maxX, maxZ }, a room's for example) at the nearest zoom that fits it, eased. */
+      /** Centre on a box ({ minX, minZ, maxX, maxZ }, a room's for example) at the closest stop that fits it, eased. */
       fitBox(box, o) { driver.fitBox(box, o); },
       fit(o) { driver.fit(o); },
+      /** The edges of the canvas a host's panels cover, CSS px ({ left, top, right, bottom }). Never refits. */
+      setInsets(insets) { driver.setInsets(insets); },
       pose: () => cameraPose(cam),
       get state() { return { rot: cam.rot, az: cam.az, zoom: cam.zoom, ppm: cam.ppm, focus: [...cam.focus], turning: !!cam.turn, moving: !!cam.moving }; },
     },
@@ -480,11 +486,13 @@ export function createWorld(canvas, world, opts = {}) {
       return view.inspect();
     },
     render() { syncArch(); render(); },
+    /** Pause (true) or resume: while paused nothing steps or draws, for a view the host has covered. */
+    pause(on) { driver.pause(on); },
     /** Request a frame (the host changed something the engine cannot see, such as an attached object). */
     invalidate(o) { driver.invalidate(o); },
-    bindInput(el = canvas) { return bindInput(view, el, emit); },
+    bindInput(el = canvas) { return bindInput(view, el, emit, canvas); },
     inspect() {
-      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
+      return { rot: ((cam.rot % 4) + 4) % 4, zoom: cam.zoom, paused: driver.paused, walls: driver.walls, focusRoom: driver.focusRoom, theme, time, cut: [...(arch?.userData.cut ?? [])].sort(),
         camera: { y: pose.position[1], position: pose.position, target: pose.target, az: cam.az, ppm: cam.ppm, snapped: pose.snapped },
         size: { w: cam.w, h: cam.h, dpr: cam.dpr, buffer: [canvas.width, canvas.height] },
         stats: { ...stats, frames: driver.stats.frames },
@@ -509,9 +517,11 @@ function disposeGroup(g) {
   g.traverse((o) => { if (o.userData.engine !== false) o.geometry?.dispose(); });
 }
 
-// Drag to pan, wheel to step the zoom, click to pick (emits "pick"), move to hover. Returns a function that unbinds.
-function bindInput(view, el, emit) {
-  let drag = null, wheelAt = 0;
+// Drag to pan, wheel or pinch to zoom toward the cursor (a stop each time the deltas add up to one, wheelSteps), click
+// to pick (emits "pick"), move to hover. Returns a function that unbinds.
+function bindInput(view, el, emit, canvas) {
+  let drag = null;
+  const wheelAcc = {};
   const down = (e) => { drag = { x: e.clientX, y: e.clientY, moved: false }; el.setPointerCapture?.(e.pointerId); };
   const move = (e) => {
     if (!drag) { view.hover(e.clientX, e.clientY); return; }
@@ -527,10 +537,10 @@ function bindInput(view, el, emit) {
   };
   const wheel = (e) => {
     e.preventDefault();
-    const now = performance.now();
-    if (now - wheelAt < 220) return;
-    wheelAt = now;
-    view.camera.zoom(view.camera.state.zoom + (e.deltaY < 0 ? 1 : -1));
+    const n = wheelSteps(wheelAcc, e);
+    if (!n) return;
+    const r = canvas.getBoundingClientRect();
+    view.camera.zoom(view.camera.state.zoom + n, [e.clientX - r.left, e.clientY - r.top]);
   };
   el.addEventListener("pointerdown", down);
   el.addEventListener("pointermove", move);

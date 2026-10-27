@@ -21,6 +21,7 @@ src/client/               the page, plain ES modules and stylesheets, served as 
   main.js                 loads every built-in area in the old order
   core/                   shared by every area: state, net, bus, formatting, rich text, base styles, layout
   world/                  the 3D office (three.js): plan, rooms, furniture, people, camera, scene, api
+  office-view/            the office on the @hq/world engine, behind the OFFICE setting (D18): view.js
   theme/                  light, dark or system theme
   vendor/three/           three.js r186, vendored (the page's import map points "three" here)
   inbox/                  the owner's inbox: the stack, the pills, the keys, drafts and the page clock

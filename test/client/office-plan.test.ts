@@ -6,11 +6,11 @@ import { describe, expect, test } from "bun:test";
 import { fromJSON, validateWorld, formatProblems, buildLot, diffWorld, cutaway, lotPrims, lintCoplanar, lintViews, describePairs, defineObject, WALL_MODES, WALL_T, FLOOR_Y, CLIPS } from "@hq/world/model";
 import japandi from "../../src/client/office/japandi/index.js";
 import { officeDoc, deskId, chairId, workerId } from "../../src/client/office/plan.js";
-import { STATUS_ACTS } from "../../src/client/office/acts.js";
+import { STATUS_ACTS, actFor, rowOf } from "../../src/client/office/acts.js";
 import { FOOT } from "../../src/client/office/furnish.js";
 
 const PACKS = [japandi];
-const STATUSES = ["moving", "needs_you", "blocked", "hq_turn", "waiting", "stale", "done", "parked", "gone"];
+const STATUSES = ["moving", "needs_you", "blocked", "with_lead", "hq_turn", "waiting", "stale", "done", "parked", "gone"];
 type Lane = { name: string; parent?: string | null; status?: string };
 // A lane's status, fixed by its name, so a lane keeps its status while others come and go.
 const statusOf = (name: string) => STATUSES[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % STATUSES.length];
@@ -91,11 +91,17 @@ describe("office doc", () => {
   });
 
   test("the act per status is a table: each row names a place and a clip the engine has", () => {
-    expect(Object.keys(STATUS_ACTS).sort()).toEqual([...STATUSES].sort());
+    expect(Object.keys(STATUS_ACTS).sort()).toEqual([...STATUSES, "visit-lead"].sort());
     for (const [status, row] of Object.entries(STATUS_ACTS)) {
-      expect({ status, place: ["desk", "beside", "break"].includes(row.place) }).toEqual({ status, place: true });
+      expect({ status, place: ["desk", "beside", "break", "lead"].includes(row.place) }).toEqual({ status, place: true });
       expect({ status, clip: !!(CLIPS as any)[row.clip] }).toEqual({ status, clip: true });
     }
+    // a question with its lead sits at its desk; the walk to the lead is a row that stays off until a setting turns it on
+    expect(STATUS_ACTS["visit-lead"].off).toBe(true);
+    expect(rowOf("visit-lead")).toBe(STATUS_ACTS.parked);
+    const at = { chair: "c", beside: [1, 2], spot: [3, 4], lead: [5, 6] };
+    expect(actFor("w", "with_lead", at)).toMatchObject({ do: "sit", target: "c" });
+    expect(actFor("w", "with_lead", at, { visitLead: true })).toMatchObject({ do: "walk", to: [5, 6] });
     // working types at the desk, waiting leans back there, a question stands up beside it, done goes for a drink
     const lanes = ["moving", "waiting", "needs_you", "done", "parked", "mystery"].map((s) => ({ name: `x-${s}`, parent: "hq", status: s }));
     const { doc } = officeDoc(withHq(lanes));

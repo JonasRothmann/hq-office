@@ -18,7 +18,7 @@ Goals:
 - Lots on a 1 m tile grid: floors per tile, walls on tile edges, doors and windows as wall openings, rooms found from
   the walls, objects placed by catalog id, tile and facing, and characters that walk, sit and use things.
 - The Sims 1 view (`docs/research/sims1-look.md`): orthographic, 30° pitch (2:1 tile diamonds), yaw 45° + n·90°,
-  three zooms (22.6, 45.3, 90.5 px/m), walls 2.95 m with a 0.35 m kerb when cut, walls up / cutaway / down.
+  a ladder of 13 zoom stops from 16 to 128 px/m (far, mid and near at 22.6, 45.3, 90.5), walls 2.95 m with a 0.35 m kerb when cut, walls up / cutaway / down.
 - A picture that holds still: no shimmer when panning, no bob when turning, no z-fighting, no frame cap judder.
 - Agents can build worlds and objects in minutes, check them without a browser, and see them headlessly.
 
@@ -422,15 +422,15 @@ A clip is keyframes per joint (`[t, rx, ry, rz]`), an optional root offset, and 
 
 ### 3.5 camera
 
-The Sims camera, pure. State: `focus` (a ground point), `rot` (an integer), `az` (current azimuth), `zoom` (0, 1, 2)
-and `ppm` (current pixels per metre). Rules:
+The Sims camera, pure. State: `focus` (a ground point), `rot` (an integer), `az` (current azimuth), `zoom` (a stop,
+an index into `ZOOMS`) and `ppm` (current pixels per metre). Rules:
 
 - The camera orbits the focus at a fixed pitch of 30° and a fixed distance. Its height is
   `focus.y + D·sin 30°` at every frame, and the focus projects to the same screen point at every frame.
 - A turn animates only the azimuth, along the arc, with an ease-in-out over 0.38 s. It never moves the focus and
   never changes the zoom. Fitting is done once (on load or on request), for the worst of the four rotations, so a
   turn never needs a refit.
-- Zoom has three steps; between them the camera eases in log space, focus fixed.
+- Zoom moves between stops; between them the camera eases in log space. See "The zoom ladder" below.
 - Panning moves the focus on the ground plane, clamped to the lot.
 - At rest, the rendered focus is snapped so the whole picture lands on whole device pixels: the focus's screen
   coordinates are rounded to `1 / (ppm · dpr)` metres along screen x and `1 / (ppm · dpr · sin 30°)` along the
@@ -438,6 +438,40 @@ and `ppm` (current pixels per metre). Rules:
   picture by whole pixels, and a static scene renders identically, shifted.
 - `project(pose, point)` and `unproject(pose, screen)` (to the ground plane) are pure, so overlays, picking of tiles
   and the tests use the same maths as the renderer.
+
+**The zoom ladder.** The first engine had three steps (22.6, 45.3, 90.5 px/m), one per wheel notch, throttled to one
+every 220 ms. The old renderer zooms freely with the wheel and feels finer. Free zoom would keep the snap (it works
+at any ppm), but `fitBox`, the lab's buttons and the shots would land on arbitrary scales. So the engine keeps
+stops, and makes them finer:
+
+- `ZOOMS` is `16·2^(k/4)` for k = 0..12, rounded to 0.1 px/m: 16 to 128, each stop about 19 % closer than the last.
+  The rounding keeps the old three values exactly, as stops 2, 6 and 10. `ZOOM_STOPS` names them `far`, `mid` and
+  `near`, so the lab's buttons, `shot.ts --zoom near` and old intent still read. `cam.zoom` is an index into the
+  ladder, and the default is `mid`.
+- `fitCamera` (and `fitBox`) picks the closest stop at which the box fits at every rotation, from the whole ladder,
+  so a fit is now within 19 % of tight instead of within a factor of two.
+- A zoom eases in log space over 260 ms. A zoom that arrives mid-zoom retargets: it starts from the scale reached,
+  with an ease-out (full speed at once) instead of an ease-in-out, so rapid input never stalls and never queues.
+  `cam.zoom` is the target, so the next step counts from it.
+- **Toward the cursor.** `zoomCamera(cam, step, at)` with `at`, a viewport point in CSS px, holds the ground point
+  under it. The anchor is taken from the picture as drawn: at rest the logical focus first takes the snapped value,
+  a move of under one device pixel, so the first eased frame matches the last still one. Each frame then puts the
+  focus at `g + (f0 − g)·ppm0/ppm` (g the anchor, f0 and ppm0 the focus and scale when the zoom began), clamped to
+  the bounds as a pan is. That formula has no azimuth in it, so a turn mid-zoom changes neither the target stop nor
+  the focus the zoom ends on; the turn only rotates the picture about the focus, as always. A pan or a
+  `focusCamera` mid-zoom lets go of the anchor and the zoom goes on about the focus. Without `at` (keys, buttons,
+  `fitBox`) the zoom centres on the focus.
+- **At rest, every stop snaps.** The settle frame is the snapped pose (3.9) at whichever stop the zoom ended on, so
+  the anchor ends within half a device pixel of the cursor on each axis. `camera.test.ts` checks every stop at DPR
+  1, 1.5 and 2, and the anchor through the ease and after settle at three rotations.
+- **Wheel and pinch** (`wheelSteps` in the rig, used by `bindInput`). The wheel's `deltaY` adds up, and each time
+  the total passes one stop's worth it moves one stop toward the cursor. A stop is 100 px of wheel (about one mouse
+  notch; a trackpad sends many small deltas that add up to it). A pinch is a wheel event with `ctrlKey`, and the
+  browser's own pinch scale is `exp(−deltaY / 100)`, so a stop of pinch is 17.3 (`100 · ln 2^(1/4)`): the zoom
+  keeps up with the fingers. Lines count 40 px and pages 800. One event moves at most one stop, so a ctrl+wheel notch
+  is one stop, not six. A change of direction, or a pause over 400 ms, starts the total again, so a remainder left
+  from one gesture never tips the next. There is no throttle.
+- **Keys** are the host's. The lab maps `+` and `=` to a stop closer and `-` to a stop further, about the focus.
 
 ### 3.6 arch and the cutaway
 
@@ -621,14 +655,14 @@ re-exports it and adds the browser half.
 | `lintCoplanar` | `(primitives) → Pair[]` |
 | `RIG`, `CLIPS`, `samplePose`, `blendPose` | the rig and clips as data (experimental) |
 | `createCamera`, `stepCamera`, `cameraPose`, `project`, `unproject`, `focusCamera` | the camera rig |
-| `WALL_H`, `KERB_H`, `WALL_T`, `FLOOR_Y`, `PITCH`, `ZOOMS` | the numbers |
+| `WALL_H`, `KERB_H`, `WALL_T`, `FLOOR_Y`, `PITCH`, `ZOOMS`, `ZOOM_STOPS` | the numbers (the zoom ladder and its named stops) |
 
 `@hq/world` adds:
 
 ```js
 /** createWorld(canvas, world, { theme, time, walls, rot, zoom, clock: "raf"|"manual", idleFps, systems }) → WorldView
  *  WorldView:
- *   camera: { rotate(dir), zoom(step), pan(dxPx, dyPx), focusOn(x, z, { ease }), fitBox(box, { ease }), fit(),
+ *   camera: { rotate(dir), zoom(step, atPx?), pan(dxPx, dyPx), focusOn(x, z, { ease }), fitBox(box, { ease }), fit(),
  *             pose(), state }
  *   roomBox(roomId) → { minX, minZ, maxX, maxZ }      for camera.fitBox
  *   apply(nextWorldOrDoc) → WorldDiff | null         an edit at run time (3.10)
@@ -762,7 +796,7 @@ darkening), then rich (time of day, lamps, AO) only if a laptop keeps 60 fps whi
   with its fix and exits non-zero on errors. It also runs the coplanar lint on the world as built, for every rotation
   and wall mode.
 - **Errors that name the fix** (2.9), each with a stable `code` so tests and agents can match on it.
-- **A headless shot CLI.** `bun packages/world/tools/shot.ts <world> --rot 0..3 --zoom 0..2 --theme light|dark
+- **A headless shot CLI.** `bun packages/world/tools/shot.ts <world> --rot 0..3 --zoom far|mid|near|0..12 --theme light|dark
   --time 14:00 --walls up|cutaway|down --out x.jpg`. It serves the root and the package, opens the lab in headless
   Chrome on SwiftShader (the same approach as `scripts/room-hash.ts`, reimplemented in `tools/chrome.ts` because the
   package may not import the app), steps the world with a manual clock and writes the frame.

@@ -28,7 +28,7 @@ export function tick() {
   }
   for (const el of document.querySelectorAll("[data-since]")) setText(el, age(now - Number(el.dataset.since)));
   if (S) {
-    const oldest = S.open.length ? Math.min(...S.open.map((a) => a.created_at)) : null;
+    const own = S.open.filter((a) => !a.holder), oldest = own.length ? Math.min(...own.map((a) => a.created_at)) : null;
     const waited = oldest ? now - oldest : 0;
     setClass($("sOld"), "old" + (waited > 30 * 60000 ? " hot" : waited > 5 * 60000 ? " warm" : ""));
     setText($("sOld").querySelector(".v"), oldest ? dur(waited) : "-");
@@ -49,8 +49,9 @@ export function scheduleTick() {
   if (!S || document.hidden) return;
   const now = Date.now();
   let wait = Infinity;
-  if (S.open.length) {
-    const waited = now - Math.min(...S.open.map((a) => a.created_at)), step = waited < 3600_000 ? 1000 : 60_000;
+  const own = S.open.filter((a) => !a.holder);
+  if (own.length) {
+    const waited = now - Math.min(...own.map((a) => a.created_at)), step = waited < 3600_000 ? 1000 : 60_000;
     wait = step - (waited % step);
   }
   for (const el of document.querySelectorAll("[data-created], [data-since]")) {

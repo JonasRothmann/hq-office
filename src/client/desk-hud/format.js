@@ -25,6 +25,7 @@ export function tokens(n) {
 // Status word and tone (a glass status colour) per lane status: the world's table in spec section 3.
 const STATUS = {
   needs_you: ["needs you", "red"],
+  with_lead: ["with lead", "amber"],
   blocked: ["blocked", "red"],
   hq_turn: ["on HQ", "amber"],
   waiting: ["waiting", "blue"],
