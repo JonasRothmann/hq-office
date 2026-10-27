@@ -215,6 +215,9 @@ describe("canvas sizing", () => {
     expect(canvasSize({ css: { w: 801.3, h: 600 }, dpr: 2 })).toMatchObject({ bw: 1603, bh: 1200, w: 801.5 });
     // above the cap the buffer is scaled up, so no snap can hold; it says so by setting no style
     expect(canvasSize({ css: { w: 400, h: 300 }, dpr: 3, device: { w: 1200, h: 900 } })).toMatchObject({ dpr: 2, bw: 800, bh: 600, style: null });
+    // Chrome's DPR emulation reports the unscaled box (800 at DPR 1.5): not trusted, so the buffer is still 1200 wide
+    expect(canvasSize({ css: { w: 800, h: 500 }, dpr: 1.5, device: { w: 800, h: 500 } })).toMatchObject({ dpr: 1.5, bw: 1200, bh: 750 });
+    expect(canvasSize({ css: { w: 640.390625, h: 400.59375 }, dpr: 1.5, device: { w: 641, h: 400 } })).toMatchObject({ bw: 961, bh: 601 });
   });
 
   for (const [dpr, css] of [[1, { w: 1280, h: 800 }], [1.5, { w: 1280, h: 800 }], [2, { w: 1280, h: 800 }], [1.5, { w: 1023.4, h: 700.6 }], [1, { w: 1023.4, h: 700.6 }], [2, { w: 801.3, h: 600.7 }]] as const) {

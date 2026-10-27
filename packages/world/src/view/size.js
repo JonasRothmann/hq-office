@@ -16,7 +16,10 @@ export const MAX_DPR = 2;
 export function canvasSize({ css, dpr, device = null }) {
   const real = dpr > 0 ? dpr : 1;
   const scale = Math.min(real, MAX_DPR);
-  if (device && device.w > 0 && device.h > 0 && scale === real) return { w: device.w / real, h: device.h / real, dpr: real, bw: device.w, bh: device.h, style: null };
+  // A device box is trusted only when it is the CSS box times the DPR, give or take the browser's rounding. Chrome's
+  // DPR emulation (DevTools, headless screenshots) reports the unscaled box; scaling it would blur the picture.
+  const agrees = device && Math.abs(device.w - css.w * real) <= 1 && Math.abs(device.h - css.h * real) <= 1;
+  if (agrees && device.w > 0 && device.h > 0 && scale === real) return { w: device.w / real, h: device.h / real, dpr: real, bw: device.w, bh: device.h, style: null };
   const bw = Math.max(1, Math.round(css.w * scale)), bh = Math.max(1, Math.round(css.h * scale));
   return { w: bw / scale, h: bh / scale, dpr: scale, bw, bh, style: scale === real ? { w: bw / scale, h: bh / scale } : null };
 }
