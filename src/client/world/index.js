@@ -1,11 +1,13 @@
 // The 3D office on the page: the world drawn on #world behind the panels, fitted to the area right of the question
 // column and under the status pill, driven by the state (lanes, vitals, HQ), the theme and the owner's settings.
 // A click on a worker or a desk selects its lane like a click on its name anywhere else (card/card.js select()).
+// The OFFICE setting picks the renderer: the classic one (world.js) or the @hq/world engine (office-view/view.js, D18).
+// Both answer the same calls, so everything below drives either one.
 import { on } from "../core/bus.js";
 import { S, CONFIG } from "../core/state.js";
 import { select, selected } from "../card/card.js";
 import { effectiveTheme } from "../theme/index.js";
-import { settings } from "../settings/prefs.js";
+import { settings, localSettings } from "../settings/prefs.js";
 
 const canvas = document.getElementById("world");
 const narrow = matchMedia("(max-width: 1150px)");
@@ -50,9 +52,23 @@ function render(S) {
 // The land grows from the owner's name, until REROLL picks another seed.
 const seedOf = (s) => s.outsideSeed || CONFIG.owner || "hq";
 
+// Which renderer draws the office: ?office=new or ?office=classic for this page, else the OFFICE setting. A browser
+// with no copy of the settings waits for the server's (they come with the first state) before it picks.
+const asked = ["new", "classic"].find((o) => o === new URLSearchParams(location.search).get("office")) ?? null;
+let office = null;
+function settled(fn) {
+  if (asked || S || Object.keys(localSettings()).length) { fn(); return; }
+  const off = on("state", () => { off(); fn(); });
+}
+
+// One canvas holds one renderer: when OFFICE changes (here or on another page), the page reloads, unless its address
+// chose the renderer.
+on("settings", (s) => { if (office && !asked && s.office !== office) location.reload(); });
+
 // The world's module (and three.js with it) is fetched only here, so a page without the world never loads it.
 async function start() {
-  const { mountWorld } = await import("./world.js");
+  office = asked ?? settings.office;
+  const mountWorld = office === "new" ? (await import("../office-view/view.js")).mountOffice : (await import("./world.js")).mountWorld;
   const first = S;
   const hq = first ? hqOf(first) : { name: "hq" };
   world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets(), outside: settings.outside, outsideSeed: seedOf(settings) });
@@ -115,7 +131,7 @@ async function start() {
 }
 
 // ?world=off: the panels only, and three.js is never fetched (for tests and work on the panels).
-if (canvas && new URLSearchParams(location.search).get("world") !== "off" && webgl()) start();
+if (canvas && new URLSearchParams(location.search).get("world") !== "off" && webgl()) settled(start);
 else {
   document.documentElement.dataset.world = "off";
   Object.defineProperty(window, "__world", { value: Object.freeze({ rooms: [], desks: [], stage: null, rotation: 0, unavailable: true }) });
