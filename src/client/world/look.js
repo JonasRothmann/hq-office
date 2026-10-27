@@ -42,28 +42,42 @@ export function markerOf(status, blocking = 0) {
   }
 }
 
-// People: skin, hair and trousers, picked per lane by its name.
+// People: skin, hair, a wardrobe in muted Nordic colours with a few strong ones, picked per lane by its name.
 const PEOPLE = {
-  skin: ["#f1c9a5", "#e0ac83", "#c68a5e", "#9a6440", "#6e4529", "#f6d7bd"],
-  hair: ["#2a1d15", "#4a3020", "#7a4b28", "#c08a4a", "#e2c27a", "#1d1d22", "#8c8c94", "#a33a2a"],
-  pants: ["#33384a", "#4b4f5c", "#5c4a3a", "#2d3e50", "#6b6f58", "#3d3d42"],
+  skin: ["#f3cfb0", "#e8b892", "#d29a6e", "#b27a50", "#8a5a3a", "#5e3b26", "#f6dcc6"],
+  hair: ["#2a1d15", "#4a3020", "#7a4b28", "#b07a3e", "#e0c07a", "#1d1d22", "#9a968f", "#9c3b24", "#d8d2c4"],
+  pants: ["#33384a", "#3e5778", "#5d7896", "#c9b48f", "#5d6247", "#2b2b2e", "#7a6a58", "#4a4a50"],
+  tops: ["#b5532e", "#d4a236", "#3f5b45", "#2f3e57", "#e3d9c6", "#9fae8f", "#c98a7a", "#5b7fa6", "#efece4", "#6b4a6e", "#8a3b32", "#4f6a74", "#cf7a3a", "#26292e"],
+  shoes: ["#f2f0ea", "#2b2b2e", "#6b4a33", "#f2f0ea", "#9c3b24", "#c9b48f"],
+};
+
+// What the Nordic studio is made of: woods, plaster, textiles, pots and greens (day; night keeps them).
+const STUDIO = {
+  oak: "#dcbf92", oakLight: "#e8d3ae", oakDark: "#b48f5e", ply: "#ead8b4", plyEdge: "#b99868", walnut: "#6e4c34",
+  plaster: "#f3eee6", warmGrey: "#d6cfc4", sand: "#cfc4b2", black: "#2a2a2c", chrome: "#c9ccd0",
+  oatmeal: "#e2d7c3", wool: "#bdb6aa", rust: "#b5532e", sage: "#9fae8f", mustard: "#d4a236", navy: "#2f3e57",
+  forest: "#3f5b45", blush: "#d9a99a", cord: "#d9c9a0", felt: "#8f9c88", paper: "#f7f1e2",
+  pots: ["#c06b45", "#efebe4", "#47474a", "#d9cbb4", "#9a6a4a"],
+  leaf: ["#4f7d47", "#3f6b3c", "#5f8e4f", "#365d34", "#6f9a58"], leafPale: "#8fb06e", olive: "#8a9a74",
+  mugs: ["#f4f1ea", "#b5532e", "#2f3e57", "#d4a236", "#9fae8f", "#26292e"],
+  spines: ["#2f3e57", "#b5532e", "#d4a236", "#e9e2d2", "#9fae8f", "#26292e", "#c98a7a", "#5b7fa6", "#8a3b32", "#efece4", "#6b8f71", "#d9c9a0"],
 };
 
 const LOOK = {
   shirts: ["#e9e4da", "#3f4a5a", "#8aa39b", "#c9b79c", "#5c6f8a", "#d7a68a", "#2f3a33", "#b9c4cc"],
   day: {
-    bg: "#a9b893", ground: { base: "#a8b98c", alt: "#9aac7f", kind: "grass" },
+    bg: "#9cb37c", ground: { base: "#9fb67d", alt: "#91a970", kind: "grass" },
     court: { base: "#e4ded1", alt: "#d3ccbc", kind: "raked" }, path: "#d9d2c3",
     plinth: "#cfc8ba",
     floor: {
-      office: { base: "#e4cfa8", alt: "#d9c095", line: "#c4a77a", kind: "planks" },
-      hq: { base: "#d4cf98", alt: "#c8c38a", line: "#6d6a45", kind: "tatami" },
+      office: { base: "#e5cda4", alt: "#d9bd90", line: "#b9996a", kind: "planks" },
+      hq: { base: "#e5cda4", alt: "#d9bd90", line: "#b9996a", kind: "planks" },
       // one-metre stone tiles with dark joints, so corridors read apart from the oak offices at the far zoom
       corridor: { base: "#d9d2c4", alt: "#c9c1b1", line: "#958b78", kind: "cement" },
-      break: { base: "#ece7de", alt: "#c9c2b4", line: "#a39b8b", kind: "terrazzo" },
+      break: { base: "#ebe5da", alt: "#cfc6b6", line: "#a89e8c", kind: "terrazzo" },
     },
-    wall: { face: "#f4f1ea", alt: "#ebe6dc", trim: "#d9c095", kind: "plain" },
-    cladding: { base: "#cfb38a", alt: "#c4a77c", line: "#a88d66", kind: "boards" },
+    wall: { face: "#f4efe7", alt: "#e9e2d6", trim: "#d9c095", kind: "plain" },
+    cladding: { base: "#3d3c38", alt: "#363531", line: "#252420", kind: "boards" },
     cap: "#9a8462",
     wood: "#dcc29a", woodEdge: "#c4a77a", steel: "#2b2b2e",
     chair: { seat: "#e9e4da", frame: "#2b2b2e" },
@@ -80,9 +94,9 @@ const LOOK = {
   },
   // A lawn under the moon, blue-lit and never black: `moon` is added to everything outdoors (ground, lot, courts).
   night: {
-    bg: "#2c3d55", ground: { base: "#6a8a80", alt: "#607f75", kind: "grass" },
+    bg: "#26374a", ground: { base: "#55805c", alt: "#4c7653", kind: "grass" },
     court: { base: "#6a6f78", alt: "#60656e", kind: "raked" }, path: "#4a4f5a",
-    moon: "#4a6a94",
+    moon: "#3c5a80",
     light: { amb: "#3e5898", ambI: 1.0, sky: "#4a64a8", ground: "#1b2030", hemi: 0.45, key: "#8aa0d8", keyI: 0.35, room: 0.6, shadow: 0.0 },
   },
 };
@@ -91,7 +105,7 @@ const LOOK = {
 // and the light, so lit offices glow among dark ones.
 export function lookFor(theme = "light") {
   const night = theme === "dark";
-  return { night, shirts: LOOK.shirts, people: PEOPLE, ...LOOK.day, ...(night ? LOOK.night : {}) };
+  return { night, shirts: LOOK.shirts, people: PEOPLE, studio: STUDIO, ...LOOK.day, ...(night ? LOOK.night : {}) };
 }
 
 // A small stable hash, so a lane's looks (shirt, hair, poster) never change between loads.
@@ -101,3 +115,42 @@ export function hash(s) {
   return h >>> 0;
 }
 export const pick = (arr, h, salt = 0) => arr[(((h >>> (salt % 24)) ^ (salt * 2654435761)) >>> 0) % arr.length];
+
+// An independent 32-bit draw per salt from one hash (a murmur-style finaliser), so a lane's picks do not move together.
+export function draw(h, salt) {
+  let x = (h ^ Math.imul(salt + 1, 0x9e3779b9)) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b) >>> 0;
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0;
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+// What a worker wears and looks like, from its name: skin, hair (a colour and one of nine cuts), a top (sweater,
+// shirt, hoodie, tee, cardigan, breton stripes, blazer) in a colour, trousers, shoes, and now and then glasses, a
+// beard, freckles, a beanie or headphones round the neck. L: the theme's tokens (lookFor).
+export function appearance(name, L) {
+  const h = hash(name), P = L.people;
+  const r = (salt, n) => draw(h, salt) % n;
+  const one = (arr, salt) => arr[r(salt, arr.length)];
+  const hairStyle = r(3, 9);
+  const top = one(["sweater", "shirt", "hoodie", "tee", "cardigan", "stripes", "sweater", "blazer", "tee"], 7);
+  const skin = one(P.skin, 1);
+  let hair = one(P.hair, 5);
+  if (P.skin.indexOf(skin) >= 4 && ["#e0c07a", "#b07a3e", "#9c3b24", "#d8d2c4"].includes(hair)) hair = "#1d1d22";
+  const topColor = one(P.tops, 9);
+  let inner = one(["#efece4", "#26292e", "#d4a236", "#e3d9c6"], 17);
+  if (inner === topColor) inner = "#efece4";
+  let pants = one(P.pants, 13);
+  if (pants === topColor) pants = P.pants[(P.pants.indexOf(pants) + 1) % P.pants.length];
+  return {
+    skin, hair, hairStyle,
+    beard: [0, 6, 7, 8].includes(hairStyle) && r(11, 3) === 0,
+    glasses: r(13, 4) === 0 ? one(["#26292e", "#6b4a33", "#b5532e"], 19) : null,
+    freckles: r(15, 5) === 0 && P.skin.indexOf(skin) <= 1,
+    lashes: [1, 2, 3, 5].includes(hairStyle),
+    beanie: r(21, 10) === 0 ? one(["#b5532e", "#d4a236", "#2f3e57", "#3f5b45"], 23) : null,
+    top, topColor, inner, pants,
+    shoes: one(P.shoes, 15),
+    stripe: one(["#2f3e57", "#b5532e", "#26292e"], 25),
+    headphones: r(17, 5) === 0,
+  };
+}
