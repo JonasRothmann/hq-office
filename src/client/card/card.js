@@ -5,12 +5,12 @@ import { CONFIG, S } from "../core/state.js";
 import { STATUS_TEXT } from "../core/status.js";
 import { dur, esc, setHTML } from "../core/format.js";
 import { linkify } from "../core/text.js";
-import { emit } from "../core/bus.js";
+import { emit, on } from "../core/bus.js";
 
 export let selected = null;
 
 // Selects a lane: its card shows (again, after Esc closed it), the bus hears "select", and with jump its open
-// question scrolls into view and flashes.
+// card in the stack scrolls into view and flashes.
 export function select(name, jump) {
   selected = name;
   $("card").removeAttribute("data-closed");
@@ -47,5 +47,6 @@ export function renderCard() {
     <div class="row"><span class="status" style="background:${color}">${esc(label.toUpperCase())}</span>${lane.herdr_since ? `<span class="tag">FOR <span data-since="${lane.herdr_since}">${dur(Date.now() - lane.herdr_since)}</span></span>` : ""}${links}</div>
     ${lane.status === "blocked" ? `<div class="prompt"><span class="k">BLOCKED ON A PROMPT · ANSWER IT IN HERDR ON ${esc(String(lane.machine || "?").toUpperCase())}, PANE ${esc(lane.pane || "?")}</span><pre>${esc(lane.prompt || "")}</pre></div>` : ""}
     ${lane.note ? `<div class="note">${linkify(lane.note)}</div>` : ""}
-    ${asks.length ? `<div class="row">${asks.map((a) => `<button class="tag lane" data-select="${esc(lane.name)}">ANSWER: ${esc(a.title.slice(0, 40))}${a.title.length > 40 ? "…" : ""}</button>`).join("")}</div>` : ""}`);
+    ${asks.length ? `<div class="row">${asks.map((a) => `<button class="tag lane" type="button" data-read="question:${a.id}">ANSWER: ${esc(a.title.slice(0, 40))}${a.title.length > 40 ? "…" : ""}</button>`).join("")}</div>` : ""}`);
 }
+on("state", (S, keys) => { if (!keys || ["lanes", "open", "config"].some((k) => keys.has(k))) renderCard(); });

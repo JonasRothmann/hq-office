@@ -31,7 +31,7 @@
         <div><span class="k">ON HQ</span><span class="v" id="sHq">0</span></div>
         <div><span class="k">₽ BANK</span><span class="v" id="sBank">0</span></div>
       </div>
-      <button class="box fromhq" id="sFrom" type="button" data-tab="updates"><span class="k">FROM HQ</span><span class="v">0 NEW</span></button>
+      <button class="box fromhq" id="sFrom" type="button" data-go="updates"><span class="k">FROM HQ</span><span class="v">0 NEW</span></button>
       <div class="box health" id="machines"><span class="k">MACHINES</span><span class="v">-</span></div>
       <div class="btns">
         <button class="btn" id="settingsBtn" type="button" title="Settings" aria-label="Settings">SETTINGS</button>
@@ -42,44 +42,30 @@
   </header>
 
   <div class="main" id="main">
-    <section class="desk glass" aria-label="Questions">
-      <div class="qwrap">
-        <div class="qtabs" id="qtabs" role="tablist">
-          <button class="tab" type="button" role="tab" data-qtab="questions">QUESTIONS <span class="tag count" id="qtCount" hidden></span></button>
-          <button class="tab" type="button" role="tab" data-qtab="messages">MESSAGES <span class="tag new" id="qtUnread" hidden></span></button>
-          <button class="tab" type="button" role="tab" data-qtab="work">WORK <span class="tag count" id="qtStalled" hidden></span></button>
-          <button class="tab" type="button" role="tab" data-qtab="rooms">ROOMS <span class="tag new" id="qtRooms" hidden></span></button>
+    <!-- The stack: every open question, HQ's updates and the rooms, as tall as its content (inbox/). -->
+    <section class="desk glass" id="stack" aria-label="Inbox">
+      <div class="ihead">
+        <h2 class="lbl">INBOX</h2>
+        <div class="seg" id="filters" role="tablist" aria-label="Show">
+          <button type="button" role="tab" data-filter="needs">Needs you <span class="n" id="fNeeds"></span></button>
+          <button type="button" role="tab" data-filter="all">All</button>
+          <button type="button" role="tab" data-filter="rooms">Rooms <span class="n" id="fRooms"></span></button>
         </div>
-        <button class="stall" id="stall" type="button" hidden></button>
-        <div class="hud" id="hud"></div>
-        <div class="box msgs" id="msgs" hidden></div>
-        <div class="box work" id="work" hidden></div>
-        <div class="box rooms" id="rooms" hidden></div>
       </div>
-      <div class="box tell">
-        <form class="compose" id="compose">
-          <div class="head"><h2>TELL HQ</h2><span class="hint">⌘↩ sends</span><button class="below" id="below" type="button" hidden></button></div>
-          <div class="reply" data-composer="note">
-            <div class="chips" data-chips="note"></div>
-            <textarea id="noteText" rows="1" placeholder="An order, a change of plan, a question."></textarea>
-            <div class="acts"><button class="send go" type="submit">SEND</button></div>
-          </div>
-        </form>
-        <div class="lastnote" id="lastNote"></div>
-      </div>
+      <div class="list" id="hud"></div>
+      <button class="below" id="below" type="button" hidden></button>
+      <button class="sdock" id="tellDock" type="button" data-open="tell"><span class="plus" aria-hidden="true">+</span><span>Tell HQ…</span></button>
     </section>
-    <section class="stage">
-      <div class="under">
-        <div class="box card glass" id="card"></div>
-        <section class="box feed glass" id="feed">
-          <div class="fhead">
-            <div class="tabs" id="feedTabs"></div>
-            <button class="fold" id="feedFold" type="button" aria-expanded="true" aria-controls="feedBody" title="Fold">
-              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-          </div>
-          <div class="body" id="feedBody"></div>
-          <div class="body" id="secretsPane" hidden>
+    <!-- The reader: one item in full beside the stack, never over it (reader/). -->
+    <section class="reader glass" id="reader" aria-label="Reader" hidden>
+      <section class="rview tellview" id="tellView" data-view="tell" aria-label="Tell HQ" hidden>
+        <header class="rv-head">
+          <div class="meta"><b class="rv-kind">TELL HQ</b><span class="hint">An order, a change of plan, a question. ⌘↩ sends.</span><span class="spacer"></span><button class="x" type="button" data-close aria-label="Close">Esc</button></div>
+        </header>
+        <div class="rv-body">
+          <section class="rsec"><h4 class="k">SENT AND ANSWERED</h4><div class="log" id="log"></div></section>
+          <section class="rsec secrets">
+            <h4 class="k">SECRETS <span id="secCount"></span></h4>
             <form class="sform" id="secretForm" autocomplete="off" novalidate>
               <input class="sin name" id="secName" placeholder="NAME_LIKE_THIS" autocomplete="off" spellcheck="false" autocapitalize="characters" maxlength="64" aria-label="Secret name">
               <input class="sin min" id="secMin" type="number" min="1" max="10080" step="1" value="60" autocomplete="off" aria-label="Minutes until it expires"><span class="sk">MIN</span>
@@ -87,10 +73,35 @@
               <button class="send go" type="submit">SAVE</button>
             </form>
             <div class="slist" id="secretList"></div>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+        <footer class="rv-foot">
+          <form class="compose" id="compose">
+            <div class="reply" data-composer="note">
+              <div class="chips" data-chips="note"></div>
+              <textarea id="noteText" rows="1" placeholder="An order, a change of plan, a question."></textarea>
+              <div class="acts"><button class="send go" type="submit">SEND</button></div>
+            </div>
+          </form>
+          <div class="lastnote" id="lastNote"></div>
+        </footer>
+      </section>
+      <section class="rview workview" id="workView" data-view="work" aria-label="Work board" hidden>
+        <header class="rv-head">
+          <div class="meta"><b class="rv-kind">WORK BOARD</b><span class="hint" id="workSum"></span><span class="spacer"></span><button class="x" type="button" data-close aria-label="Close">Esc</button></div>
+        </header>
+        <div class="rv-body"><div class="work" id="work"></div></div>
+      </section>
     </section>
+    <!-- Bottom right: the worker card, then the pills that open Tell HQ, rooms and the work board in the reader. -->
+    <div class="dock" id="dock">
+      <div class="box card glass" id="card"></div>
+      <div class="pills" id="pills">
+        <span class="rpills" id="roomPills"></span>
+        <button class="pill glass" id="pWork" type="button" data-open="work">Work board <span class="tag" id="workCount" hidden></span></button>
+        <button class="pill glass" id="pTell" type="button" data-open="tell">Tell HQ… <kbd>T</kbd></button>
+      </div>
+    </div>
   </div>
 </div>
 

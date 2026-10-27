@@ -1,0 +1,38 @@
+/* Markdown (core/markdown.js): a room's brief and thread, a question or an update in the reader. In a document a
+   long section, table or code block folds, and a wide table or code line scrolls inside its own box. */
+.md { font: 400 13px/1.5 var(--font); color: var(--text); overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h3, .md h4, .md h5, .md h6 { margin: 10px 0 4px; font: 600 14px/1.3 var(--font); color: var(--text); }
+.md h5, .md h6 { font-size: 13px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 4px 0; padding-left: 20px; }
+.md li { margin: 2px 0; }
+.md li:has(> .tick) { list-style: none; margin-left: -18px; }
+.md .tick { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-right: 6px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--hairline-2); font-size: 9px; line-height: 1; vertical-align: -2px; }
+.md .tick.on { background: var(--st-green); box-shadow: none; color: #fff; }
+.md code { padding: 0 4px; border-radius: 4px; background: var(--surface-3); font: 12px/1.4 var(--mono); }
+.md blockquote { margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--hairline-2); color: var(--text-2); }
+.md hr { border: 0; border-top: 1px solid var(--hairline-2); margin: 8px 0; }
+.md .mdtable { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.md table { border-collapse: collapse; font-size: 12.5px; }
+.md th, .md td { padding: 4px 8px; border: 1px solid var(--hairline-2); text-align: left; vertical-align: top; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md .more { margin-top: 4px; }
+
+/* a document: the reader's body */
+.doc.md { font-size: 14px; line-height: 1.6; }
+.doc.md h3, .doc.md h4 { font-size: 15px; }
+.doc .codebox pre { white-space: pre; overflow-x: auto; overflow-wrap: normal; overscroll-behavior-x: contain; }
+.doc .mdtable table { white-space: nowrap; }
+.doc .mdtable td, .doc .mdtable th { white-space: normal; min-width: 80px; }
+.fold { margin: 6px 0; }
+.fold > summary { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 2px 0; list-style: none; cursor: pointer; font: 600 13px/1.3 var(--font); color: var(--text); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: ""; flex: none; width: 0; height: 0; border-left: 5px solid var(--text-3); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .12s; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold > summary .n { font: 500 11px/1 var(--mono); color: var(--text-3); }
+.fold > summary:hover .n { color: var(--text-2); }
+.fold.sec > summary { font-size: 15px; padding-top: 4px; }
+.fold.sec[open] > summary { margin-bottom: 2px; }
+.fold:not(.sec) > summary { font: 600 11px/1 var(--font); letter-spacing: 0.04em; color: var(--text-2); }

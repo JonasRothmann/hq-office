@@ -1,8 +1,8 @@
-// Markdown as safe HTML, for every body an agent writes (questions, updates, a room's brief and thread): everything is escaped first, then headings, lists (with [ ] and [x]),
-// quotes, rules, tables, code fences (with COPY), inline code, bold, italic and links (http(s) or a path on this
-// HUD). Nothing an agent writes can add a tag, an attribute or a script. A thread's messages use it too, as chat:
-// each line break shows, a blank line starts a paragraph, and [image: PATH] (an attached image) and #1234 (a PR)
-// show as they do in MESSAGES.
+// Markdown as safe HTML, for every body an agent writes (questions, updates, a room's brief and thread): everything
+// is escaped first, then headings, lists (with [ ] and [x]), quotes, rules, tables, code fences (with COPY), inline
+// code, bold, italic and links (http(s) or a path on this HUD). Nothing an agent writes can add a tag, an attribute or
+// a script. A thread's messages use it as chat: each line break shows, a blank line starts a paragraph, and
+// [image: PATH] (an attached image) and #1234 (a PR) show as links. doc() is the reader's: long sections fold.
 import { esc } from "./format.js";
 import { CONFIG } from "./state.js";
 
@@ -30,29 +30,38 @@ const task = (t, chat) => {
 const BULLET = /^\s*[-*+]\s+/, NUMBER = /^\s*\d+[.)]\s+/;
 const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 
-// chat: a message in a thread, where a line break is a line break.
-export function markdown(src, chat = false) {
+// The body as blocks: each one's HTML, what it is, and how many source lines it took.
+// rich: image tokens and PR numbers become links (chat has them too; doc() has them without the line breaks).
+function blocks(src, chat, rich = chat) {
   const lines = String(src ?? "").replace(/\r\n?/g, "\n").split("\n");
   const out = [];
   let para = [];
-  const flush = () => { if (para.length) { out.push(`<p>${chat ? para.map((l) => inline(l, true)).join("<br>") : inline(para.join(" "))}</p>`); para = []; } };
-  for (let i = 0; i < lines.length;) {
-    const l = lines[i];
+  let i = 0;
+  const push = (kind, html, from, extra = {}) => out.push({ kind, html, lines: Math.max(1, i - from), ...extra });
+  const flush = () => {
+    if (!para.length) return;
+    out.push({ kind: "p", html: `<p>${chat ? para.map((l) => inline(l, true)).join("<br>") : inline(para.join(" "), rich)}</p>`, lines: para.length });
+    para = [];
+  };
+  while (i < lines.length) {
+    const l = lines[i], from = i;
     let m;
     if (/^\s*```/.test(l)) {
       flush();
+      const lang = l.replace(/^\s*```/, "").trim().split(/\s/)[0];
       const body = [];
       for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
       i++;
-      out.push(`<div class="codebox"><button class="copy" type="button">COPY</button><pre>${esc(body.join("\n"))}</pre></div>`);
+      push("code", `<div class="codebox"><button class="copy" type="button">COPY</button><pre>${esc(body.join("\n"))}</pre></div>`, from, { lang, rows: body.length });
     } else if ((m = l.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/))) {
       flush();
-      out.push(`<h${Math.min(m[1].length, 4) + 2}>${inline(m[2], chat)}</h${Math.min(m[1].length, 4) + 2}>`);
       i++;
+      const h = Math.min(m[1].length, 4) + 2;
+      push("h", `<h${h}>${inline(m[2], rich)}</h${h}>`, from, { title: inline(m[2], rich) });
     } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) {
       flush();
-      out.push("<hr>");
       i++;
+      push("hr", "<hr>", from);
     } else if (BULLET.test(l) || NUMBER.test(l)) {
       flush();
       const kind = BULLET.test(l) ? BULLET : NUMBER, items = [];
@@ -62,18 +71,18 @@ export function markdown(src, chat = false) {
         while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !BULLET.test(lines[i]) && !NUMBER.test(lines[i])) items[items.length - 1] += " " + lines[i++].trim();
       }
       const tag = kind === BULLET ? "ul" : "ol";
-      out.push(`<${tag}>${items.map((t) => `<li>${task(t, chat)}</li>`).join("")}</${tag}>`);
+      push("list", `<${tag}>${items.map((t) => `<li>${task(t, rich)}</li>`).join("")}</${tag}>`, from);
     } else if (/^\s*>/.test(l)) {
       flush();
       const q = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ""));
-      out.push(`<blockquote>${markdown(q.join("\n"), chat)}</blockquote>`);
+      push("quote", `<blockquote>${markdown(q.join("\n"), chat)}</blockquote>`, from);
     } else if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] ?? "")) {
       flush();
       const head = cells(l);
       const rows = [];
       for (i += 2; i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i]); i++) rows.push(cells(lines[i]));
-      out.push(`<div class="mdtable"><table><thead><tr>${head.map((c) => `<th>${inline(c, chat)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c, chat)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      push("table", `<div class="mdtable"><table><thead><tr>${head.map((c) => `<th>${inline(c, rich)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c, rich)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`, from, { rows: rows.length });
     } else if (!l.trim()) {
       flush();
       i++;
@@ -83,5 +92,36 @@ export function markdown(src, chat = false) {
     }
   }
   flush();
+  return out;
+}
+
+// chat: a message in a thread, where a line break is a line break.
+export function markdown(src, chat = false) {
+  return blocks(src, chat).map((b) => b.html).join("");
+}
+
+// A body in the reader: each heading starts a section that folds, closed when it runs past FOLD source lines; a code
+// block or a table that long folds on its own. Everything else shows as it is.
+export const FOLD = 12;
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function folded(b) {
+  if (b.kind === "code" && b.rows > FOLD) return `<details class="fold"><summary>${esc(b.lang ? b.lang.toUpperCase() : "Code")}<span class="n">${count(b.rows, "line", "lines")}</span></summary>${b.html}</details>`;
+  if (b.kind === "table" && b.rows > FOLD) return `<details class="fold"><summary>Table<span class="n">${count(b.rows, "row", "rows")}</span></summary>${b.html}</details>`;
+  return b.html;
+}
+export function doc(src) {
+  const out = [];
+  let section = null;
+  const close = () => {
+    if (!section) return;
+    const lines = section.body.reduce((n, b) => n + b.lines, 0);
+    out.push(`<details class="fold sec"${lines <= FOLD ? " open" : ""}><summary>${section.title}<span class="n">${count(lines, "line", "lines")}</span></summary>${section.body.map(folded).join("")}</details>`);
+    section = null;
+  };
+  for (const b of blocks(src, false, true)) {
+    if (b.kind === "h") { close(); section = { title: b.title, body: [] }; } else if (section) section.body.push(b);
+    else out.push(folded(b));
+  }
+  close();
   return out.join("");
 }

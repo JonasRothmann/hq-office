@@ -1,6 +1,7 @@
-// The glass shell never covers a question (spec outcome F10): at 1440x900 and 1280x800, light and dark, with the
-// worker card and the settings sheet open, the centre of every open question card is the topmost element at its point,
-// no other panel overlaps the question column, and the page does not scroll. The theme control cycles system, light
+// The glass shell never covers a question (spec outcome F10): at 1440x900 and 1280x800, light and dark, with a
+// question open in the reader and the worker card and the settings sheet open, the centre of every open question card
+// in the stack is the topmost element at its point, and so are the reader's head, body and foot; no other panel
+// overlaps the stack or the reader, and the page does not scroll. The theme control cycles system, light
 // and dark, sets <html data-theme> and tells the bus. Needs Chrome (CHROME_BIN to point at one); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
@@ -29,10 +30,15 @@ const CARDS_ON_TOP = `(async () => {
   }
   return out;
 })()`;
-// Every other panel that shows: none of them may overlap the question column.
-const OVERLAPS = `(() => {
-  const d = document.querySelector(".desk").getBoundingClientRect();
-  const panels = [".top", "#card", "#feed", "#settings", ".hqdown", "#roomView"].flatMap((s) => [...document.querySelectorAll(s)]);
+// The reader's parts: the element at the centre of each is inside it.
+const READER_ON_TOP = `(() => [...document.querySelectorAll("#reader .rview:not([hidden]) > *")].map((part) => {
+  const r = part.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { part: part.className, onTop: !!hit && part.contains(hit), hit: hit ? hit.tagName + "." + hit.className : null };
+}))()`;
+// Every other panel that shows: none of them may overlap the stack, or the reader.
+const OVERLAPS = (box: string, others: string[]) => `(() => {
+  const d = document.querySelector(${JSON.stringify(box)}).getBoundingClientRect();
+  const panels = ${JSON.stringify(others)}.flatMap((s) => [...document.querySelectorAll(s)]);
   return panels.filter((p) => { const r = p.getBoundingClientRect(); return r.width && r.height && getComputedStyle(p).display !== "none" && !(r.right <= d.left || r.left >= d.right || r.bottom <= d.top || r.top >= d.bottom); }).map((p) => p.id || p.className);
 })()`;
 const NO_SCROLL = `document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth`;
@@ -62,14 +68,20 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.s("Page.navigate", { url: `${server.base}/?world=off` });
       await until(`document.querySelectorAll("#hud .ask").length === 4 && !!document.getElementById("card").innerHTML`);
       expect(await page.evaluate(`document.documentElement.dataset.theme`)).toBe(scheme);
-      expect(await page.evaluate(`[...document.querySelectorAll("#hud .tiergroup")].map((h) => h.textContent.trim())`)).toEqual(["BLOCKING 1", "NON-BLOCKING 3"]);
-      // with the worker card and the settings sheet open
-      await page.evaluate(`document.querySelector('.ask [data-select="bravo"]').click(); document.getElementById("settingsBtn").click()`);
+      expect(await page.evaluate(`[...document.querySelectorAll("#hud .grp h4")].map((h) => h.textContent.trim())`)).toEqual(["Blocking 1", "Open 3", "From HQ 1"]);
+      // a question in the reader, with the worker card and the settings sheet open
+      await page.evaluate(`document.querySelector('#hud .ask[data-lane="bravo"]').click()`);
+      await until(`!document.getElementById("reader").hidden && !!document.querySelector('#reader .askview .lname[data-select="bravo"]')`);
+      await page.evaluate(`document.querySelector('#reader .askview .lname[data-select="bravo"]').click(); document.getElementById("settingsBtn").click()`);
       expect(await page.evaluate(`getComputedStyle(document.getElementById("card")).display !== "none" && !document.getElementById("settings").hidden`)).toBe(true);
       const cards = await page.evaluate(CARDS_ON_TOP);
       expect(cards).toHaveLength(4);
       for (const c of cards) expect(c).toMatchObject({ onTop: true });
-      expect(await page.evaluate(OVERLAPS)).toEqual([]);
+      const parts = await page.evaluate(READER_ON_TOP);
+      expect(parts.map((p: any) => p.part)).toEqual(["rv-head", "rv-body", "rv-foot"]);
+      for (const p of parts) expect(p).toMatchObject({ onTop: true });
+      expect(await page.evaluate(OVERLAPS(".desk", [".top", "#reader", "#card", ".pill", "#settings", ".hqdown"]))).toEqual([]);
+      expect(await page.evaluate(OVERLAPS("#reader", [".top", ".desk", "#card", ".pill", "#settings", ".hqdown"]))).toEqual([]);
       expect(await page.evaluate(NO_SCROLL)).toBe(true);
       expect(errors).toEqual([]);
     });

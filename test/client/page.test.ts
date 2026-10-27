@@ -1,6 +1,6 @@
 // The page works end to end in a real browser at 1440x900, against a temporary server: it loads with no console
-// errors and no page scroll, the world's canvas behind it, an answer and a note reach the server, the tabs, the worker card, settings and sound
-// respond. Needs Chrome (CHROME_BIN to point at one); skipped without it.
+// errors and no page scroll, the world's canvas behind it, an answer and a note reach the server, the stack's filters,
+// the reader, the pills, the worker card, settings and sound respond. Needs Chrome (CHROME_BIN to point at one); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, seed, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -44,10 +44,14 @@ test.skipIf(!chromeFound)("loads with no errors and no page scroll, the world's 
 });
 
 test.skipIf(!chromeFound)("an answer goes to the server", async () => {
-  await page.evaluate(`[...document.querySelectorAll(".ask")].find((a) => a.textContent.includes("Ship the thing?")).querySelector('.opt[data-opt="Yes"]').click()`);
-  await until(`[...document.querySelectorAll(".ask")].find((a) => a.textContent.includes("Ship the thing?"))?.querySelector(".opt.sel")?.dataset.opt === "Yes"`);
-  await page.evaluate(`[...document.querySelectorAll(".ask")].find((a) => a.textContent.includes("Ship the thing?")).querySelector(".send").click()`);
-  await until(`document.querySelectorAll(".ask").length === 1`);
+  // picked with its number key in the reader, sent with ⌘Enter
+  await page.evaluate(`[...document.querySelectorAll("#hud .ask")].find((a) => a.textContent.includes("Ship the thing?")).click()`);
+  await until(`!!document.querySelector('#reader .askview .opt[data-opt="Yes"]')`);
+  const key = (k: string, extra = "") => page.evaluate(`document.body.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(k)}, bubbles: true${extra} }))`);
+  await key("1");
+  await until(`document.querySelector("#reader .askview .opt.sel")?.dataset.opt === "Yes"`);
+  await key("Enter", ", metaKey: true");
+  await until(`document.querySelectorAll("#hud .ask").length === 1`);
   const s = await state();
   expect(s.answered.find((a: any) => a.title === "Ship the thing?")?.answer).toBe("Yes");
 });
@@ -58,15 +62,31 @@ test.skipIf(!chromeFound)("Tell HQ sends a note", async () => {
   expect((await state()).notes[0].text).toBe("From the page test");
 });
 
-test.skipIf(!chromeFound)("tabs, worker card, settings and sound respond", async () => {
-  await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
-  expect(await page.evaluate(`!document.getElementById("msgs").hidden && document.getElementById("hud").hidden && document.getElementById("msgs").textContent.includes("Halfway there")`)).toBe(true);
-  await page.evaluate(`document.querySelector('[data-qtab="questions"]').click()`);
-  expect(await page.evaluate(`!document.getElementById("hud").hidden`)).toBe(true);
-  await page.evaluate(`document.querySelector('[data-select="charlie"]').click()`);
-  expect(await page.evaluate(`document.querySelector("#card h3").textContent`)).toBe("charlie");
-  await page.evaluate(`document.querySelector('#feed [data-tab="log"]').click()`);
-  expect(await page.evaluate(`document.querySelector("#feed .log").textContent.includes("Ship the thing?")`)).toBe(true);
+test.skipIf(!chromeFound)("the filters, the reader, the pills, the worker card, settings and sound respond", async () => {
+  // Rooms: none yet. All: the update read earlier stays listed. Needs you again: the open question and the unread update.
+  await page.evaluate(`document.querySelector('[data-filter="rooms"]').click()`);
+  expect(await page.evaluate(`document.querySelectorAll("#hud .item").length === 0 && document.getElementById("hud").textContent.includes("No rooms yet")`)).toBe(true);
+  await page.evaluate(`document.querySelector('[data-filter="needs"]').click()`);
+  expect(await page.evaluate(`[...document.querySelectorAll("#hud .item")].map((i) => i.dataset.key.split(":")[0])`)).toEqual(["ask", "update"]);
+  // an update opens in the reader and is marked read
+  await page.evaluate(`document.querySelector("#hud .upd").click()`);
+  await until(`!document.getElementById("reader").hidden && document.querySelector("#reader .updview").textContent.includes("The first part is merged.")`);
+  // read now, it stays listed (lit) while the reader shows it
+  await until(`!!document.querySelector("#hud .upd.on") && !document.querySelector("#hud .upd.unread")`);
+  expect((await state()).updates[0].read_at).toBeTruthy();
+  await page.evaluate(`document.querySelector('[data-filter="all"]').click()`);
+  expect(await page.evaluate(`!!document.querySelector("#hud .upd.on")`)).toBe(true);
+  // a lane's name selects its worker
+  await page.evaluate(`document.querySelector('#reader .updview [data-select="golf"]').click()`);
+  expect(await page.evaluate(`document.querySelector("#card h3").textContent`)).toBe("golf");
+  // the pills: Tell HQ (its log has the answer), the work board, and a second click closes the reader
+  await page.evaluate(`document.getElementById("pTell").click()`);
+  expect(await page.evaluate(`!document.getElementById("tellView").hidden && document.getElementById("log").textContent.includes("Ship the thing?")`)).toBe(true);
+  await page.evaluate(`document.getElementById("pWork").click()`);
+  expect(await page.evaluate(`!document.getElementById("workView").hidden && document.getElementById("tellView").hidden`)).toBe(true);
+  await page.evaluate(`document.getElementById("pWork").click()`);
+  expect(await page.evaluate(`document.getElementById("reader").hidden`)).toBe(true);
+  await page.evaluate(`document.querySelector('[data-filter="needs"]').click()`);
   await page.evaluate(`document.getElementById("settingsBtn").click()`);
   expect(await page.evaluate(`!document.getElementById("settings").hidden`)).toBe(true);
   // Only what still does something: PERFORMANCE, OUTSIDE and LEVEL NAMES (the pixel room's hero, season, hat and theme
@@ -78,7 +98,7 @@ test.skipIf(!chromeFound)("tabs, worker card, settings and sound respond", async
   expect(await page.evaluate(`!!document.querySelector("#settings [data-levels]")`)).toBe(true);
   await page.evaluate(`document.querySelector('[data-set="performance"][data-val="saver"]').click()`);
   expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).performance`)).toBe("saver");
-  await page.evaluate(`document.querySelector("[data-reset]").click(); document.querySelector("[data-close]").click()`);
+  await page.evaluate(`document.querySelector("[data-reset]").click(); document.querySelector("#settings [data-close]").click()`);
   expect(await page.evaluate(`document.getElementById("settings").hidden`)).toBe(true);
   const before = await page.evaluate(`document.getElementById("alerts").textContent`);
   await page.evaluate(`document.getElementById("alerts").click()`);
