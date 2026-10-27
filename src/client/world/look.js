@@ -82,7 +82,7 @@ const LOOK = {
   night: {
     bg: "#2c3d55", ground: { base: "#6a8a80", alt: "#607f75", kind: "grass" },
     court: { base: "#6a6f78", alt: "#60656e", kind: "raked" }, path: "#4a4f5a",
-    moon: "#334a74",
+    moon: "#4a6a94",
     light: { amb: "#3e5898", ambI: 1.0, sky: "#4a64a8", ground: "#1b2030", hemi: 0.45, key: "#8aa0d8", keyI: 0.35, room: 0.6, shadow: 0.0 },
   },
 };
