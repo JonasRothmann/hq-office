@@ -46,8 +46,9 @@ export function createScene(canvas, { fps = 30 } = {}) {
     key.shadow.needsUpdate = true;
   }
 
+  // The loop: at most `fps` ticks a second, none while the tab is hidden. tick(now, dt) decides whether to draw.
   let raf = 0, last = 0, running = false;
-  const frame = 1000 / fps;
+  let frame = 1000 / fps;
   function start(tick) {
     running = true;
     const loop = (now) => {
@@ -62,11 +63,12 @@ export function createScene(canvas, { fps = 30 } = {}) {
     raf = requestAnimationFrame(loop);
   }
   function stop() { running = false; cancelAnimationFrame(raf); }
+  function setFps(n) { frame = 1000 / Math.max(1, n); }
 
   function resize(w, h) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
     renderer.setSize(w, h, false);
   }
 
-  return { renderer, scene, hemi, key, setLights, start, stop, resize };
+  return { renderer, scene, hemi, key, setLights, start, stop, setFps, resize };
 }

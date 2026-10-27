@@ -1,6 +1,0 @@
-/* The old pixel room's frame, canvas and legend. The shell keeps them hidden (the 3D world replaces them); these rules only keep the canvas crisp if it is shown. */
-.room { display: flex; flex-direction: column; min-width: 0; padding: 8px; border-radius: var(--radius); background: #1b1d2c; }
-#room { display: block; width: 100%; max-width: 100%; height: auto; margin: auto; image-rendering: pixelated; border-radius: 6px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 4px 2px; color: #c8c8e0; font: 600 11px/1.6 var(--font); }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend i { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; background: #fff; color: #23233a; font-style: normal; }

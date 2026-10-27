@@ -182,7 +182,6 @@ import { deskAnchor, project, onFrame } from "/src/client/world/api.js";
 import { STATUS, MODEL, modelFamily } from "/src/client/world/look.js";
 
 const q = new URLSearchParams(location.search);
-const look = q.get("look") === "a" ? "a" : "b";
 const theme = q.get("theme") === "dark" ? "dark" : "light";
 const n = Math.max(0, Math.min(40, Number(q.get("lanes") ?? 4)));
 const rot = Number(q.get("rot") ?? 0) | 0;
@@ -199,23 +198,28 @@ const custom = (q.get("statuses") ?? "").split(",").filter(Boolean);
 const lanes = [{ name: "hq", status: "moving" }];
 for (let i = 0; i < n; i++) {
   const team = n > 8 ? Math.floor(i / 5) * 5 : -1;
-  lanes.push({ name: NAMES[i % NAMES.length] + (i >= NAMES.length ? `-${i}` : ""), parent: team >= 0 && i !== team ? NAMES[team] : null, status: custom[i] ?? CYCLE[i % CYCLE.length] });
+  const status = custom[i] ?? CYCLE[i % CYCLE.length];
+  // a lane that works while one of its questions blocks it: the second working lane
+  lanes.push({ name: NAMES[i % NAMES.length] + (i >= NAMES.length ? `-${i}` : ""), parent: team >= 0 && i !== team ? NAMES[team] : null, status, blocking: status === "needs_you" || i === 4 ? 1 : 0 });
 }
+// Vitals in the server's shape (S.vitals[lane]): model, family, effort, context used and max, running subagents.
 const MODELS = ["claude-opus-4-5", "claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"];
+const family = (m) => (m.includes("opus") ? "opus" : m.includes("sonnet") ? "sonnet" : m.includes("haiku") ? "haiku" : "other");
 const EFFORTS = ["high", "medium", "xhigh", null];
 const vitals = {};
 lanes.forEach((l, i) => {
   const sub = ["moving", "hq_turn", "waiting"].includes(l.status) ? [0, 3, 1, 2, 4, 0, 2][i % 7] : l.status === "needs_you" ? 1 : 0;
+  const model = MODELS[i % MODELS.length];
   vitals[l.name] = {
-    model: MODELS[i % MODELS.length], effort: EFFORTS[i % EFFORTS.length],
-    subagents: Array.from({ length: sub }, (_, k) => ({ id: `${l.name}-${k}`, model: MODELS[(i + k + 1) % MODELS.length] })),
-    context: { used: [84000, 132000, 41000, 176000, 12000, 99000][i % 6], max: 200000 },
-    blocking: l.status === "needs_you" ? 1 : 0,
+    model, family: family(model), effort: EFFORTS[i % EFFORTS.length],
+    contextUsed: [84000, 132000, 41000, 176000, 12000, 99000][i % 6], contextMax: 1000000,
+    subagents: Array.from({ length: sub }, (_, k) => { const m = MODELS[(i + k + 1) % MODELS.length]; return { id: `${l.name}-${k}`, model: m, family: family(m), description: "a lab subagent" }; }),
+    source: "lab", at: Date.now(),
   };
 });
 
 const canvas = document.getElementById("world");
-const world = mountWorld(canvas, { look, theme, insets: ui ? { left: 444, top: 56 } : {} });
+const world = mountWorld(canvas, { theme, insets: ui ? { left: 444, top: 56 } : {} });
 for (let i = 0; i < ((rot % 4) + 4) % 4; i++) world.rotate(1);
 world.setLanes(lanes, vitals);
 if (zoom !== null) {
@@ -238,18 +242,18 @@ if (onHq) document.getElementById("q2lane").textContent = onHq.name;
 // Desk HUD chips: one per lane, projected above its desk every frame
 const WORDS = { moving: "working", needs_you: "needs you", blocked: "blocked", hq_turn: "on HQ", waiting: "waiting", done: "done", parked: "parked", gone: "gone", stale: "stale" };
 const huds = document.getElementById("huds");
-const fmtK = (t) => (t >= 1000 ? `${Math.round(t / 1000)}k` : String(t));
+const fmtK = (t) => (t >= 1e6 ? `${+(t / 1e6).toFixed(1)}M` : t >= 1000 ? `${Math.round(t / 1000)}k` : String(t));
 const shortModel = (m) => (m ?? "").replace(/^claude-/, "").replace(/-(\d)-(\d)$/, " $1.$2");
 const chips = new Map();
 for (const l of lanes) {
   const v = vitals[l.name];
   const el = document.createElement("div");
-  el.className = "hud glass" + (v.blocking ? " alert" : "");
-  const pct = Math.round((v.context.used / v.context.max) * 100);
-  const dots = v.subagents.map((s) => `<span class="sd" style="background:${MODEL[modelFamily(s.model)]}"></span>`).join("");
+  el.className = "hud glass" + (l.blocking ? " alert" : "");
+  const pct = Math.round((v.contextUsed / v.contextMax) * 100);
+  const dots = v.subagents.map((s) => `<span class="sd" style="background:${MODEL[modelFamily(s.model, s.family)]}"></span>`).join("");
   el.innerHTML = `
-    <div class="r1"><span class="dot" style="background:${STATUS[l.status]}"></span><span>${l.name}</span>${v.blocking ? `<span class="blk" title="open blocking questions">${v.blocking}</span>` : ""}<span class="st" style="color:${STATUS[l.status]}">${WORDS[l.status]}</span></div>
-    <div class="r2"><span>${shortModel(v.model)} · ${v.effort ?? "—"}</span><span class="sub">${dots}<span class="cnt mono${v.subagents.length ? "" : " muted"}">${v.subagents.length}</span></span><span class="ctx"><span class="track"><span class="fill" style="display:block;width:${pct}%;${pct > 80 ? "background:var(--amber)" : ""}"></span></span><span class="n mono">${fmtK(v.context.used)} / ${fmtK(v.context.max)}</span></span></div>`;
+    <div class="r1"><span class="dot" style="background:${STATUS[l.status]}"></span><span>${l.name}</span>${l.blocking ? `<span class="blk" title="open blocking questions">${l.blocking}</span>` : ""}<span class="st" style="color:${STATUS[l.status]}">${WORDS[l.status]}</span></div>
+    <div class="r2"><span>${shortModel(v.model)} · ${v.effort ?? "—"}</span><span class="sub">${dots}<span class="cnt mono${v.subagents.length ? "" : " muted"}">${v.subagents.length}</span></span><span class="ctx"><span class="track"><span class="fill" style="display:block;width:${pct}%;${pct > 80 ? "background:var(--amber)" : ""}"></span></span><span class="n mono">${fmtK(v.contextUsed)} / ${fmtK(v.contextMax)}</span></span></div>`;
   huds.appendChild(el);
   chips.set(l.name, el);
 }

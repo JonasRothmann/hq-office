@@ -37,8 +37,8 @@ test.skipIf(!chromeFound)("loads with no errors and no page scroll, the world's 
   expect(await page.evaluate(`document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth`)).toBe(true);
   // The 3D world's canvas is the body's first child and fills the window.
   expect(await page.evaluate(`(() => { const w = document.getElementById("world"), r = w.getBoundingClientRect(); return [document.body.firstElementChild === w, r.width === innerWidth && r.height === innerHeight]; })()`)).toEqual([true, true]);
-  // The old pixel room is kept unseen until the world replaces it: its canvas is still there for its modules.
-  expect(await page.evaluate(`[document.getElementById("room").width, !!document.getElementById("room").closest("[hidden]")]`)).toEqual([24 * 16 * 3, true]);
+  // The pixel room is gone. This Chrome has no WebGL, so the office stays undrawn and says so, with no error.
+  expect(await page.evaluate(`[!!document.getElementById("room"), !!document.querySelector(".stage > .room"), window.__world.unavailable]`)).toEqual([false, false, true]);
   expect(await page.evaluate(`document.querySelector("#sWait .count").textContent`)).toBe("2");
   expect(errors).toEqual([]);
 });
@@ -69,10 +69,11 @@ test.skipIf(!chromeFound)("tabs, worker card, settings and sound respond", async
   expect(await page.evaluate(`document.querySelector("#feed .log").textContent.includes("Ship the thing?")`)).toBe(true);
   await page.evaluate(`document.getElementById("settingsBtn").click()`);
   expect(await page.evaluate(`!document.getElementById("settings").hidden`)).toBe(true);
-  // The default hero is labelled with the owner's name (HUD_OWNER).
-  expect(await page.evaluate(`document.querySelector('[data-set="hero"][data-val="YOU"]').textContent`)).toBe((process.env.PIXEL_OWNER || "Tester").toUpperCase());
-  await page.evaluate(`document.querySelector('[data-set="hero"][data-val="IVY"]').click()`);
-  expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).hero`)).toBe("IVY");
+  // Only what still does something: PERFORMANCE and LEVEL NAMES (the pixel room's hero, season, hat and theme are gone).
+  expect(await page.evaluate(`[...new Set([...document.querySelectorAll("#settings [data-set]")].map((b) => b.dataset.set))]`)).toEqual(["performance"]);
+  expect(await page.evaluate(`!!document.querySelector("#settings [data-levels]")`)).toBe(true);
+  await page.evaluate(`document.querySelector('[data-set="performance"][data-val="saver"]').click()`);
+  expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).performance`)).toBe("saver");
   await page.evaluate(`document.querySelector("[data-reset]").click(); document.querySelector("[data-close]").click()`);
   expect(await page.evaluate(`document.getElementById("settings").hidden`)).toBe(true);
   const before = await page.evaluate(`document.getElementById("alerts").textContent`);

@@ -26,7 +26,8 @@ afterAll(async () => {
 });
 
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-const clientFiles = walk(join(ROOT, "src", "client")).map((f) => "/" + relative(ROOT, f).split("\\").join("/"));
+// The page's files (scripts and stylesheets); a licence beside vendored code is not one of them.
+const clientFiles = walk(join(ROOT, "src", "client")).filter((f) => /\.(js|css)$/.test(f)).map((f) => "/" + relative(ROOT, f).split("\\").join("/"));
 
 test("the page links every stylesheet, core first, and loads main.js", async () => {
   const res = await fetch(`${BASE}/`);

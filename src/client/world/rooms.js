@@ -57,8 +57,9 @@ function windowKeys(p) {
   return keys;
 }
 
-// lightOf(id): a room's light uniform; rooms: { value: Color[] } with indexOf(id) giving each room's slot in it.
-export function buildRooms(p, L, lightOf, rooms, indexOf) {
+// lightOf(id): a room's light uniform; rooms: { value: Color[] } with indexOf(id) giving each room's slot in it;
+// outdoor: the light uniform of everything outside (the moon at night).
+export function buildRooms(p, L, lightOf, rooms, indexOf, outdoor) {
   const group = new THREE.Group();
   group.name = "rooms";
   const disposables = [];
@@ -70,24 +71,24 @@ export function buildRooms(p, L, lightOf, rooms, indexOf) {
   {
     const kit = new Kit();
     kit.plane(maxX - minX + pad * 2, maxZ - minZ + pad * 2, "#ffffff", (minX + maxX) / 2, -SLAB, (minZ + maxZ) / 2);
-    const m = keep(roomMaterial({ map: surface(L.ground) }));
+    const m = keep(roomMaterial({ map: surface(L.ground), room: outdoor }));
     const mesh = kit.mesh(m, { uv: true, cast: false });
     group.add(mesh);
   }
   {
     const lot = new Kit();
     scatterLot(lot, p.bounds, L);
-    group.add(lot.mesh(keep(roomMaterial())));
+    group.add(lot.mesh(keep(roomMaterial({ room: outdoor }))));
   }
   const courts = p.rooms.filter((r) => r.kind === "court");
   if (courts.length) {
     const kit = new Kit();
     for (const c of courts) kit.plane(c.w - 0.6, c.d - 0.6, "#ffffff", c.x + c.w / 2, -SLAB + 0.01, c.z + c.d / 2);
-    const mesh = kit.mesh(keep(roomMaterial({ map: surface(L.court) })), { uv: true, cast: false });
+    const mesh = kit.mesh(keep(roomMaterial({ map: surface(L.court), room: outdoor })), { uv: true, cast: false });
     group.add(mesh);
     const deco = new Kit();
     courts.forEach((c, i) => scatterCourt(deco, c, L, i));
-    if (!deco.empty) group.add(deco.mesh(keep(roomMaterial())));
+    if (!deco.empty) group.add(deco.mesh(keep(roomMaterial({ room: outdoor }))));
   }
 
   // Floor slabs and floors, one per room, each lit by its room
@@ -96,7 +97,7 @@ export function buildRooms(p, L, lightOf, rooms, indexOf) {
     if (r.kind === "court") continue;
     slab.box(r.w + T, SLAB, r.d + T, L.plinth, r.x + r.w / 2, -SLAB, r.z + r.d / 2);
   }
-  group.add(slab.mesh(keep(roomMaterial()), { cast: false }));
+  group.add(slab.mesh(keep(roomMaterial({ room: outdoor })), { cast: false }));
   for (const r of p.rooms) {
     if (r.kind === "court") continue;
     const spec = L.floor[r.kind] ?? L.floor.corridor;
@@ -120,9 +121,9 @@ export function buildRooms(p, L, lightOf, rooms, indexOf) {
     };
   }
   const capMat = keep(roomMaterial());
-  const cladMat = keep(roomMaterial({ map: cladding(L.cladding) }));
+  const cladMat = keep(roomMaterial({ map: cladding(L.cladding), room: outdoor }));
   const glassMat = keep(new THREE.MeshBasicMaterial({ color: L.night ? "#1d2a44" : "#cfe3ee" }));
-  const frameHex = L.id === "b" ? L.steel : L.woodEdge;
+  const frameHex = L.steel;
   const windows = windowKeys(p);
   {
     const kit = new Kit(), out = new Kit();
@@ -180,11 +181,14 @@ export function buildRooms(p, L, lightOf, rooms, indexOf) {
     return current.userData.cuts;
   };
 
+  // The walls above the kerbs, squashed toward the floor (1 = full height): the world lowers them during a turn.
+  const setWallScale = (s) => { if (current) current.scale.y = s; };
+
   const dispose = () => {
     group.traverse((o) => o.geometry?.dispose());
     for (const g of perRot.values()) g.traverse((o) => o.geometry?.dispose());
     for (const m of disposables) m.dispose?.();
   };
 
-  return { group, setRotation, dispose };
+  return { group, setRotation, setWallScale, dispose };
 }

@@ -3,54 +3,34 @@
 //
 //   bun scripts/world-shots.ts [--only=SUBSTRING] [--out=DIR]
 //
-// Each shot is the lab at 1440x900 with a query (look, theme, lanes, rot, zoom, focus). A PNG over ~400 KB is saved
-// as a JPEG at quality 85 instead. WebGL runs on SwiftShader, so it works without a GPU (and slowly under load).
-import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+// Each shot is the lab at 1440x900 with a query (theme, lanes, rot, zoom, focus). A PNG over ~400 KB is saved as a
+// JPEG at quality 85 instead. WebGL runs on SwiftShader, so it works without a GPU (and slowly under load).
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { findChrome, Cdp, newSession, freePort } from "./room-hash.ts";
+import { newSession, freePort, startChrome } from "./room-hash.ts";
 import { serveLab } from "./world-lab.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 const MAX_BYTES = 400 * 1024;
 
 export const SHOTS: [string, string][] = [
-  ["a-light-4", "look=a&theme=light&lanes=4"],
-  ["a-dark-4", "look=a&theme=dark&lanes=4"],
-  ["b-light-4", "look=b&theme=light&lanes=4"],
-  ["b-dark-4", "look=b&theme=dark&lanes=4"],
-  ["b-light-1", "look=b&theme=light&lanes=1"],
-  ["b-light-9", "look=b&theme=light&lanes=9"],
-  ["b-light-18", "look=b&theme=light&lanes=18"],
-  ["b-light-close", "look=b&theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
-  ["a-light-close", "look=a&theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
-  ["b-light-poses", "look=b&theme=light&lanes=3&statuses=hq_turn,done,stale&zoom=2&focus=0,1"],
-  ["b-light-4-rot1", "look=b&theme=light&lanes=4&rot=1"],
+  ["light-4", "theme=light&lanes=4"],
+  ["dark-4", "theme=dark&lanes=4"],
+  ["light-1", "theme=light&lanes=1"],
+  ["light-9", "theme=light&lanes=9"],
+  ["light-18", "theme=light&lanes=18"],
+  ["dark-18", "theme=dark&lanes=18"],
+  ["light-close", "theme=light&lanes=3&statuses=moving,needs_you,waiting&zoom=2&focus=0,1"],
+  ["light-poses", "theme=light&lanes=3&statuses=hq_turn,done,stale&zoom=2&focus=0,1"],
+  ["light-4-rot1", "theme=light&lanes=4&rot=1"],
 ];
-
-// Chrome with WebGL on SwiftShader (room-hash's startChrome takes no extra flags).
-async function startChrome() {
-  const bin = findChrome();
-  if (!bin) throw new Error("no Chrome found; set CHROME_BIN");
-  const profile = mkdtempSync(join(tmpdir(), "hq-world-chrome-"));
-  const proc = Bun.spawn([bin, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--mute-audio", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"], { stdout: "ignore", stderr: "ignore" });
-  let port = "";
-  for (let i = 0; i < 300 && !port; i++) {
-    try { port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]; } catch {}
-    if (!port) await Bun.sleep(100);
-  }
-  if (!port) throw new Error("Chrome did not start");
-  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-  const cdp = await Cdp.open(version.webSocketDebuggerUrl);
-  return { cdp, close: async () => { cdp.ws.close(); proc.kill(); await proc.exited; rmSync(profile, { recursive: true, force: true }); } };
-}
 
 if (import.meta.main) {
   const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
   const out = resolve(ROOT, process.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? "docs/design/shots");
   mkdirSync(out, { recursive: true });
   const server = serveLab(freePort());
-  const chrome = await startChrome();
+  const chrome = await startChrome({ webgl: true });
   const errors: string[] = [];
   try {
     const { s, evaluate } = await newSession(chrome.cdp, errors);

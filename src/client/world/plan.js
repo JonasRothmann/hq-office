@@ -95,7 +95,6 @@ function layout(stage, slots) {
   } else {
     const wings = wingsOf(slots);
     const cols = stage === 4 ? 2 : 1;
-    const rows = Math.ceil(wings.length / cols);
     const pitch = OFFICE.d + CORRIDOR + COURT; // one wing and the court after it
     const colW = CORRIDOR + WING_MAX * OFFICE.w + COURT;
     rooms.push(rect("hq", "hq", -SUITE.w, -SUITE.d, SUITE.w, SUITE.d, { back: "n", door: { side: "s", at: 5, width: 2 } }));
@@ -114,7 +113,9 @@ function layout(stage, slots) {
       const x0 = c * colW, z0 = r * pitch;
       rooms.push(rect(`wing:${j}`, "corridor", x0, z0 + OFFICE.d, w.slots.length * OFFICE.w, CORRIDOR, { team: w.team }));
       w.slots.forEach(({ slot, i }, k) => rooms.push(office(slot, i, x0 + k * OFFICE.w, z0, "n")));
-      if (r < rows - 1) rooms.push(rect(`court:${j}`, "court", x0, z0 + OFFICE.d + CORRIDOR, WING_MAX * OFFICE.w, COURT));
+      // the court between this wing and the next one down: as long as the longer of the two, so it never sticks out
+      const below = wings[j + cols];
+      if (below) rooms.push(rect(`court:${j}`, "court", x0, z0 + OFFICE.d + CORRIDOR, Math.max(w.slots.length, below.slots.length) * OFFICE.w, COURT));
     });
   }
   return rooms;

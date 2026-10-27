@@ -2,7 +2,7 @@
 // as a place you go to (its address #room/SLUG, BACK TO OFFICE, Esc, the browser's back button, a reload, the strip
 // of rooms), with the question column untouched; an open room's lanes, brief, shelf and thread; the thread keeping
 // its height beside a long brief and many artifacts, with no scroll area inside another; line breaks in messages;
-// the rail's fold, remembered; writing to the owner and to a member; the pixel strip; and the phone: a full-screen
+// the rail's fold, remembered; writing to the owner and to a member; who sits at the table; and the phone: a full-screen
 // view with CHAT, BRIEF and SHELF (no zoom, no sideways page, the newest message in view, no jump when a message
 // lands while you read older ones). Needs Chrome; skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -217,17 +217,13 @@ test.skipIf(!chromeFound)("the rail folds and opens, and this browser remembers 
   expect(await page.evaluate(`localStorage.getItem("hq-room-rail")`)).toBeNull();
 });
 
-test.skipIf(!chromeFound)("the strip draws the room's lanes at a table, and the office rests while a room covers it", async () => {
+test.skipIf(!chromeFound)("the seats name who is at the table: the owner at its head, then the owning lane and its members (by name when added together), each one selectable", async () => {
   await load("#room/ope-7");
   await until(inRoom("ope-7"));
-  const v = await page.evaluate(`(() => {
-    const c = document.querySelector("#roomView .rvpix"), g = c.getContext("2d"), d = g.getImageData(0, 0, c.width, c.height).data;
-    let colours = new Set(); for (let i = 0; i < d.length; i += 4 * 97) colours.add(d[i] << 16 | d[i + 1] << 8 | d[i + 2]);
-    return { w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, colours: colours.size };
-  })()`);
-  expect(v.h).toBe(48 * 3);
-  expect(Math.abs(v.w / 3 * 2 - v.cssW)).toBeLessThan(4); // two screen pixels per art pixel
-  expect(v.colours).toBeGreaterThan(8);
+  const seats = await page.evaluate(`[...document.querySelectorAll("#roomView .rvseats .rlane")].map((b) => [b.querySelector("b").textContent, b.dataset.select ?? null])`);
+  expect(seats).toEqual([["Tester", null], ["alpha", "alpha"], ["bravo", "bravo"], ["golf", "golf"]]);
+  await page.evaluate(`document.querySelector('#roomView .rvseats [data-select="golf"]').click()`);
+  await until(`document.querySelector("#card h3")?.textContent === "golf"`);
 });
 
 test.skipIf(!chromeFound)("writing: to the owner by default, to a member with To:, kept for a lane that is away", async () => {

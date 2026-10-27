@@ -1,0 +1,7 @@
+/* The 3D office's own controls: turn left, turn right and fit, at the foot of the office area; none on a narrow screen. */
+.wctl { position: fixed; z-index: 2; left: calc(max(var(--gap), env(safe-area-inset-left, 0px)) + var(--qcol) + var(--gap)); bottom: var(--gap); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; }
+.wctl .btn { height: 26px; min-width: 26px; padding: 0 8px; color: var(--text-2); }
+.wctl .btn:hover { color: var(--text); }
+.wctl svg { width: 14px; height: 14px; }
+html.roomopen .wctl { display: none; }
+@media (max-width: 1150px) { .wctl { display: none; } }

@@ -17,7 +17,6 @@ import { STATUS_TEXT } from "../core/status.js";
 import { qTab } from "../messages/messages.js";
 import { clearImages, composer, hasImages, notReady, openPreview, withImages } from "../images/images.js";
 import { markdown } from "./markdown.js";
-import { ART_H, drawStrip, laneAt, stripKey } from "./pix.js";
 
 const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -43,7 +42,7 @@ view.innerHTML = `<div class="rvbar">
     <nav class="rvtabs" aria-label="Open rooms"></nav>
   </div>
   <div class="rvhead"></div>
-  <canvas class="rvpix" aria-hidden="true"></canvas>
+  <div class="rvseats" aria-label="At the table"></div>
   <div class="rvptabs" role="tablist">
     <button class="tab" type="button" role="tab" data-ptab="chat">CHAT</button>
     <button class="tab" type="button" role="tab" data-ptab="brief">BRIEF</button>
@@ -160,7 +159,7 @@ function renderCount() {
   t.title = `${n} ${n === 1 ? "room has" : "rooms have"} new messages`;
 }
 
-// ---- an open room: the bar, the head, the strip ----
+// ---- an open room: the bar, the head, the seats ----
 
 // The other open rooms, one step away; a count on those with new lane messages.
 function renderBar(r) {
@@ -177,29 +176,10 @@ function renderHead(r, d) {
   view.classList.toggle("folded", railFolded);
 }
 
-// The strip is drawn at 2 screen pixels per art pixel (1.5 on a full screen); its art is as wide as its box allows.
-const pix = part("rvpix");
-let pixKey = "", pixWidth = 0;
-function renderStrip(r) {
-  if (!r) return;
-  const scale = fullScreen.matches ? 1.5 : 2;
-  const css = pix.clientWidth;
-  if (css <= 0) return;
-  const width = Math.max(120, Math.round(css / scale));
-  const lanes = new Map((S?.lanes ?? []).map((l) => [l.name, l]));
-  const k = `${scale}|${stripKey(r, lanes, width)}`;
-  if (k === pixKey) return;
-  pixKey = k;
-  pixWidth = width;
-  pix.style.height = `${ART_H * scale}px`;
-  drawStrip(pix, r, lanes, width);
+// Who sits at the table: the owner at its head, then the room's lanes with their status (a click selects one).
+function renderSeats(r) {
+  setHTML(part("rvseats"), `<span class="k">AT THE TABLE</span><span class="rlane you" title="You, at the head of the table"><i></i><b>${esc(CONFIG.owner.trim() || "You")}</b><span class="role">HEAD</span></span>${[r.owner, ...r.members].map((n) => laneChip(n)).join("")}`);
 }
-pix.addEventListener("mousemove", (e) => {
-  const r = roomOf(openSlug), b = pix.getBoundingClientRect();
-  const name = laneAt(r, pixWidth, ((e.clientX - b.left) / b.width) * pixWidth);
-  const t = name ? (name === "you" ? "You, at the head of the table" : `${name}: ${laneInfo(name).label}`) : "";
-  if (pix.title !== t) pix.title = t;
-});
 
 // ---- the rail: lanes and work, the brief, the shelf ----
 
@@ -331,7 +311,7 @@ function renderRoom() {
   renderShelf(d);
   renderThread(d, r);
   renderSend(r);
-  renderStrip(r);
+  renderSeats(r);
   // Seen: its lanes' messages stop counting as new (the tint stays until you leave the room).
   if (d && r.unread && seenSent.get(r.slug) !== r.rev && document.visibilityState === "visible") {
     seenSent.set(r.slug, r.rev);
@@ -369,12 +349,12 @@ function setPtab(t) {
   for (const b of view.querySelectorAll("[data-ptab]")) { b.classList.toggle("on", b.dataset.ptab === t); b.setAttribute("aria-selected", String(b.dataset.ptab === t)); }
 }
 function show(slug) {
-  if (openSlug !== slug) { detail = null; fresh.clear(); stick = true; atEnd = true; sendFor = null; pixKey = ""; setPtab("chat"); }
+  if (openSlug !== slug) { detail = null; fresh.clear(); stick = true; atEnd = true; sendFor = null; setPtab("chat"); }
   openSlug = slug;
   view.hidden = !slug;
   stage.classList.toggle("inroom", !!slug);
   document.documentElement.classList.toggle("roomopen", !!slug);
-  emit("stage", slug ? "room" : "office"); // the office's frame loop rests while a room covers it (room/loop.js)
+  emit("stage", slug ? "room" : "office"); // the 3D office rests while a room covers it (world/index.js)
   fitViewport();
   if (qTab === "rooms") renderList();
 }
@@ -416,11 +396,11 @@ function fitViewport() {
   if (!openSlug || !fullScreen.matches) { view.style.removeProperty("--vvh"); view.style.removeProperty("--vvt"); view.classList.remove("typing"); return; }
   view.style.setProperty("--vvh", `${vv.height}px`);
   view.style.setProperty("--vvt", `${vv.offsetTop}px`);
-  view.classList.toggle("typing", vv.height < innerHeight * 0.75); // the keyboard is up: the strip steps aside
+  view.classList.toggle("typing", vv.height < innerHeight * 0.75); // the keyboard is up: the seats step aside
 }
 vv?.addEventListener("resize", fitViewport);
 vv?.addEventListener("scroll", fitViewport);
-fullScreen.addEventListener("change", () => { fitViewport(); if (openSlug) renderStrip(roomOf(openSlug)); });
+fullScreen.addEventListener("change", fitViewport);
 
 // ---- sending ----
 
@@ -526,10 +506,6 @@ thread.addEventListener("scroll", () => {
 }, { passive: true });
 thread.addEventListener("load", toEnd, true);
 new ResizeObserver(toEnd).observe(thread);
-// The strip follows its own width (the rail folding, the window) and redraws only when that changes what it shows.
-new ResizeObserver(() => { if (openSlug) renderStrip(roomOf(openSlug)); }).observe(pix);
-document.fonts?.addEventListener?.("loadingdone", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("state", render);
-on("settings", () => { if (openSlug) renderStrip(roomOf(openSlug)); });
 on("qtab", (t) => { if (t === "rooms") render(); });

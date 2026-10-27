@@ -3,11 +3,10 @@ import { PANELS, keepDrafts } from "../questions/drafts.js";
 import { CONFIG, S, setCONFIG, setS } from "./state.js";
 import { announce } from "../questions/announce.js";
 import { announceUpdates } from "../feed/feed.js";
-import { syncWorkers } from "../room/workers.js";
 import { scheduleTick, tick } from "../questions/questions.js";
 import { emit } from "./bus.js";
 
-let first = true, pageStamp = null;
+let pageStamp = null;
 function apply(part, whole) {
   setS(whole ? part : Object.assign(S, part));
   const changed = (k) => whole || k in part;
@@ -16,7 +15,6 @@ function apply(part, whole) {
   else if (S.page !== pageStamp) { keepDrafts(); location.reload(); return; }
   if (changed("open")) announce();
   if (changed("updates")) announceUpdates();
-  if (changed("lanes") || changed("open")) { syncWorkers(first); first = false; }
   for (const [keys, render] of PANELS) if (keys.some(changed)) render();
   emit("state", S);
   tick();

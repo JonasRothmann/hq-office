@@ -77,21 +77,6 @@ export function surface(spec) {
         }
         break;
       }
-      case "checker": {
-        const s = 64;
-        for (let x = 0; x < w; x += s) for (let y = 0; y < h; y += s) {
-          if (((x + y) / s) % 2) { g.fillStyle = spec.alt; g.fillRect(x, y, s, s); }
-        }
-        g.strokeStyle = shade(spec.base, -0.12); g.globalAlpha = 0.5; g.lineWidth = 1;
-        for (let x = 0; x <= w; x += s) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, h); g.stroke(); }
-        for (let y = 0; y <= h; y += s) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(w, y + 0.5); g.stroke(); }
-        g.globalAlpha = 0.07; speckle(g, w, h, ["#000", "#fff"], 900, 2, r); g.globalAlpha = 1;
-        break;
-      }
-      case "carpet": {
-        g.globalAlpha = 0.35; speckle(g, w, h, [spec.alt, spec.line, shade(spec.base, 0.06)], 5000, 2, r); g.globalAlpha = 1;
-        break;
-      }
       case "tatami": {
         // mats of 1 × 2 m with cloth borders along the long sides
         g.globalAlpha = 0.5;
@@ -104,9 +89,12 @@ export function surface(spec) {
         break;
       }
       case "cement": {
+        // one-metre stone tiles, every other one a shade darker, with dark joints: a corridor reads at the far zoom
+        g.fillStyle = spec.alt;
+        g.fillRect(128, 0, 128, 128); g.fillRect(0, 128, 128, 128);
         g.globalAlpha = 0.25; speckle(g, w, h, [spec.alt, spec.line, "#fff"], 2600, 3, r); g.globalAlpha = 1;
-        g.strokeStyle = spec.line; g.globalAlpha = 0.6;
-        g.strokeRect(0.5, 0.5, 128, 128); g.strokeRect(128.5, 128.5, 128, 128);
+        g.fillStyle = spec.line; g.globalAlpha = 0.85;
+        g.fillRect(0, 0, w, 3); g.fillRect(0, 127, w, 3); g.fillRect(0, 0, 3, h); g.fillRect(127, 0, 3, h);
         g.globalAlpha = 1;
         break;
       }
@@ -135,54 +123,35 @@ export function surface(spec) {
   return t;
 }
 
-// Wallpaper, one metre square: stripes with a small motif (look A) or a faint plaster (look B).
+// Wallpaper, one metre square: a faint plaster.
 export function wallpaper(spec) {
   const id = `wall:${JSON.stringify(spec)}`;
   if (cache.has(id)) return cache.get(id);
   const r = rng(hash(id));
   const c = canvas(128, 128, (g, w, h) => {
     g.fillStyle = spec.face; g.fillRect(0, 0, w, h);
-    if (spec.kind === "stripes") {
-      for (let x = 0; x < w; x += 32) { g.fillStyle = spec.alt; g.fillRect(x + 12, 0, 8, h); g.globalAlpha = 0.5; g.fillRect(x + 6, 0, 2, h); g.fillRect(x + 24, 0, 2, h); g.globalAlpha = 1; }
-      g.fillStyle = shade(spec.alt, -0.12);
-      for (let x = 0; x < w; x += 32) for (let y = 0; y < h; y += 32) { g.beginPath(); g.arc(x + 16, y + 16 + ((x / 32) % 2) * 16, 2, 0, 7); g.fill(); }
-    } else {
-      g.globalAlpha = 0.18; speckle(g, w, h, [spec.alt, "#fff"], 900, 2, r); g.globalAlpha = 1;
-    }
+    g.globalAlpha = 0.18; speckle(g, w, h, [spec.alt, "#fff"], 900, 2, r); g.globalAlpha = 1;
   });
   const t = texture(c, { metres: 1 });
   cache.set(id, t);
   return t;
 }
 
-// A rug, drawn to its own size (not repeated): a border rug (A) or a tatami mat (B).
+// A tatami-style rug, drawn to its own size (not repeated), with cloth borders along its long sides.
 export function rug(spec, wm, dm) {
   const id = `rug:${JSON.stringify(spec)}:${wm}x${dm}`;
   if (cache.has(id)) return cache.get(id);
   const W = 256, H = Math.round((256 * dm) / wm);
   const c = canvas(W, H, (g, w, h) => {
     g.fillStyle = spec.base; g.fillRect(0, 0, w, h);
-    if (spec.kind === "tatami") {
-      g.globalAlpha = 0.45;
-      for (let y = 0; y < h; y += 3) { g.fillStyle = y % 6 ? spec.alt : spec.base; g.fillRect(0, y, w, 2); }
-      g.globalAlpha = 1;
-      g.fillStyle = spec.line;
-      g.fillRect(0, 0, 10, h); g.fillRect(w - 10, 0, 10, h);
-      g.fillStyle = "#e8e2c8"; g.globalAlpha = 0.5;
-      for (let y = 6; y < h; y += 14) { g.fillRect(3, y, 4, 4); g.fillRect(w - 7, y, 4, 4); }
-      g.globalAlpha = 1;
-    } else {
-      g.fillStyle = spec.line; g.fillRect(0, 0, w, h);
-      g.fillStyle = spec.alt; g.fillRect(8, 8, w - 16, h - 16);
-      g.fillStyle = spec.base; g.fillRect(20, 20, w - 40, h - 40);
-      g.fillStyle = spec.alt;
-      const cx = w / 2, cy = h / 2;
-      g.beginPath(); g.moveTo(cx, cy - h * 0.28); g.lineTo(cx + w * 0.22, cy); g.lineTo(cx, cy + h * 0.28); g.lineTo(cx - w * 0.22, cy); g.closePath(); g.fill();
-      g.fillStyle = spec.line;
-      g.beginPath(); g.arc(cx, cy, Math.min(w, h) * 0.08, 0, 7); g.fill();
-      g.fillStyle = spec.alt;
-      for (let x = 26; x < w - 20; x += 16) { g.fillRect(x, 13, 6, 3); g.fillRect(x, h - 16, 6, 3); }
-    }
+    g.globalAlpha = 0.45;
+    for (let y = 0; y < h; y += 3) { g.fillStyle = y % 6 ? spec.alt : spec.base; g.fillRect(0, y, w, 2); }
+    g.globalAlpha = 1;
+    g.fillStyle = spec.line;
+    g.fillRect(0, 0, 10, h); g.fillRect(w - 10, 0, 10, h);
+    g.fillStyle = "#e8e2c8"; g.globalAlpha = 0.5;
+    for (let y = 6; y < h; y += 14) { g.fillRect(3, y, 4, 4); g.fillRect(w - 7, y, 4, 4); }
+    g.globalAlpha = 1;
   });
   const t = texture(c, { repeat: false });
   cache.set(id, t);
@@ -358,29 +327,19 @@ export function face(skin, hair, mood = "calm") {
   return t;
 }
 
-// The outside face of an outer wall, one metre square: brick (look A) or vertical boards (look B).
+// The outside face of an outer wall, one metre square: vertical oak boards.
 export function cladding(spec) {
   const id = `cladding:${JSON.stringify(spec)}`;
   if (cache.has(id)) return cache.get(id);
   const r = rng(hash(id));
   const c = canvas(128, 128, (g, w, h) => {
     g.fillStyle = spec.line; g.fillRect(0, 0, w, h);
-    if (spec.kind === "brick") {
-      const bh = 16, bw = 42;
-      for (let y = 0, row = 0; y < h; y += bh, row++) {
-        for (let x = (row % 2) * -bw / 2; x < w; x += bw) {
-          g.fillStyle = r() < 0.5 ? spec.base : spec.alt;
-          g.fillRect(x + 1, y + 1, bw - 2, bh - 2);
-        }
-      }
-    } else {
-      for (let x = 0; x < w; x += 16) {
-        g.fillStyle = r() < 0.5 ? spec.base : spec.alt;
-        g.fillRect(x + 1, 0, 14, h);
-        g.globalAlpha = 0.12; g.fillStyle = spec.line;
-        for (let k = 0; k < 3; k++) g.fillRect(x + 3 + r() * 10, 0, 1, h);
-        g.globalAlpha = 1;
-      }
+    for (let x = 0; x < w; x += 16) {
+      g.fillStyle = r() < 0.5 ? spec.base : spec.alt;
+      g.fillRect(x + 1, 0, 14, h);
+      g.globalAlpha = 0.12; g.fillStyle = spec.line;
+      for (let k = 0; k < 3; k++) g.fillRect(x + 3 + r() * 10, 0, 1, h);
+      g.globalAlpha = 1;
     }
   });
   const t = texture(c, { metres: 1 });
