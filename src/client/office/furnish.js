@@ -26,7 +26,7 @@ export const TEAM_ROOM = {
     { id: "plant", type: CORNER[hash(room.id) % CORNER.length], at: [0, 0], facing: "s" },
     { id: "lamp", type: "japandi/floor-lamp", at: [6, 0], facing: "s" },
   ],
-  windows: [[1, 0], [5, 0]],
+  windows: [[1, 0], [2, 0], [4, 0], [5, 0]],
 };
 
 // The HQ suite (7×5, back north; its door is on the south or east side at the front corner, kept clear): HQ's desk
@@ -48,7 +48,8 @@ export const SUITE_AT = {
 // The break area (its own size w × d is 5 or 7 wide; the floor stage's is 12 deep, the hall coming in on its west
 // side at z 5..7): the kitchenette, and a sofa and tea table under a ceramic pendant, on the back wall; the tatami
 // lounge in the west corner beside a shoji screen; the tea corner where the room is wide; a lamp, a sideboard and a
-// fig along the east wall where it is deep. The rest stays open for standing.
+// fig along the east wall, and a sofa and tea table on a boro rug at the front of the west side, where it is deep.
+// The rest stays open for standing.
 export const BREAK_AT = {
   objects: (w, d) => [
     { id: "kitchenette", type: "japandi/kitchenette", at: [0, 0], facing: "s" },
@@ -65,6 +66,11 @@ export const BREAK_AT = {
         { id: "lamp", type: "japandi/floor-lamp", at: [w - 1, 5], facing: "w" },
         { id: "sideboard", type: "japandi/sideboard", at: [w - 1, 6], facing: "w" },
         { id: "fig", type: "japandi/plant-fig", at: [w - 1, 8], facing: "w" },
+        { id: "rug", type: "japandi/rug-boro", at: [0, 8], facing: "s" },
+        { id: "front-table", type: "japandi/tea-table", at: [0, 8], facing: "n" },
+        { id: "front-pendant", type: "japandi/pendant-ceramic", at: [0, 8], facing: "n" },
+        { id: "front-sofa", type: "japandi/sofa", at: [0, 9], facing: "n" },
+        { id: "front-lamp", type: "japandi/floor-lamp", at: [0, 10], facing: "s" },
       ]
       : []),
   ],
