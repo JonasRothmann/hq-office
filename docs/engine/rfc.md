@@ -119,36 +119,54 @@ packages/world/
     render/             three.js: renderer, lights and shadows, materials, meshes, characters, picking
     world/              createWorld: the composition a world author uses
   packs/starter/        the starter pack: index.js plus one file per object
+  api.txt               the public API, one exported name per line (test/api.test.ts)
   examples/             tiny-house.world.js
-  lab/index.html        loads any world file: ?world=/path/to/x.world.js
-  tools/                serve.ts, shot.ts, proof.ts, catalog.ts, check.ts, chrome.ts
+  lab/index.html        loads any world file: ?world=/path/to/x.world.js (served by tools/serve.ts, which adds the
+                        import map built from package.json's exports)
+  tools/                serve.ts (the lab), shot.ts, proof.ts, check.ts, catalog.ts, chrome.ts (headless Chrome),
+                        resolve.ts (lets Bun load world and pack files outside the package), pack-files.ts
   test/                 bun tests, pure (no three.js, no browser)
 ```
 
+The lab lives in the package (`packages/world/lab/`), not in `docs/engine/lab.html` as first planned, so the package
+carries its own lab like its own tests.
+
 ### 2.5 How the app serves it
 
-- **Import map** (`public/index.html`, a shared file; a one-line change in its own commit): add
+Done in phase 1, as three small changes:
+
+- **Import map** (`public/index.html`, a shared file; one line plus its comment): add
   `"@hq/world": "/packages/world/src/index.js"` and `"@hq/world/model": "/packages/world/src/model/index.js"` beside
   `"three"`. Exact entries, no trailing-slash prefix, so a browser cannot resolve a deep import either.
 - **A route file** (`src/server/routes/packages.ts`, new, so no shared file changes): serves `.js` files under
   `packages/<name>/src/` and `packages/<name>/packs/` only, with the same no-cache and etag rules as `clientFile`.
-  Tests, tools, examples and the lab are not served by the app.
+  Tests, tools, examples and the lab are not served by the app. Checked against `server.ts` on a spare port:
+  `/packages/world/src/index.js` is 200, `/packages/world/package.json` is 404.
+- **`modules.test.ts`** (2.6).
+
+Left for phase 2:
+
 - **Autoreload** (`src/server/page.ts`, shared): open pages reload when `src/client` or `public` changes. Package
   edits do not trigger it until `page.ts` also watches `packages/`. That is a two-line change, named here and left
   for phase 2, when the app first imports the package.
-- **Bun side**: nothing in the app server imports the package in phase 1. When it needs `@hq/world/model` (say, to
-  validate a world on the server), the root `package.json` gets `"workspaces": ["packages/*"]`; no dependency is
-  added.
+- **Bun side**: nothing in the app server imports the package in phase 1. Bun resolves `@hq/world/model` by
+  self-reference inside the package (its tests and the starter pack use it), but not from app files. The package's
+  tools load app-side worlds and packs through `tools/resolve.ts`, which points `@hq/world...` at the exports on load.
+  When app tests import an app pack directly, the root `package.json` gets `"workspaces": ["packages/*"]` (a symlink in
+  `node_modules`, no dependency).
 
 ### 2.6 How `modules.test.ts` treats it
 
-`test/client/modules.test.ts` walks `src/client` only, so package files are never checked as page modules. An app
-import of `@hq/world` resolves through the import map to `packages/world/src/index.js`; the test reads that file's
-exports lazily (the one-line change in this phase), so the link check works across the boundary. The package
-checks its own links in `packages/world/test/links.test.ts` with the same rules. The new
-`test/client/world-package.test.ts` checks the boundary from the app side: no import from app code (`src/`,
-`scripts/`, `test/`, `bin/`) resolves into `packages/world/` except through an `exports` entry, and the import map's
-`@hq/world*` entries equal the package's `exports`.
+`test/client/modules.test.ts` walks `src/client` only, so package files are never checked as page modules and it did
+not flag them. The one change: it read exports only of `src/client` files, so an app import of `@hq/world` (mapped by
+the import map to `packages/world/src/index.js`) would have crashed it. It now reads a module's exports when first
+asked, following `export * from`, so the link check works across the boundary. The package checks its own links in
+`packages/world/test/boundary.test.ts` with the same rules. The new `test/client/world-package.test.ts` checks the
+boundary from the app side: no app file (`src/`, `scripts/`, `test/`, `bin/`, `public/`) imports a path into
+`packages/world/` or a deep `@hq/world/...` name, every `@hq/world*` import-map entry points at the file its export
+names, and the route serves the package's browser modules and nothing else. Both boundary tests were checked against a
+planted violation (an app file deep-importing `render/stage.js`; a package file importing `src/client/core/state.js`)
+and failed with the file, the import and the fix.
 
 ### 2.7 Versioning and stability
 
@@ -186,6 +204,45 @@ checks its own links in `packages/world/test/links.test.ts` with the same rules.
 | Deep-imports `render/materials.js` from the app | `test/client/world-package.test.ts` |
 | Imports app code from the package | `packages/world/test/boundary.test.ts` |
 | Patches `ShaderChunk` | `boundary.test.ts` (no global three.js mutation) |
+| Writes "lane" or "ask" into the engine | `boundary.test.ts` (no host concepts in the package) |
+
+### 2.10 Second critique, after building the proof
+
+Building B in `packages/world/` tested the revision against real tools. What changed:
+
+1. *Bun cannot see the import map.* Inside the package, Bun resolves `@hq/world/model` by package self-reference, so
+   the starter pack and the tests import it like any pack would. An app-side world or pack is outside the package, and
+   Bun's runtime `onResolve` hook does not see bare names. `tools/resolve.ts` rewrites `@hq/world...` on load to
+   the exports' files, and refuses names that are not exports. A world in any folder checks with `check.ts`.
+2. *The lab's import map must not drift from `exports`.* `tools/serve.ts` builds it from `package.json` on every
+   request, and `api.test.ts` checks that every export is mapped.
+3. *The lint is only as good as what it reads.* Its first run reported 109 coplanar pairs in the tiny house. All
+   were bottom faces at y = 0 (wall bottoms on slab bottoms), never visible. The primitive kit gained `omit` faces,
+   so hidden faces are neither drawn nor linted. The lint also caught the first door and window, which were too wide
+   for the space between the wall posts, and a chair back exactly as wide as its seat.
+4. *A pack folder can drift from its index.* `checkPack` cannot read folders (it is pure), so `tools/pack-files.ts`
+   checks that every file is imported and listed, and `check.ts` runs both.
+
+### 2.11 Decision entry (D16, for `docs/decisions.md`)
+
+> ## D16. The 3D world is an isolated package, `@hq/world`; HQ content stays in the app as packs
+>
+> The owner asked for the 3D world to be its own isolated package that the app uses. It lives in `packages/world/`
+> with its own `package.json` (`exports`: `.`, `./model`, `./packs/starter`; three.js as a peer and nothing else),
+> README, AGENTS guide, tests, lab and CLIs. It imports nothing from the app, and it knows nothing about lanes, asks,
+> the bus or HQ: it speaks lots, rooms, objects, slots, characters, acts and events. The app reaches it only through
+> the import map (`@hq/world`, `@hq/world/model`), which a new route file (`src/server/routes/packages.ts`) serves
+> from `packages/*/src` and `packages/*/packs`. Tests on both sides fail on a crossing: a package file importing
+> outside the package, or an app file deep-importing it.
+>
+> Three shapes were compared: one package with the engine and the office's content, an engine package with content
+> kept in the app, and an engine package plus a package per content pack. The first makes every new chair an engine
+> change. The third makes every new pack touch four shared places, for one consumer. The engine package with a pack
+> contract was chosen. Content comes as packs (`definePack`, one file per object, ids prefixed by pack), catalogs
+> are built per world with no global registry, and a pack imports only public entries. So HQ's Japandi pack, the
+> office layout from the lane tree and the outside generator stay app-side, and any of them can later move to its own
+> package unchanged. The public API is `api.txt` plus world format 1, versioned 0.x, and a test fails when it changes
+> without the changelog.
 
 ## 3. The layers
 
@@ -276,7 +333,7 @@ and `ppm` (current pixels per metre). Rules:
 
 - The camera orbits the focus at a fixed pitch of 30° and a fixed distance. Its height is
   `focus.y + D·sin 30°` at every frame, and the focus projects to the same screen point at every frame.
-- A turn animates only the azimuth, along the arc, with an ease-in-out over 0.35 s. It never moves the focus and
+- A turn animates only the azimuth, along the arc, with an ease-in-out over 0.38 s. It never moves the focus and
   never changes the zoom. Fitting is done once (on load or on request), for the worst of the four rotations, so a
   turn never needs a refit.
 - Zoom has three steps; between them the camera eases in log space, focus fixed.
@@ -452,6 +509,11 @@ up and down is the picture:
    lerps the focus in a straight line by the same factor. Halfway through, the focus is about 29 % of the offset off
    the arc (1 − cos 45°), which shows as a vertical slide of the whole office.
 
+Measured by replaying `camera.js` and the turn in `world.js` without three.js on the tiny house's bounds at
+1280×800: the lot's centre slides 33.5 px down and back up during the turn (cause 3; the plan is near-square, so the
+zoom happened not to change), and the squash moves the top of every upper wall 2.6 m × cos 30° × 89.7 px/m ≈ 200 px
+down and up again (cause 1); together with the turn, the back wall's top edge sweeps 413 px of screen height.
+
 The engine fixes all three by design (3.5, 3.6): walls never scale, a turn never refits or moves the focus, and only
 the azimuth moves. The proof logs the camera height and the focus's screen position per frame.
 
@@ -575,8 +637,83 @@ per-room light at night, and `attach`/`anchor` on characters as well as objects.
 
 ## 11. Phase 1 proof
 
-See section 11 results below (filled in after the proof ran).
+`bun packages/world/tools/proof.ts --out docs/engine/shots` runs the tiny house in headless Chrome (SwiftShader,
+1280×800, DPR 1). It writes the shots and `docs/engine/shots/proof.json`, and every number below comes from that
+file.
 
-## 12. Phase 2
+**The turn** (`turn-strip.png`): six frames across a 90° turn, from az 45° to 135°.
 
-See the end of this document.
+| Frame | az | camera y | focus on screen | px/m |
+| --- | --- | --- | --- | --- |
+| 0 | 45.0° | 49.99999999999999 | 640, 400 | 45.3 |
+| 1 | 47.9° | 49.99999999999999 | 640, 400 | 45.3 |
+| 2 | 68.0° | 49.99999999999999 | 640, 400 | 45.3 |
+| 3 | 112.0° | 49.99999999999999 | 640, 400 | 45.3 |
+| 4 | 132.1° | 49.99999999999999 | 640, 400 | 45.3 |
+| 5 | 135.0° | 49.99999999999999 | 640, 400 | 45.3 |
+
+The camera's height (`100 · sin 30°`), the focus's screen point and the zoom are the same in every frame. Only the
+azimuth moves. The old camera, replayed on the same bounds, slid the lot's centre 33.5 px and moved the wall tops
+about 200 px (6.1).
+
+**Panning** (two consecutive frames of a drag of 7.37, 3.11 CSS px at the near zoom; the second frame shifted back
+by the camera's reported shift and compared with the first; about 975k overlapping pixels compared; "changed" means a channel
+differs by more than 8/255):
+
+| Configuration | Shift (device px) | Whole pixels | Changed pixels | Mean difference (/255) |
+| --- | --- | --- | --- | --- |
+| engine | 8, 3 | yes | **0** | 0.005 |
+| engine, shadow radius 4 | 8, 3 | yes | **0** | 0.005 |
+| no pixel snap | 7.37, 3.11 | no | 16,661 (1.70 %) | 0.642 |
+| three's screen-space shadow dither, radius 4 | 8, 3 | yes | 618 (0.06 %) | 0.082 |
+| old: no snap, screen dither, radius 4 | 7.37, 3.11 | no | 16,702 (1.71 %) | 0.647 |
+
+The engine's frames are identical after the shift. Each old cause shows up on its own. Sub-pixel camera placement
+changes 1.7 % of the picture per frame, mostly edges and thin parts. The screen-fixed shadow dither changes 618
+pixels, all in penumbrae, even with a perfectly snapped camera. With world-fixed taps, a wide radius is stable too.
+The coplanar causes (window frames, squashed walls, wall ends) are caught before rendering: `lint.test.ts` rebuilds
+each one and the lint fails on it, and the tiny house has 0 pairs in all 12 views and 12 turn states.
+
+**Wall modes** (`walls-strip.png`): up (0 cut edges), cutaway (24), down (41), and cutaway with focus on the lounge
+(12; the study's near walls stay up).
+
+**A character walks and sits** (`walk-sit-strip.png`): Ada starts idle in the lounge at (9.5, 7.5). She walks
+diagonally to the inner door, through it at (7, 5) → (6, 5), and on to the chair's free side tile (4.5, 4.5), because
+the chair's front tile is the desk. She turns to face north, sits down (hips 0.62 → 0.44 m) and loops `type`:
+
+| t | clip | position |
+| --- | --- | --- |
+| 0.0 s | idle | 9.5, 7.5 |
+| 1.2 s | walk | 8.4, 6.4 |
+| 2.4 s | walk | 7.21, 5.5 |
+| 3.6 s | walk | 5.65, 5.5 |
+| 4.8 s | walk | 4.5, 4.5 |
+| 7.0 s | type | 3.5, 4.47 (seated) |
+
+**Night** (`night.jpg`, 21:30, dark theme): blue moonlight, the lamps' shades glow and light the floor round them,
+and Ada types at the desk. `day.jpg` is the same view at 14:00. Draw calls: 27 for the whole lot, 2k triangles.
+
+**Tests**: `bun test packages/world test/client/modules.test.ts test/client/world-package.test.ts` gives 157 pass,
+0 fail. The package's 94 tests cover validation, rooms, nav, the camera, the lint, packs, the boundary and the API.
+
+**What the proof does not show yet**: real-GPU timing (SwiftShader is a CPU rasteriser), DPR 2, instancing, per-room
+light, and the HQ office itself.
+
+## 12. Phase 2: what to build first
+
+1. **The office as a world, behind the adapter.** Write `src/client/office/plan.js` (the lane tree to a `WorldDoc`)
+   and `src/client/office/adapter.js` (today's `api.js` contract on `world.anchor`, `project`, `attach`, `on`). Ship
+   it behind a setting next to the current world. This is the step that proves the boundary. Everything else
+   follows from what it needs.
+2. **Engine features the office needs**, in that order: `InstancedMesh` for `instance: true` objects (a 12-lane
+   office has 48 desks and chairs); per-room light (a uniform per room, so a lit office glows at night among dark
+   ones); anchors and `attach` on characters (the desk HUD, the subagent balls); model edits at run time
+   (`addObject`, `moveObject`, `removeObject`, validated) so a new lane's desk appears without a rebuild.
+3. **The Japandi pack**, after the two lanes now in `src/client/world/` merge: `furniture.js` and `look.js` reshaped
+   into one `defineObject` file per piece, checked with `check.ts`.
+4. **The small shared changes named in 2.5**: `page.ts` watches `packages/`; root `workspaces` once app tests import
+   app packs.
+5. **Then delete** `src/client/world/{camera,scene,rooms,kit,walk}.js` and `plan.js`'s `wallCuts`/`cameraSide`,
+   in the same change that switches the page to the engine.
+6. **Golden numbers in CI**: `proof.ts` already gives the camera-height range and the pan residual. Turn them into a
+   browser test that fails when the pan residual goes above 0 or the camera height varies.

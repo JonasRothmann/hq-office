@@ -1,6 +1,5 @@
 // Acts: "sit on chair-1" or "walk to (4, 6)" turned into steps the world runs: walk a path, turn, enter the slot with
 // a transition clip, then loop the slot's clip. Pure.
-import { tileKey } from "../model/grid.js";
 import { simplify } from "./nav.js";
 import { problem } from "../model/problems.js";
 
@@ -40,5 +39,3 @@ export function planAct(lot, nav, who, act, path = "acts") {
   steps.push({ kind: "loop", clip: slot.clip });
   return { steps, slot: slotName, stand: tiles[tiles.length - 1] };
 }
-
-export const standKey = (t) => tileKey(t[0], t[1]);
