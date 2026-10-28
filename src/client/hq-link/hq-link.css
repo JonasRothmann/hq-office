@@ -1,19 +1,19 @@
-/* "HQ isn't receiving": red, across the top, only while it is true. */
-.hqdown { display: grid; gap: 4px; padding: 8px 14px; border-color: var(--red); background: #fff0f0; color: var(--ink, #23233a); }
+/* "HQ isn't receiving": a red glass banner on the stage, under the status pill, only while it is true. */
+.hqdown { display: grid; gap: 6px; padding: 10px 14px; color: var(--text); box-shadow: inset 0 0 0 1px rgba(229, 72, 77, 0.55), var(--glass-shadow); background: linear-gradient(var(--st-red-fill), var(--st-red-fill)), var(--glass-bg); }
 .hqdown[hidden] { display: none; }
-.hqdown .head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
-.hqdown .head b { font: 12px/1.2 var(--pixel); color: var(--red); }
-.hqdown .why { font-weight: 700; }
-.hqdown p { margin: 0; font-size: 13px; }
-.hqdown code { font-size: 12px; background: #fff; padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
-.hqdown .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-.hqdown .acts .btn { padding: 6px 10px; }
-.hqdown .held summary { cursor: pointer; font: 9px/1.6 var(--pixel); color: var(--red); }
+.hqdown .head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.hqdown .head b { font: 600 12px/1.2 var(--font); letter-spacing: 0.04em; color: var(--st-red-text); }
+.hqdown .why { font-weight: 600; }
+.hqdown p { margin: 0; font-size: 12.5px; }
+.hqdown code { padding: 1px 4px; border-radius: 4px; background: var(--surface-3); font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+.hqdown .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.hqdown .acts .btn { height: 26px; background: var(--surface-solid); box-shadow: 0 0 0 1px var(--hairline-2); }
+.hqdown .hqfix { background: var(--st-green) !important; color: #fff; box-shadow: none !important; }
+.hqdown .held summary { cursor: pointer; font: 600 11px/1.6 var(--font); letter-spacing: 0.04em; color: var(--st-red-text); }
 .hqdown .held { max-height: 30vh; overflow-y: auto; }
-.hqdown .held div { font-size: 13px; padding: 3px 0; overflow-wrap: anywhere; }
-.hqdown .held div b { font-size: 12px; margin-right: 8px; }
-/* desktop: the page grid gets a row for it, so the desk and the office keep the rest of the height */
+.hqdown .held div { padding: 3px 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.hqdown .held div b { margin-right: 8px; font: 500 11px/1 var(--mono); }
+/* desktop: right of the stack, under the pill, over the reader's column (core/layout.css's grid) */
 @media (min-width: 1151px) {
-  .wrap:has(> .hqdown:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
+  .wrap > .hqdown { grid-column: 2 / 4; grid-row: 2; margin-top: var(--gap); z-index: 4; }
 }
-.hqdown .hqfix { background: var(--green); border-color: #1d6b3a; color: #fff; }

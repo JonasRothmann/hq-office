@@ -1,6 +1,6 @@
-// The page for a lane blocked on a prompt in herdr: a BLOCKED count in the top bar (only while there is one), a red
-// bubble at the lane's desk (not the queue), the card with the excerpt and where to answer it, and the WORK board
-// with the blocked item on top. Needs Chrome (CHROME_BIN); skipped without it.
+// The page for a lane blocked on a prompt in herdr: a BLOCKED count in the top bar (only while there is one), its
+// worker standing at its desk with a raised hand under the red badge, the card with the excerpt and where to answer
+// it, and the WORK board with the blocked item on top. Needs Chrome with WebGL (SwiftShader); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,26 +32,16 @@ let chrome: Awaited<ReturnType<typeof startChrome>>;
 let server: Awaited<ReturnType<typeof startServer>>;
 let page: Awaited<ReturnType<typeof newSession>>;
 const errors: string[] = [];
-const until = async (expr: string, ms = 8000) => {
+const until = async (expr: string, ms = 60_000) => {
   for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(50)) if (await page.evaluate(expr).catch(() => false)) return true;
   throw new Error(`timed out waiting for ${expr}`);
 };
-// Where alpha stands and the colour inside its bubble (10x9 room pixels at (x + 9, y - 9), inside one pixel in).
-const PROBE = `(async () => {
-  const { workers } = await import("/src/client/room/workers.js");
-  const { SEATS, QUEUE } = await import("/src/client/room/spots.js");
-  const { ctx, TS, SC } = await import("/src/client/room/canvas.js");
-  const w = workers.get("alpha");
-  const at = (list) => list.some((p) => Math.abs(p.x - w.target.x) < 0.5 && Math.abs(p.y - w.target.y) < 0.5);
-  const bx = w.x * TS + 9, by = w.y * TS - 6 - 9;
-  // The bubble bounces up to 2.5 pixels: 3 pixels down from its resting top is inside it at every height.
-  const d = ctx.getImageData(Math.round((bx + 2) * SC), Math.round((by + 3) * SC), 1, 1).data;
-  return { status: w.lane.status, desk: at(SEATS), queue: at(QUEUE), still: !w.path.length, red: d[0] === 0xd6 && d[1] === 0x3c && d[2] === 0x3c };
-})()`;
+// What alpha's worker does: its pose (the clip it loops), whether it is off to the break area, and its badge.
+const PROBE = `(() => { const w = __world.worker("alpha"); return { pose: w.pose, out: w.out, marker: w.marker }; })()`;
 
 beforeAll(async () => {
   if (!chromeFound) return;
-  chrome = await startChrome();
+  chrome = await startChrome({ webgl: true });
   server = await startServer(ROOT, { HERDR_BIN: herdr });
   for (const name of ["golf", "alpha"]) await server.post("/api/lanes", { name, machine: "local" });
   await server.post("/api/board/track", { issue: "ABC-7", lane: "alpha" });
@@ -60,8 +50,8 @@ beforeAll(async () => {
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.s("Page.navigate", { url: `${server.base}/` });
-  await until(`import("/src/client/room/workers.js").then(({ workers }) => workers.size === 2)`);
-}, 30_000);
+  await until(`window.__world?.desks?.length === 2`);
+}, 120_000);
 
 afterAll(async () => {
   await server?.stop();
@@ -69,13 +59,13 @@ afterAll(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test.skipIf(!chromeFound)("a blocked lane: BLOCKED in the top bar, a red bubble at its desk, the prompt on its card, first on WORK", async () => {
+test.skipIf(!chromeFound)("a blocked lane: BLOCKED in the top bar, a raised hand under the red badge at its desk, the prompt on its card, first on WORK", async () => {
   // The top bar.
   await until(`!!document.querySelector("#sBlocked:not([hidden])")`);
   expect(await page.evaluate(`document.querySelector("#sBlocked .k").textContent + " " + document.querySelector("#sBlocked .v").textContent`)).toBe("BLOCKED 1");
-  // The room: at its desk, under a red bubble.
-  await until(`(${PROBE}).then((p) => p.still && p.red)`, 15_000);
-  expect(await page.evaluate(PROBE)).toMatchObject({ status: "blocked", desk: true, queue: false, red: true });
+  // The office: beside its desk, hand raised, under the red badge.
+  await until(`(${PROBE}).pose === "wave"`);
+  expect(await page.evaluate(PROBE)).toEqual({ pose: "wave", out: false, marker: { color: "#e5484d", glyph: "!" } });
   // The card: clicking the count selects the lane, and its card shows what it asks and where.
   await page.evaluate(`document.querySelector("#sBlocked").click()`);
   await until(`!!document.querySelector("#card .prompt")`);
@@ -83,11 +73,11 @@ test.skipIf(!chromeFound)("a blocked lane: BLOCKED in the top bar, a red bubble 
   expect(card).toContain("BLOCKED ON A PROMPT");
   expect(card).toContain("ANSWER IT IN HERDR ON LOCAL, PANE w3:p2");
   expect(card).toContain("Remove the build folder · Do you want to proceed?\n1. Yes\n2. No, and tell Claude what to do differently (esc)");
-  // WORK: the blocked item first, the excerpt as its why.
-  await page.evaluate(`document.querySelector('[data-qtab="work"]').click()`);
+  // The work board (its pill): the blocked item first, the excerpt as its why.
+  await page.evaluate(`document.getElementById("pWork").click()`);
   await until(`!!document.querySelector("#work .wi")`);
   const first = await page.evaluate(`(() => { const a = document.querySelector("#work .wi"); return { cls: a.className, key: a.querySelector(".key").textContent, what: a.querySelector(".what").textContent }; })()`);
   expect(first).toEqual({ cls: "wi blocked", key: "ABC-7", what: "Remove the build folder · Do you want to proceed? / 1. Yes / 2. No, and tell Claude what to do differently (esc)" });
   expect(await page.evaluate(`document.querySelector("#work h4").textContent`)).toBe("BLOCKED ON A PROMPT (1)");
   expect(errors).toEqual([]);
-}, 40_000);
+}, 120_000);

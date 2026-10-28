@@ -1,4 +1,4 @@
-// The SECRETS pane: paste a value, see names and deadlines (with the date), and the names a restart lost.
+// The secrets drop, in Tell HQ: paste a value, see names and deadlines (with the date), and the names a restart lost.
 import { $, toast } from "../core/dom.js";
 import { S } from "../core/state.js";
 import { clock, esc, setHTML } from "../core/format.js";
@@ -18,7 +18,7 @@ export function renderSecrets() {
     </div>`).join("");
   const rows = liveSecrets().map((x) => `<div class="sitem" data-secret-row="${esc(x.name)}">
       <b>${esc(x.name)}</b><span class="tag">${esc(x.by.toUpperCase())}</span><span class="sk">SET ${clock(x.setAt)}</span>
-      <span class="left" data-exp="${x.expiresAt}"></span>
+      <span class="left" data-exp="${esc(x.expiresAt)}"></span>
       <button class="btn-s" type="button" data-secret-rm="${esc(x.name)}">DELETE</button>
     </div>`).join("");
   setHTML($("secretList"), lost + rows || `<div class="hint">No secrets. Name one, give it minutes and paste the value. HQ reads it with <code>hud secret get NAME | &lt;command&gt;</code> until it expires. A restart of the plugin hands them over; a crash loses them, and they show here as lost.</div>`);
@@ -47,4 +47,10 @@ $("secretForm").addEventListener("submit", async (e) => {
     $("secName").value = "";
     toast(`SAVED ${name}. HQ CAN READ IT.`);
   } catch (err) { toast(err.message); }
+});
+$("secretList").addEventListener("click", async (e) => {
+  const rm = e.target.closest("[data-secret-rm]");
+  if (!rm) return;
+  rm.disabled = true;
+  try { await post("/api/secrets/rm", { name: rm.dataset.secretRm }); toast(`DELETED ${rm.dataset.secretRm}.`); } catch (err) { toast(err.message); rm.disabled = false; }
 });

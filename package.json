@@ -8,7 +8,9 @@
   "type": "module",
   "scripts": {
     "start": "bun server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:hud": "bun test --timeout 90000 test/server test/client/hud-only test/client/inbox test/client/reader test/client/modules test/client/page test/client/glass test/client/rooms test/client/attach test/client/threads test/client/hierarchy test/client/hq-link test/client/ledger test/client/phone test/client/settings test/client/secrets-page",
+    "test:world": "bun test --timeout 90000 test/client/world.test test/client/blocked test/client/performance test/client/ask-scope test/client/desk-hud test/client/office-plan.test test/client/office-outside.test test/client/outside.test test/client/world-package.test packages/world/test"
   },
   "engines": {
     "bun": ">=1.1.0"

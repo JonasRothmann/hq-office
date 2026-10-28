@@ -1,15 +1,17 @@
-// The owner's settings (hero, season, hat, sound, performance): kept on the server, with a copy in this browser for the first paint.
-import { HEROES } from "../room/palette.js";
-import { THEME_CHOICES } from "../room/themes.js";
+// The owner's settings (sound, performance, level names, the land round the office): kept on the server, with a copy in this browser for the first paint.
 import { emit, on } from "../core/bus.js";
 import { post } from "../core/net.js";
 
-// The owner's choices, not per-view state such as the open tab. The defaults: the season follows the calendar, the
-// default hero (YOU) is the hero, its hat follows the season, the chime is off, and the room moves smoothly.
-// The level names (one per depth of the lane tree, comma-separated) and the theme that dresses the levels.
-export const DEFAULTS = { hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" };
-// How much the room moves, and so what it costs (room/beat.js).
+// The owner's choices, not per-view state such as the open tab. The defaults: the chime is off, the office moves
+// smoothly, the lane tree's levels (one name per depth, comma-separated) are Manager, Lead, Engineer, and the office
+// stands in a valley. Choices kept on the server by earlier versions (hero, season, hat and theme for the pixel room;
+// office, from when the owner picked the renderer) are left there untouched and ignored.
+export const DEFAULTS = { sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", outside: "nature" };
+// How much the 3D office moves, and so what it costs (world/index.js).
 export const PERFORMANCE_CHOICES = ["smooth", "balanced", "saver"];
+// What surrounds the office (office/outside/): a valley, a town, or the garden alone. outsideSeed, when set (REROLL),
+// is what the land grows from; without it the land grows from the owner's name, so each installation has its own.
+export const OUTSIDE_CHOICES = ["nature", "city", "off"];
 const LOCAL_KEY = "hq-settings";
 // Before 0.3.0 the SOUND switch was remembered on its own, under this key.
 const LOCAL_SOUND_KEY = "hq-sound";
@@ -27,15 +29,14 @@ export function localSettings() {
 }
 function saveLocal() { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(settings)); } catch {} }
 
-// The defaults with the given choices over them. A hero this page no longer has (one saved by an older version) is
-// the default hero again; the season and the hat are checked where they are used.
+// The defaults with the given choices over them, each checked against what this page offers.
 export function withDefaults(v) {
   const s = { ...DEFAULTS, ...v };
-  if (!HEROES.some((h) => h.name === s.hero)) s.hero = DEFAULTS.hero;
   s.sound = s.sound === true;
   if (!PERFORMANCE_CHOICES.includes(s.performance)) s.performance = DEFAULTS.performance;
-  if (!THEME_CHOICES.includes(s.theme)) s.theme = DEFAULTS.theme;
   if (typeof s.levels !== "string" || !s.levels.split(",").some((n) => n.trim())) s.levels = DEFAULTS.levels;
+  if (!OUTSIDE_CHOICES.includes(s.outside)) s.outside = DEFAULTS.outside;
+  if (typeof s.outsideSeed !== "string" || !s.outsideSeed || s.outsideSeed.length > 40) delete s.outsideSeed;
   return s;
 }
 
@@ -49,18 +50,15 @@ export function plan(server, local, migrated) {
 }
 
 export let settings = withDefaults(localSettings());
-export let heroIndex = Math.max(0, HEROES.findIndex((h) => h.name === settings.hero));
-export const hero = () => HEROES[heroIndex];
 
-// Makes these the settings: the copy in this browser, the hero, and the "settings" event on the bus, which the
-// settings panel, the room and SOUND listen to. Nothing happens when nothing changed.
+// Makes these the settings: the copy in this browser and the "settings" event on the bus, which the settings panel,
+// the world and SOUND listen to. Nothing happens when nothing changed.
 function adopt(v) {
   const next = withDefaults(v);
   const same = JSON.stringify(next) === JSON.stringify(settings);
   settings = next;
   saveLocal();
   if (same) return;
-  heroIndex = Math.max(0, HEROES.findIndex((h) => h.name === settings.hero));
   emit("settings", settings);
 }
 
@@ -79,7 +77,7 @@ export async function changeSettings(changes) {
     pending--;
   }
 }
-export const resetSettings = () => changeSettings({ ...DEFAULTS });
+export const resetSettings = () => changeSettings({ ...DEFAULTS, outsideSeed: null });
 
 on("state", (S) => {
   if (!S.settings || S.settings === lastServer) return;

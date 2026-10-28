@@ -1,5 +1,6 @@
-// Images on the send boxes, in Chrome against a temporary server: every send box is one composer (the tray, the text
-// field, then the photo button and SEND) and stays compact on a desktop; a picked image is re-encoded before upload (a
+// Images on the send boxes (each in the reader: Tell HQ, a question, an update), in Chrome against a temporary
+// server: every send box is one composer (the tray, the text
+// field, then the + menu and SEND) and stays compact on a desktop; a picked image is re-encoded before upload (a
 // big PNG comes out at most 2048 px, as JPEG where the browser has no WebP encoder, an image the server does not take
 // but the browser can read is converted); thumbnails show in the tray, are removed by their corner badge, open in a
 // preview, and show a failed upload with a red ring and a retry; a file that is refused says why in one line; the
@@ -7,7 +8,6 @@
 // keeps its images through a re-render and a reload; on a touch screen the targets are big enough. Needs Chrome;
 // skipped without it.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { findChrome, newSession, seed, startChrome, startServer } from "../../scripts/room-hash.ts";
 
@@ -43,6 +43,8 @@ const HELPERS = `
   window.__images = () => import("/src/client/images/images.js");
   window.__size = (blob) => new Promise((res) => { const i = new Image(); i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.src = URL.createObjectURL(blob); });
 `;
+// Opens an item in the reader the way a link to it does: open("tell"), open("question:12"), open("update:1").
+const OPEN = `window.open_ = (key) => { const b = document.createElement("button"); b.dataset.read = key; document.body.append(b); b.click(); b.remove(); }`;
 const chips = (key: string) => page.evaluate(`[...document.querySelectorAll('[data-chips="${key}"] .chip')].map((c) => c.className.replace("chip ", ""))`);
 
 beforeAll(async () => {
@@ -52,9 +54,10 @@ beforeAll(async () => {
   askId = await seed(server.post);
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector(".ask")`);
   await page.evaluate(HELPERS);
+  await page.evaluate(OPEN);
 }, 30_000);
 
 afterAll(async () => {
@@ -63,25 +66,23 @@ afterAll(async () => {
 });
 
 describe.skipIf(!chromeFound)("attach", () => {
-  // Each composer, in order: its children, the photo button's input, and its height.
-  const COMPOSERS = `[...document.querySelectorAll(".reply")].map((r) => { const i = r.querySelector(".acts > label.attach:first-child input[type=file]");
-    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest("label").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
-  test("every send box is one composer: the tray, the field, then the photo button and SEND; compact on a desktop", async () => {
-    const boxes = await page.evaluate(COMPOSERS);
-    expect(boxes.map((b: any) => b.key)).toContain("note");
-    expect(boxes.filter((b: any) => /^\d+$/.test(b.key))).toHaveLength(2);
+  // Each composer, in order: its children, the + menu's image input, and its height.
+  const COMPOSERS = `[...document.querySelectorAll(".reply")].filter((r) => r.offsetParent).map((r) => { const i = r.querySelector(".acts > .attach:first-child input[data-attach-image]");
+    return { key: r.dataset.composer, parts: [...r.children].map((c) => c.tagName === "TEXTAREA" ? "field" : c.className), input: i && { key: i.dataset.attach, accept: i.accept, multiple: i.multiple, beforeSend: !!i.closest(".attach").nextElementSibling?.matches(".send") }, height: r.getBoundingClientRect().height }; })`;
+  test("every send box is one composer: the tray, the field, then the + menu and SEND; compact on a desktop", async () => {
+    const boxes = [];
+    for (const [key, item] of [[String(askId), `question:${askId}`], ["upd:1", "update:1"], ["note", "tell"]]) {
+      await page.evaluate(`open_(${JSON.stringify(item)})`);
+      await until(`!!document.querySelector('#reader .reply[data-composer="${key}"]')?.offsetParent`);
+      boxes.push(...(await page.evaluate(COMPOSERS)));
+    }
+    expect(boxes.map((b: any) => b.key)).toEqual([String(askId), "upd:1", "note"]);
     for (const b of boxes) {
       expect(b.parts).toEqual(["chips", "field", "acts"]);
       expect(b.input).toEqual({ key: b.key, accept: "image/*", multiple: true, beforeSend: true });
       // 0.8.0's row was 42 to 61 px; the composer stays under 64 at 1440x900 (the empty tray takes no space).
       expect(b.height).toBeLessThanOrEqual(64);
     }
-    await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
-    await until(`!!document.querySelector("#msgs [data-reply]")`);
-    await page.evaluate(`document.querySelector("#msgs [data-reply]").click()`);
-    await until(`!!document.querySelector('[data-rbox] .reply[data-composer="reply"] label.attach input[data-attach="reply"][accept="image/*"][multiple]')`);
-    expect((await page.evaluate(COMPOSERS)).find((b: any) => b.key === "reply").parts).toEqual(["chips", "field", "acts"]);
-    await page.evaluate(`document.querySelector("#msgs [data-reply]").click(); document.querySelector('[data-qtab="questions"]').click()`);
   });
 
   test("the field grows with its text up to five lines, then scrolls inside", async () => {
@@ -151,9 +152,12 @@ describe.skipIf(!chromeFound)("attach", () => {
 
   test("picked images show in the composer's tray, each with a remove badge on its corner, and the text box stays clean", async () => {
     await page.evaluate(`document.getElementById("noteText").value = "Look at these"`);
+    // Uploads are held until the spinners are checked: a small image can otherwise finish first.
+    await page.evaluate(`(() => { const real = window.__realFetch = window.fetch; let go; window.__release = new Promise((r) => (go = r)); window.__go = go; window.fetch = (u, o) => (String(u).startsWith("/api/uploads") ? window.__release.then(() => real(u, o)) : real(u, o)); })()`);
     await page.evaluate(`(async () => __pick('[data-attach="note"]', [await __img(3000, 2000, { name: "one.png" }), await __img(400, 300, { name: "two.png" }), await __img(300, 300, { name: "three.png" })]))()`);
     // While uploading, each thumbnail is dimmed under a spinner.
     expect(await page.evaluate(`[...document.querySelectorAll('[data-chips="note"] .chip')].every((c) => c.matches(".prep, .up") && !!c.querySelector(".cover .spin"))`)).toBe(true);
+    await page.evaluate(`window.__go(); window.fetch = window.__realFetch`);
     await until(`document.querySelectorAll('[data-chips="note"] .chip.done').length === 3`);
     expect(await page.evaluate(`document.getElementById("noteText").value`)).toBe("Look at these");
     expect(await page.evaluate(`document.querySelectorAll('#compose .reply > [data-chips="note"] .tray > .chip > button.cimg[data-chip-open] > img').length`)).toBe(3);
@@ -196,50 +200,53 @@ describe.skipIf(!chromeFound)("attach", () => {
     expect(await chips("note")).toEqual(["done", "done"]);
   });
 
-  test("on send the tokens are appended, the files are on disk, and the box and chips clear", async () => {
+  test("on send the tokens are appended as URLs on this server, never paths, and the box and chips clear", async () => {
     await page.evaluate(`document.getElementById("compose").requestSubmit()`);
     await until(`document.getElementById("lastNote").textContent.includes("Look at these")`);
     const text: string = (await state()).notes[0].text;
-    const paths = [...text.matchAll(/\[image: ([^\]]+)\]/g)].map((m) => m[1]);
+    const urls = [...text.matchAll(/\[image: ([^\]]+)\]/g)].map((m) => m[1]);
     expect(text).toMatch(/^Look at these \[image: \S+one\.(jpg|webp)\] \[image: \S+two\.png\]$/);
-    expect(paths.every((p) => existsSync(p))).toBe(true);
+    expect(urls.every((u) => u.startsWith(`${server.base}/uploads/`))).toBe(true);
+    for (const u of urls) expect((await fetch(u)).status).toBe(200);
     expect(await page.evaluate(`document.getElementById("noteText").value`)).toBe("");
     expect(await chips("note")).toEqual([]);
   });
 
   test("an ask keeps its images through a re-render and a reload, and sends them with the answer", async () => {
-    const card = `[data-ask="${askId}"]`;
+    const card = `#reader .askview[data-ask="${askId}"]`;
+    await page.evaluate(`open_("question:${askId}")`);
+    await until(`!!document.querySelector('${card} [data-attach]')`);
     await page.evaluate(`(async () => __pick('${card} [data-attach]', [await __img(200, 100, { name: "proof.png" })]))()`);
     await until(`document.querySelectorAll('${card} .chip.done').length === 1`);
     // An image is enough to send a decision without an option.
-    expect(await page.evaluate(`document.querySelector('${card} .send').disabled`)).toBe(false);
+    expect(await page.evaluate(`document.querySelector('${card} [data-send]').disabled`)).toBe(false);
     await server.post("/api/asks", { lane: "golf", kind: "info", title: "Arrives while attaching" });
     await until(`document.getElementById("hud").textContent.includes("Arrives while attaching")`);
     expect(await chips(String(askId))).toEqual(["done"]);
     await page.evaluate(`location.reload()`);
+    // the reader opens on it again, with its image
     await until(`!!document.querySelector('${card} .chip.done img')`);
     await page.evaluate(HELPERS);
+    await page.evaluate(OPEN);
     await page.evaluate(`document.querySelector('${card} .opt[data-opt="No"]').click()`);
     await until(`!!document.querySelector('${card} .opt.sel')`);
-    await page.evaluate(`document.querySelector('${card} .send').click()`);
+    await page.evaluate(`document.querySelector('${card} [data-send]').click()`);
     await until(`!document.querySelector('${card}')`);
     const answer = (await state()).answered.find((a: any) => a.id === askId)?.answer;
     expect(answer).toMatch(/^No\. \[image: \S+proof\.png\]$/);
   });
 
   test("a reply keeps its images while the thread updates, and a failed upload shows on its chip with a retry", async () => {
-    await page.evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
-    await until(`!!document.querySelector("#msgs [data-reply]")`);
-    await page.evaluate(`document.querySelector('#msgs [data-reply="u1"]').click()`);
-    await until(`!!document.querySelector("[data-rbox]")`);
+    await page.evaluate(`document.querySelector('[data-filter="all"]').click(); open_("update:1")`);
+    await until(`!!document.querySelector('#reader .updview [data-attach="upd:1"]')`);
     // The first upload fails, as on a phone that loses its connection.
     await page.evaluate(`(() => { const real = window.fetch; let n = 0; window.fetch = (u, o) => (String(u).startsWith("/api/uploads") && !n++ ? Promise.reject(new TypeError("Load failed")) : real(u, o)); })()`);
-    await page.evaluate(`(async () => __pick('[data-attach="reply"]', [await __img(320, 240, { name: "shot.png" })]))()`);
-    await until(`!!document.querySelector('[data-chips="reply"] .chip.err [data-chip-retry]')`);
+    await page.evaluate(`(async () => __pick('[data-attach="upd:1"]', [await __img(320, 240, { name: "shot.png" })]))()`);
+    await until(`!!document.querySelector('[data-chips="upd:1"] .chip.err [data-chip-retry]')`);
     // The failed thumbnail has a red ring and a retry icon, and the tray says why in one line.
-    const failed = await page.evaluate(`(() => { const c = document.querySelector('[data-chips="reply"] .chip.err'), w = document.querySelector('[data-chips="reply"] .why');
+    const failed = await page.evaluate(`(() => { const c = document.querySelector('[data-chips="upd:1"] .chip.err'), w = document.querySelector('[data-chips="upd:1"] .why');
       return { ring: getComputedStyle(c.querySelector(".cimg")).boxShadow, retry: c.querySelector("button.cimg[data-chip-retry] .cover svg + b")?.textContent, why: w.textContent, lines: Math.round(w.getBoundingClientRect().height / parseFloat(getComputedStyle(w).lineHeight)) }; })()`);
-    expect(failed.ring).toContain("rgb(214, 60, 60)");
+    expect(failed.ring).toContain("rgb(229, 72, 77)");
     expect(failed.retry).toBe("RETRY");
     expect(failed.why).toBe("shot.png did not upload. Tap it to retry.");
     expect(failed.lines).toBe(1);
@@ -247,37 +254,47 @@ describe.skipIf(!chromeFound)("attach", () => {
     expect(await page.evaluate(`document.querySelector("[data-rsend]").disabled`)).toBe(false);
     await page.evaluate(`document.querySelector("[data-rsend]").click()`);
     expect((await state()).notes[0].text).not.toContain("re: #u1");
-    await page.evaluate(`document.querySelector('[data-chips="reply"] [data-chip-retry]').click()`);
-    await until(`document.querySelectorAll('[data-chips="reply"] .chip.done').length === 1`);
-    expect(await page.evaluate(`document.querySelector('[data-chips="reply"] .why')`)).toBe(null);
-    await server.post("/api/updates", { lane: "golf", title: "Lands in the thread" });
-    await until(`document.getElementById("msgs").textContent.includes("Lands in the thread")`);
-    expect(await chips("reply")).toEqual(["done"]);
-    await page.evaluate(`document.querySelector("[data-rbox] textarea").value = "Here"; document.querySelector("[data-rbox] textarea").dispatchEvent(new Event("input", { bubbles: true }))`);
+    await page.evaluate(`document.querySelector('[data-chips="upd:1"] [data-chip-retry]').click()`);
+    await until(`document.querySelectorAll('[data-chips="upd:1"] .chip.done').length === 1`);
+    expect(await page.evaluate(`document.querySelector('[data-chips="upd:1"] .why')`)).toBe(null);
+    await server.post("/api/updates", { lane: "golf", title: "Lands in the stack" });
+    await until(`document.getElementById("hud").textContent.includes("Lands in the stack")`);
+    expect(await chips("upd:1")).toEqual(["done"]);
+    const ta = `document.querySelector("#reader .updview .rcomp textarea")`;
+    await page.evaluate(`${ta}.value = "Here"; ${ta}.dispatchEvent(new Event("input", { bubbles: true }))`);
     await page.evaluate(`document.querySelector("[data-rsend]").click()`);
-    await until(`!document.querySelector("[data-rbox]")`);
+    await until(`${ta}.value === "" && !!document.querySelector('#reader .updview [data-msg]')`);
     expect((await state()).notes[0].text).toMatch(/^re: #u1 \("[^"]*"\) Here \[image: \S+shot\.png\]$/);
-    await page.evaluate(`document.querySelector('[data-qtab="questions"]').click()`);
+    expect(await chips("upd:1")).toEqual([]);
     expect(errors).toEqual([]);
   });
 
   test("a refused file stays in the tray with its reason in one line, and only its badge removes it", async () => {
+    await page.evaluate(`open_("tell")`);
     await page.evaluate(`__pick('[data-attach="note"]', [new File([new Uint8Array(10.5 * 1024 * 1024)], "huge.gif", { type: "image/gif" })])`);
     await until(`!!document.querySelector('[data-chips="note"] .chip.err')`);
     const r = await page.evaluate(`(() => { const c = document.querySelector('[data-chips="note"] .chip.err'), w = document.querySelector('[data-chips="note"] .why');
       return { label: c.querySelector(".noimg").textContent, retry: !!c.querySelector("[data-chip-retry]"), open: !!c.querySelector("[data-chip-open]"), why: w.textContent, lines: Math.round(w.getBoundingClientRect().height / parseFloat(getComputedStyle(w).lineHeight)), ring: getComputedStyle(c.querySelector(".cimg")).boxShadow }; })()`);
-    expect(r).toEqual({ label: "OVER 10 MB", retry: false, open: false, why: "huge.gif is 10.5 MB; the limit is 10 MB.", lines: 1, ring: expect.stringContaining("rgb(214, 60, 60)") });
+    expect(r).toEqual({ label: "OVER 10 MB", retry: false, open: false, why: "huge.gif is 10.5 MB; the limit is 10 MB.", lines: 1, ring: expect.stringContaining("rgb(229, 72, 77)") });
     await page.evaluate(`document.querySelector('[data-chips="note"] .chip.err [data-chip-rm]').click()`);
     expect(await page.evaluate(`document.querySelector('[data-chips="note"]').innerHTML`)).toBe("");
   });
 
-  test("on a touch screen: a 44x44 photo button, 64px thumbnails, 32px badges and 16px fields", async () => {
+  test("on a touch screen: a 44x44 + button, 64px thumbnails, 32px badges and 16px fields", async () => {
     await page.s("Emulation.setDeviceMetricsOverride", { width: 390, height: 664, deviceScaleFactor: 3, mobile: true });
     await page.s("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
     await page.evaluate(`location.reload()`);
-    await until(`matchMedia("(pointer: coarse)").matches && !!document.querySelector(".ask label.attach")`);
-    const sizes = await page.evaluate(`[...document.querySelectorAll("label.attach")].map((l) => { const r = l.getBoundingClientRect(); return [r.width, r.height, parseFloat(getComputedStyle(l.querySelector("input")).fontSize), parseFloat(getComputedStyle(l.closest(".reply").querySelector("textarea")).fontSize)]; })`);
-    expect(sizes.length).toBeGreaterThanOrEqual(2);
+    await until(`matchMedia("(pointer: coarse)").matches && !!document.querySelector("#hud .ask")`);
+    await page.evaluate(OPEN);
+    // the + button on a question's box and on Tell HQ's, each in the reader's sheet
+    const SIZES = `[...document.querySelectorAll("#reader .aplus")].filter((l) => l.offsetParent).map((l) => { const r = l.getBoundingClientRect(); return [r.width, r.height, parseFloat(getComputedStyle(l.closest(".attach").querySelector("input")).fontSize), parseFloat(getComputedStyle(l.closest(".reply").querySelector("textarea")).fontSize)]; })`;
+    const sizes = [];
+    for (const item of [`question:${await page.evaluate(`document.querySelector("#hud .ask").dataset.ask`)}`, "tell"]) {
+      await page.evaluate(`open_(${JSON.stringify(item)})`);
+      await until(`[...document.querySelectorAll("#reader .aplus")].some((l) => l.offsetParent)`);
+      sizes.push(...(await page.evaluate(SIZES)));
+    }
+    expect(sizes.length).toBe(2);
     for (const [w, h, f, t] of sizes) { expect(w).toBeGreaterThanOrEqual(44); expect(h).toBeGreaterThanOrEqual(44); expect(f).toBeGreaterThanOrEqual(16); expect(t).toBeGreaterThanOrEqual(16); }
     await page.evaluate(HELPERS);
     await page.evaluate(`(async () => __pick('[data-attach="note"]', [await __img(200, 100, { name: "phone.png" })]))()`);

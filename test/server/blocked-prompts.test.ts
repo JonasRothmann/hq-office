@@ -102,6 +102,33 @@ test("the excerpt: the question and its options, plain, at most four lines", () 
   expect(promptIn(IDLE)).toBeNull();
 });
 
+// A lead stopped at its approval prompt for `hud answer --token T` would put its hop token in the excerpt, which goes
+// to hud.db, /api/state and HQ (review finding 7). The value is hidden however the pane draws flag and value.
+test("the excerpt never holds a hop token: --token VALUE and --token=VALUE are hidden, across ANSI, box edges and wraps", () => {
+  const token = "0123456789abcdef0123456789abcdef";
+  const halves = [token.slice(0, 16), token.slice(16)];
+  const codex = (cmd: string) =>
+    ["• Running hud answer", "", "Would you like to run the following command?", "", `  $ ${cmd}`, "", "› 1. Yes, proceed (y)", "  2. Yes, and don't ask again for this command (a)", "  3. No, and tell Codex what to do differently (esc)"].join("\n");
+  const box = (...cmd: string[]) =>
+    ["╭──────────────────────────────────────────────╮", "│ Bash command                                 │", "│                                              │", ...cmd, "│                                              │", "│ Do you want to proceed?                      │", "│ ❯ 1. Yes                                     │", "│   2. No, and tell Claude what to do differently (esc) │", "╰──────────────────────────────────────────────╯"].join("\n");
+  const panes = {
+    "codex, --token VALUE": codex(`hud answer 12 "yes" --token ${token}`),
+    "codex, --token=VALUE": codex(`hud answer 12 "yes" --token=${token}`),
+    "codex, quoted": codex(`hud answer 12 "yes" --token "${token}"`),
+    "codex, ANSI between flag and value": codex(`hud answer 12 "yes" \x1b[1m--token\x1b[0m \x1b[2m${token}\x1b[0m`),
+    "claude, no description line": box(`│   hud escalate 12 --token ${token} --reason "not mine" │`),
+    "claude, wrapped between flag and value": box(`│   hud escalate 12 --reason "not mine" --token │`, `│   ${token}                 │`),
+    "claude, wrapped inside the value": box(`│   hud escalate 12 --reason "not mine" --token ${halves[0]}│`, `│${halves[1]} and more                       │`),
+  };
+  for (const [name, pane] of Object.entries(panes)) {
+    for (const known of [true, false]) {
+      const out = promptIn(pane, known) ?? "";
+      expect([name, known, out.includes(halves[0]) || out.includes(halves[1])]).toEqual([name, known, false]);
+    }
+    expect([name, promptIn(pane, true)]).toEqual([name, expect.stringContaining("[token hidden]")]);
+  }
+});
+
 test("herdr blocked with a Claude permission prompt, or a Codex question picker in the pane: the lane reads blocked", async () => {
   await sync();
   const l = await lanes();

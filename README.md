@@ -1,6 +1,6 @@
 # HQ Office
 
-HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a pixel-art office in the style of a handheld RPG: every lane (one agent working one task) is a worker at a desk, and you can see at a glance who is busy, who is blocked and who is done. Next to the room is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
+HQ Office is a small local web app for people who run AI coding agents in [herdr](https://herdr.dev). It draws a 3D office in the manner of late-90s life-sim games, in a calm Japandi style (pale oak, plaster, paper lanterns, tatami): every lane (one agent working one task) is a worker at a desk in its team's room, and you can see at a glance who is busy, who is blocked and who is done. Next to the office is the question panel, where your HQ agent (the agent that coordinates the others) asks you things and you answer them. Your answers are typed straight into the HQ agent's session.
 
 ## Requirements
 
@@ -92,7 +92,16 @@ teaches it without any setup per session:
 
 Questions from HQ appear at the top of the panel, most urgent first. Pick an option or type an answer; it goes to HQ the moment you send it. Tell HQ is a free-text box for anything HQ did not ask about, such as a new priority or a correction. Both are stored, so nothing is lost if HQ is busy.
 
+Every question has a tier and a priority. The panel shows a **BLOCKING** group above a **NON-BLOCKING** group, each with its count, and orders each group by priority, then due time, then age. Every card is shown in full; nothing collapses.
+
+- `hud ask ... --blocking`: the lane cannot go on with that piece of work until you answer. The question is locked (a lock on its card): nobody can move it to non-blocking, only answer it. The lane can still work on other things, so a lane can be working and blocked on a question at once; its `blocking` count in the state says so.
+- `hud ask ...` with no flag (or `--nonblocking`) is the default: the lane goes on without the answer. You (with the card's tier button) or HQ (`hud tier ID blocking|nonblocking`) can move it between tiers; it stays unlocked.
+- `--priority urgent|high|normal|low` (default normal) orders a question within its tier. It can always change: the picker on the card, or `hud tier ID --priority P`.
+- A card moved by you or by HQ says who moved it and when. When you move one, HQ is told in one line so it can tell the lane.
+
 HQ uses the CLI in `hud.ts` (the `hud` command after the install hud command action, or `bun hud.ts` from the plugin directory with `HUD_URL` set if you changed the port) to add lanes, ask questions and wait for your answers. HQ posts progress to the **FROM HQ** tab with `hud tell --title "PR is up" [--body "details"] [--lane NAME]` (`hud say` is the same command); the tab counts unread updates until you open them or mark them all read. `hud guide` prints how HQ should reach you.
+
+Any question or update has a thread. The reader shows it under the body, with a TO chip that says whether your message goes to the lane or to HQ, so you can write there without answering. On a question, REPLY sends to the thread and the question stays open; SEND still answers it. On an update, REPLY goes to HQ as a note unless TO picks the lane. A reply shows SENDING, DELIVERED, AWAY · KEPT (typed into the lane once herdr sees it again) or NOT DELIVERED with RETRY, as room messages do. The lane answers in the thread with `hud room say thread-q12 "..."` (`thread-u5` for update 5). An answered question can be reopened: Tell HQ's SENT AND ANSWERED list opens it in the reader, and REOPEN clears the answer, tells the lane and HQ in one line, and makes the question open again. A withdrawn question cannot be reopened.
 
 ## Secrets
 
@@ -116,22 +125,30 @@ A crash, a kill or a stop and start loses the values. The server keeps each secr
 
 ## Lanes in levels
 
-Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name) and LEVEL THEME picks how the room dresses them. The worker card shows a lane's level and its chain up to HQ.
+Lanes can form a tree under HQ. `hud lane NAME --parent OTHER` sets who a lane reports to (`--parent hq` puts it straight under HQ); a loop is refused, and removing a lane moves its reports up a level. `hud tree` prints the tree with each lane's level name and status. In SETTINGS, LEVEL NAMES names the levels from the top (default `Manager, Lead, Engineer`; deeper lanes take the last name). The worker card shows a lane's level and its chain up to HQ.
 
-A theme dresses every figure in the room, whatever the levels:
+Every lane has its own desk, and a team shares a room: a top-level lane and everyone under it in the lane tree sit together, four desks to a room, and a bigger team opens another room next to its first. Lanes with no tree fill rooms of four in the order they appear. HQ has a suite. The office grows by rooms, never by one bigger floor: a studio with one team room (1 to 4 lanes), a floor with a break area for 2 to 4 rooms, wings for 5 to 8 rooms and a campus beyond that. A lane keeps its desk while it exists; a new lane's desk rises in its team's room and a removed lane's desk stands empty until the office is next laid out.
 
-| | Office (default) | Arena |
-| --- | --- | --- |
-| Level 1 | dark suit, tie in its own colour | masked guard, square mark, black belt |
-| Level 2 | light cardigan | masked guard, triangle mark |
-| Level 3 and deeper | everyday clothes | numbered player in a matching tracksuit |
-| No tree (every lane under HQ) | everyday clothes | numbered players |
-| Your hero | as picked in HERO | the game master: black coat, black mask with gold eyes, your hero's own hair (standing, dancing and asleep) |
-| HQ | its usual look | the senior guard, a gold crown on the hood |
+Workers show their status by pose: seated and typing when working, standing beside the desk with a raised hand and a red badge when waiting on you, arms folded with an amber badge when HQ is up, leaning back with a blue badge when waiting on CI, walking to the break area with a mug when done, asleep at the desk when stale. A lane with an empty chair is parked or gone. Running subagents are small balls hopping round the desk, coloured by model family (Opus violet, Sonnet teal, Haiku amber).
 
-In Arena nothing seasonal is drawn over a mask (guards, the hero, HQ; so HERO HAT has no effect there), and players
-leave off seasonal hats and coats but keep what they hold. Office with no tree looks as it always did. The art is
-our own, not any show's.
+Click a worker or a desk to open its card. Q and E turn the office a quarter, 0 fits it to the window, and the buttons at the foot of the office do the same. The two walls nearest the camera are cut low so you can see in. Light and dark themes change the lighting: at night the lit rooms glow under their pendants and lanterns. Around the office's own garden lies a landscape grown from a seed: a valley with a river (nature) or a town with streets and traffic (city); OUTSIDE in SETTINGS picks which, or turns it off.
+
+## The desk HUD
+
+Every lane's desk in the office carries a small glass chip:
+
+- The first row has the lane's name, a status dot and the status word (working, needs you, on HQ, waiting, done, parked). A red badge counts the lane's open blocking questions, even while it works. A lane that waits on you has a red edge.
+- The second row has the model and effort (`opus 5.5 · high`), one dot per running subagent coloured by its model family (Opus violet, Sonnet teal, Haiku amber) with the exact count, and the context in use as a bar and a number (`412k / 1M`). Anything unknown shows as a dash.
+
+Chips never overlap each other or a panel. When desks are close together, or the view is zoomed out, every chip shrinks to one line: the name, the status dot and the context bar. Hover over a chip (or tab to it) to see all of it and the lane's title. Click a chip to open the lane's card.
+
+For a Claude Code lane on this machine, the server reads these values from the lane's own session transcript. Any other lane can report its own:
+
+```sh
+hud lane NAME --model claude-opus-5-5 --effort high --subagents 3 --context 412k/1M
+```
+
+Each flag is optional. `--context` takes `USED` or `USED/MAX`, written as `412000`, `412k` or `1M`. A report wins over the transcript until the transcript changes. The other `hud lane` flags work as before; vitals are sent only when one of these four is given.
 
 ## The work board
 
@@ -154,7 +171,7 @@ hud room list [--all] [--json]
 hud room archive SLUG
 ```
 
-The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them a small pixel conference room seats the room's lanes at a table with you at its head. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
+The **ROOMS** tab, next to WORK, lists the rooms with their owner and its level, the state of their work on the work board and their last activity; the tab counts rooms with new messages from lanes. A room is a place you go to: open one and it takes the place of the office on the right, full height, at its own address (`#room/SLUG`), so a link, a reload and the browser's back button work. BACK TO OFFICE or Esc return to the office, and the strip at the top of a room moves straight to the other open rooms, marking those with new messages. The question column never moves. In the room, the thread fills the main column with the send box always at its foot: write there, with images as anywhere else, and messages keep their line breaks and render as markdown. TO picks the lane (the owner by default, or any lane in the room); REPLY on a lane's message answers it and addresses that lane. A rail beside the thread holds the room's lanes (level, status, and AWAY when herdr cannot find the agent), its issues and PRs with their board state, the brief and the artifacts shelf (Claude artifacts and links as cards with OPEN, images as thumbnails that open full screen, files); fold it to give the thread the width. Above them, AT THE TABLE shows you at the head and the room's lanes as chips with their status. While a room is open, the 3D office does not draw. On a phone a room fills the screen with CHAT, BRIEF and SHELF tabs.
 
 What you write is typed into that lane's terminal through herdr, naming the room and telling it to answer with `hud room say` and to keep the brief and artifacts current. Each message shows DELIVERED, or AWAY · KEPT when the lane is not there: a kept message stays in the thread and is typed into the lane once, when herdr sees it again (RETRY appears if herdr refused one). Uploaded files are served sandboxed, so a file a lane uploads can show but never run a script.
 
@@ -174,15 +191,24 @@ Your typed answer stays on the card through an edit; a picked option the edit re
 
 ## Settings
 
-SETTINGS in the top bar picks your hero, the season and the hero's hat; SOUND next to it turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
+SETTINGS in the top bar has three choices. PERFORMANCE sets how often the office draws: SMOOTH (30 frames a second), BALANCED (15) or POWER SAVER (only when something changes or moves; the cars and the river outside then stand still). OUTSIDE picks what surrounds the office: NATURE, CITY or OFF. The land grows from your name (`HUD_OWNER`), so it stays the same across reloads; REROLL grows another, and RESET TO DEFAULTS goes back to the one from your name. LEVEL NAMES names the levels of the lane tree. The THEME button in the status pill picks system, light or dark, and the SOUND button turns the new-question chime on and off. These are saved on the server, in the data directory, so they survive a restart, a plugin update and clearing your browser's data, and every browser shows the same ones. The page keeps a copy only to draw the first frame before the server answers. The first time a page from 0.3.0 or later opens against a server with no settings, it sends up the settings that browser remembered.
 
-## Images
+## Attachments
 
-Every send box (Tell HQ, each question's answer, a reply in MESSAGES) is one composer: attached images on top, the text field, then the photo button on the left and SEND on the right. The field grows with what you type, up to five lines. On a phone it opens the phone's own menu: photo library, take a photo, or choose a file. On a computer it opens a file picker, and dropping or pasting an image into a text box works too.
+Every send box (Tell HQ, a question's answer and reply, an update's reply, a room's send box) is one composer: attachments on top, the text field, then a **+** button on the left and SEND on the right. The field grows with what you type, up to five lines. The + button opens a menu (Cmd-U opens it too):
 
-Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the data directory (10 MB at most).
+- **Upload a file**: an image (PNG, JPEG, GIF, WebP or SVG), a PDF, a zip, or a text file (txt, md, csv, tsv, json, yaml, toml, xml, html, log, diff, patch, or source such as ts, js, py, sql, sh, go or rs). 25 MB at most.
+- **Image or screenshot**: a photo or screenshot, shrunk in the browser first (see below). On a phone the phone's own menu opens: photo library, take a photo, or choose a file.
+- **Link or artifact URL**: a link, shown as a card in the box.
+- **From a room's shelf**: pick a room, then an item on its shelf.
 
-Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. The text you type stays clean. An image is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again), and an image that is too big or that the browser cannot read says why in one line. When you send, each image's path is added to the end of your text as `[image: /path]`, which is how HQ opens it. Images are part of the draft: they stay through live updates and a reload of the page (the page keeps their paths, never the pictures), and are cleared once the message is sent.
+Dropping a file on the page, or pasting one while no text field has focus, attaches it to the item the keys target (the card or reader marked KEYS). Dropping it on a specific box or card sends it there. A hint says where it will go: "Drop to attach to: <title>".
+
+Each image is shrunk in the browser before it is sent: its longest side to at most 2048 px, as JPEG (or WebP where the browser makes that smaller), so uploads are quick over a phone connection and an iPhone's HEIC photo arrives as a JPEG. A GIF, or an image already small and in PNG, JPEG, GIF or WebP, is sent as it is. It is saved in the uploads folder of the data directory (10 MB at most).
+
+Attached images show as thumbnails in the box, each with a small round × on its corner to remove it; tap a thumbnail to see it full screen. Files, links and shelf items show as cards. The text you type stays clean. An attachment is dimmed under a spinner while it uploads; a failed upload gets a red ring and a retry icon (tap it to try again). A file the server refuses says why in one line: it is too big, it is a type the server does not keep, or its bytes do not match its type (a .png must be a PNG, a text file must be UTF-8).
+
+When you send, each attachment is added to the end of your text as a link on this server: `[image: http://HOST:PORT/uploads/NAME]` for an image, `[title](URL)` for a file, a shelf item or a titled link, and a bare link as itself. Never a path on your disk, so a lane on another machine can fetch it (with curl, for example). Uploaded files sit in the uploads folder under a name nobody can guess, and are served sandboxed, so a file can show but never run a script. Attachments are part of the draft: they stay through live updates and a reload of the page (the page keeps their links, never the files), and are cleared once the message is sent.
 
 ## Configuration
 
@@ -194,7 +220,7 @@ Set these in `config.env`. An empty value means the default.
 | `HUD_HQ_HINT` | on | `0` leaves out the one-line "reply through the HUD" reminder after every message typed into HQ. |
 | `HUD_HQ_BLOCKED` | on | `0` stops telling HQ when a lane's agent becomes blocked on a prompt in herdr (the page still shows it). |
 | `HUD_HQ_GREET` | on | `0` stops the plugin typing the HQ guide into each new HQ session. |
-| `HUD_OWNER` | empty | Your name: on the desk sign, on the default hero, and in the notes and answers HQ is sent. Empty means "the owner" (and "YOU" on the hero). |
+| `HUD_OWNER` | empty | Your name, used in the notes and answers HQ is sent. Empty means "the owner". |
 | `HUD_PORT` | `4747` | Port the server listens on. |
 | `HUD_HOST` | `127.0.0.1` | Address the server binds to. |
 | `HUD_TRUSTED_ORIGINS` | empty | Extra page addresses that may use the page, comma-separated and exact, such as a phone reaching it through `tailscale serve` (`https://name.tailnet.ts.net:4747`). Every other site is refused, and secrets stay this machine's own page only. |

@@ -1,24 +1,13 @@
-#!/usr/bin/env bun
-// Renders the page for fixed states, seasons and times in headless Chrome and hashes what it draws: the room's
-// canvas pixels after the first frame and after 3 s of frames, and every element's computed style and box. The
-// same tree gives the same hashes, so two trees (before and after a change) can be compared.
+// Browser tests' tools: find and start headless Chrome (with WebGL on SwiftShader when a test needs the 3D office),
+// open a tab that collects console errors, start server.ts on a spare port with a throwaway data folder and a fake
+// herdr, seed it with lanes and questions, and freeze the page's clock and frames (FREEZE).
 //
-//   bun scripts/room-hash.ts [DIR] [--ref=GIT_REF] [--timing]
-//
-// DIR (default: this repo) or a git ref, exported to a temporary folder with git archive. Each tree runs on its
-// own temporary server, port and data folder, with a fake herdr, and is stopped afterwards. Time, randomness and
-// animation frames are frozen in the page; Google Fonts are blocked so both trees draw with the same fonts.
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync, readdirSync } from "node:fs";
+// The name is from when it also hashed the pixel room's canvas; that room is gone, and so is the hashing.
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
-const DAY = Date.UTC(2026, 3, 20, 14, 0); // 20 April, 14:00 UTC: spring, no event
-const NIGHT = Date.UTC(2026, 3, 20, 2, 0);
-const SEASONS = ["spring", "summer", "fall", "winter", "christmas", "newyear", "valentine", "stpatrick", "easter", "halloween", "thanksgiving"];
-const FRAMES = 30;
-
-export type Capture = { name: string; first: string; later: string };
-export type Result = { captures: Capture[]; styles: Record<string, string>; errors: string[]; scroll: Record<string, boolean>; timing?: Record<string, number> };
+const DAY = Date.UTC(2026, 3, 20, 14, 0); // the seeded questions' age is measured from here
 
 export function findChrome(): string | null {
   if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
@@ -28,14 +17,15 @@ export function findChrome(): string | null {
   return null;
 }
 
-// The page's clock, randomness and frames, frozen. #t=<epoch ms> turns it on; __hq.advance(n) runs n frames.
+// The page's clock, randomness and frames, frozen. #t=<epoch ms> turns it on; __hq.advance(n, ms) runs n frames, ms
+// apart (100 by default).
 export const FREEZE = `(() => {
   const m = location.hash.match(/t=(\\d+)/);
   if (!m) return;
   const EPOCH = Number(m[1]);
   let T = 900;
   const RealDate = Date;
-  // The wall clock stands still; only the frames move (the room animates from the frame time it is given).
+  // The wall clock stands still; only the frames move (the office animates from the frame time it is given).
   const now = () => EPOCH;
   function FakeDate(...a) {
     if (!new.target) return new RealDate(now()).toString();
@@ -50,8 +40,8 @@ export const FREEZE = `(() => {
   const queue = [];
   window.requestAnimationFrame = (cb) => { queue.push(cb); return queue.length; };
   window.cancelAnimationFrame = () => {};
-  // A timer with a delay waits on the frozen clock and runs in advance(), when its time comes: the room's loop waits
-  // on one between frames. A zero delay runs at once, as in a browser.
+  // A timer with a delay waits on the frozen clock and runs in advance(), when its time comes. A zero delay runs at
+  // once, as in a browser.
   const realSetTimeout = window.setTimeout.bind(window), realClearTimeout = window.clearTimeout.bind(window);
   const timers = new Map();
   let timerId = 1e9;
@@ -102,42 +92,9 @@ export const FREEZE = `(() => {
   };
   window.__hq = {
     ready: () => !!document.getElementById("card")?.innerHTML && !!document.getElementById("feed")?.innerHTML,
-    advance(n) { for (let i = 0; i < n; i++) { T += 100; runTimers(); for (const cb of queue.splice(0)) cb(T); } return T; },
+    advance(n, ms = 100) { for (let i = 0; i < n; i++) { T += ms; runTimers(); for (const cb of queue.splice(0)) cb(T); } return T; },
   };
 })();`;
-
-// The dancing hero's box (with his notes, sparkles and shadow), in canvas pixels. The dance steps on the room's
-// beat, two beats a move, so its frames differ from a tree with another tempo; idle captures leave this box out.
-const DANCE_BOX = [888, 0, 180, 138];
-// The coffee machines' lights (both) and the kitchen steam, in canvas pixels. From 0.6 the lights blink once a second
-// (they blinked every 500 ms) and the steam rises only while someone takes a coffee, so every capture leaves them out.
-const COFFEE_BOXES = [[1137, 306, 6, 6], [1140, 699, 6, 6], [1118, 638, 27, 33]];
-// The page's clock starts at 900; captures are taken on whole beats of the room's coming ambient beat (multiples of
-// 500 ms), where an animation that steps on the beat draws exactly what it drew before.
-const canvasHash = (masks: number[][]) => `(async () => {
-  const c = document.getElementById("room");
-  const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-  for (const m of ${JSON.stringify(masks)}) for (let y = m[1]; y < m[1] + m[3]; y++) d.fill(0, (y * c.width + m[0]) * 4, (y * c.width + m[0] + m[2]) * 4);
-  const h = await crypto.subtle.digest("SHA-256", d);
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
-})()`;
-
-const STYLE_HASH = `(async (raw) => {
-  const out = [];
-  // Every element the page shows (not the script, style and link tags, which the restructure changes by design),
-  // its box, every computed property in name order, and its text when it is a leaf.
-  for (const el of [document.documentElement, ...document.body.querySelectorAll("*")]) {
-    if (["SCRIPT", "STYLE", "LINK", "META"].includes(el.tagName)) continue;
-    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
-    const props = [];
-    for (let i = 0; i < cs.length; i++) props.push(cs[i] + ":" + cs.getPropertyValue(cs[i]));
-    props.sort();
-    out.push(el.tagName + "#" + el.id + "." + el.className + "|" + [r.x, r.y, r.width, r.height].map(Math.round).join(",") + "|" + props.join(";") + "|" + (el.children.length ? "" : el.textContent.replace(/\\s+/g, " ")));
-  }
-  if (raw) return out.join("\\n");
-  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(out.join("\\n")));
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
-})(${process.env.STYLE_RAW ? "true" : "false"})`;
 
 export class Cdp {
   ws: WebSocket;
@@ -164,13 +121,16 @@ export class Cdp {
   }
 }
 
-export async function startChrome() {
+// Headless Chrome. With webgl, WebGL runs on SwiftShader (no GPU needed, slow under load): only tests of the 3D office
+// ask for it; without it the page has no WebGL and the office stays undrawn, which keeps the other tests cheap.
+export async function startChrome(opts: { webgl?: boolean } = {}) {
   const bin = findChrome();
   if (!bin) throw new Error("no Chrome found; set CHROME_BIN");
   const profile = mkdtempSync(join(tmpdir(), "hq-office-chrome-"));
-  const proc = Bun.spawn([bin, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--mute-audio", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "about:blank"], { stdout: "ignore", stderr: "ignore" });
+  const gl = opts.webgl ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] : ["--disable-gpu", "--disable-software-rasterizer"];
+  const proc = Bun.spawn([bin, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--mute-audio", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-background-timer-throttling", "--disable-renderer-backgrounding", ...gl, "about:blank"], { stdout: "ignore", stderr: "ignore" });
   let port = "";
-  for (let i = 0; i < 100 && !port; i++) {
+  for (let i = 0; i < 300 && !port; i++) {
     try { port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]; } catch {}
     if (!port) await Bun.sleep(100);
   }
@@ -222,13 +182,12 @@ export async function spawnServer(opts: { cwd: string; env: Record<string, strin
 }
 
 export async function startServer(dir: string, extraEnv: Record<string, string> = {}) {
-  const data = mkdtempSync(join(tmpdir(), "hq-office-pixels-"));
+  const data = mkdtempSync(join(tmpdir(), "hq-office-page-"));
   const herdr = join(data, "herdr");
   // A herdr that knows HQ and two agents: one working, one idle. Everything else it is asked succeeds quietly.
   writeFileSync(herdr, `#!/bin/sh\ncase "$*" in\n  *"agent list"*) echo '{"result":{"agents":[{"name":"hq","agent_status":"idle","pane_id":"p0","agent":"claude"},{"name":"golf","agent_status":"working","pane_id":"p1","agent":"claude"},{"name":"alpha","agent_status":"idle","pane_id":"p2","agent":"claude"}]}}' ;;\n  *) exit 0 ;;\nesac\n`);
   chmodSync(herdr, 0o755);
-  // PIXEL_OWNER names the owner on both sides, for a base whose default hero carried a fixed name instead of HUD_OWNER.
-  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: process.env.PIXEL_OWNER || "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", ...extraEnv };
+  const env = { ...process.env, HUD_HOST: "127.0.0.1", HUD_DATA_DIR: data, HERDR_BIN: herdr, HUD_OWNER: "Tester", HUD_MACHINES: "local", HUD_LOCAL_MACHINE: "local", HUD_HQ_AGENT: "hq", ...extraEnv };
   const server = await spawnServer({ cwd: dir, env });
   const { base } = server;
   const post = (path: string, body: object) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-hud": "1" }, body: JSON.stringify(body) }).then((r) => r.json());
@@ -247,9 +206,6 @@ export async function seed(post: (p: string, b: object) => Promise<any>) {
     { name: "hotel-with-a-long-name", phase: "done", title: "Done three" },
   ];
   for (const l of lanes) await post("/api/lanes", { ...l, machine: "local" });
-  // BALANCED steps the room's motions on the same beats as the trees from before the PERFORMANCE setting (0.6), so
-  // the two draw the same; a tree from before keeps the unknown setting and ignores it.
-  await post("/api/settings", { settings: { performance: "balanced" } });
   const ask = await post("/api/asks", { lane: "bravo", kind: "decision", title: "Ship the thing?", body: "Two ways to go.\n```\nbun test\n```", options: ["Yes", "No"], recommended: "Yes", created_at: DAY - 7 * 60_000 });
   await post("/api/asks", { lane: "charlie", kind: "action", title: "Approve the deploy", created_at: DAY - 40 * 60_000 });
   await post("/api/updates", { lane: "golf", title: "Halfway there", body: "The first part is merged." });
@@ -258,115 +214,7 @@ export async function seed(post: (p: string, b: object) => Promise<any>) {
   return ask.id as number;
 }
 
-export async function capture(dir: string, opts: { timing?: boolean } = {}): Promise<Result> {
-  const t0 = Date.now();
-  const log = (what: string) => process.env.HASH_LOG && console.error(`${((Date.now() - t0) / 1000).toFixed(1)}s ${what}`);
-  const chrome = await startChrome();
-  const server = await startServer(dir);
-  const { cdp } = chrome;
-  const errors: string[] = [];
-  try {
-    const { s, evaluate } = await newSession(cdp, errors);
-    await s("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
-    await s("Emulation.setTimezoneOverride", { timezoneId: "UTC" });
-    await s("Page.addScriptToEvaluateOnNewDocument", { source: FREEZE });
-    const size = (width: number, height: number) => s("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
-    const open = async (query: string, t: number) => {
-      // Through a blank page: a URL that differs only in its hash would not load again, and keep the old clock.
-      await s("Page.navigate", { url: "about:blank" });
-      await s("Page.navigate", { url: `${server.base}/${query}#t=${t}` });
-      // Up to 15 s: two headless Chromes and two servers can share the machine during a full test run.
-      for (let i = 0; i < 300; i++) {
-        if (await evaluate("!!window.__hq && window.__hq.ready()").catch(() => false)) {
-          // CSS animations (the blinking count, the flash on a selected question) held at their start
-          await s("Animation.setPlaybackRate", { playbackRate: 0 });
-          return;
-        }
-        await Bun.sleep(50);
-      }
-      throw new Error(`page did not render ${query}`);
-    };
-    const shot = async (name: string): Promise<Capture> => {
-      const hash = canvasHash(name.startsWith("day, idle") ? [DANCE_BOX, ...COFFEE_BOXES] : COFFEE_BOXES);
-      // The first frame on the next whole beat (500 ms), the later one 3 s after it
-      const t = await evaluate("__hq.advance(0)");
-      await evaluate(`__hq.advance(${(500 - (t % 500)) / 100})`);
-      const first = await evaluate(hash);
-      await evaluate(`__hq.advance(${FRAMES})`);
-      return { name, first, later: await evaluate(hash) };
-    };
-    const noScroll = () => evaluate("document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth");
-
-    await size(1440, 900);
-    log("chrome and server up");
-    const askId = await seed(server.post);
-    log("seeded");
-    const captures: Capture[] = [];
-    const styles: Record<string, string> = {};
-    const scroll: Record<string, boolean> = {};
-    await open("", DAY);
-    captures.push(await shot("day, asks open"));
-    styles["1440x900"] = await evaluate(STYLE_HASH);
-    scroll["1440x900"] = await noScroll();
-    await evaluate(`document.getElementById("settingsBtn").click()`);
-    // The PERFORMANCE row is new in 0.6; leave it out so the rest of the panel compares with a tree from before.
-    await evaluate(`document.querySelector('[data-set="performance"]')?.closest(".srow").remove()`);
-    // The LEVEL NAMES and LEVEL THEME rows are new in the lane tree's release; left out the same way.
-    await evaluate(`document.querySelector("[data-levels]")?.remove(); document.querySelector('[data-set="theme"]')?.closest(".srow").remove()`);
-    styles["1440x900 settings open"] = await evaluate(STYLE_HASH);
-    await evaluate(`document.querySelector('[data-qtab="messages"]').click()`);
-    styles["1440x900 messages tab"] = await evaluate(STYLE_HASH);
-    await evaluate(`document.querySelector('[data-qtab="questions"]').click()`);
-    await evaluate(`document.querySelector('[data-select="bravo"]').click()`);
-    styles["1440x900 worker selected"] = await evaluate(STYLE_HASH);
-    await size(800, 900);
-    styles["800x900"] = await evaluate(STYLE_HASH);
-    await size(1440, 900);
-    // The room with a worker selected, on a fresh page: the same first seconds after load as every other capture,
-    // not the seconds after those, when the idle workers' later errands start
-    await open("", DAY);
-    await evaluate(`document.querySelector('[data-select="bravo"]').click()`);
-    captures.push(await shot("day, worker selected"));
-    for (const season of SEASONS) {
-      await open(`?season=${season}`, DAY);
-      captures.push(await shot(`day, asks open, ${season}`));
-      log(season);
-    }
-    // nothing waiting: the hero dances by day and sleeps at night
-    await server.post(`/api/asks/${askId}/answer`, { answer: "Yes" });
-    const open2 = (await (await fetch(`${server.base}/api/state`)).json()).open;
-    for (const a of open2) await server.post(`/api/asks/${a.id}/withdraw`, { reason: "test" });
-    for (const season of ["spring", "christmas", "halloween"]) {
-      await open(`?season=${season}`, DAY);
-      captures.push(await shot(`day, idle, ${season}`));
-      await open(`?season=${season}`, NIGHT);
-      captures.push(await shot(`night, idle, ${season}`));
-    }
-    styles["1440x900 idle"] = await evaluate(STYLE_HASH);
-    let timing: Record<string, number> | undefined;
-    if (opts.timing) {
-      timing = {};
-      const runs: number[][] = [];
-      for (let i = 0; i < 5; i++) {
-        await s("Network.setCacheDisabled", { cacheDisabled: i === 0 });
-        await s("Page.navigate", { url: `${server.base}/` });
-        for (let j = 0; j < 100; j++) { if (await evaluate("!!document.getElementById('card')?.innerHTML").catch(() => false)) break; await Bun.sleep(20); }
-        runs.push(await evaluate(`(() => { const n = performance.getEntriesByType("navigation")[0]; const r = performance.getEntriesByType("resource").filter((e) => !/fonts/.test(e.name)); return [n.domContentLoadedEventEnd, n.loadEventEnd, r.length + 1, n.transferSize + r.reduce((a, e) => a + e.transferSize, 0), n.encodedBodySize + r.reduce((a, e) => a + e.encodedBodySize, 0)]; })()`));
-      }
-      const median = (k: number) => runs.slice(1).map((r) => r[k]).sort((x, y) => x - y)[2];
-      timing = { coldRequests: runs[0][2], coldBytes: runs[0][3], bodyBytes: runs[0][4], coldDomContentLoadedMs: Math.round(runs[0][0]), warmDomContentLoadedMs: Math.round(median(0)), warmLoadMs: Math.round(median(1)), warmBytes: median(3) };
-    }
-    return { captures, styles, errors, scroll, timing };
-  } finally {
-    log("captured");
-    await server.stop();
-    log("server stopped");
-    await chrome.close();
-    log("chrome closed");
-  }
-}
-
-// A tab with focus emulated (the room only draws in a focused window) and errors collected.
+// A tab with focus emulated and console errors and warnings collected.
 export async function newSession(cdp: Cdp, errors: string[]) {
   const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
@@ -386,23 +234,3 @@ export async function newSession(cdp: Cdp, errors: string[]) {
   };
   return { s, evaluate };
 }
-
-export async function treeOf(ref: string, repo: string) {
-  const dir = mkdtempSync(join(tmpdir(), "hq-office-ref-"));
-  const archive = Bun.spawnSync(["git", "-C", repo, "archive", ref], { stdout: "pipe" });
-  if (archive.exitCode !== 0) throw new Error(`git archive ${ref} failed`);
-  Bun.spawnSync(["tar", "-x", "-C", dir], { stdin: archive.stdout });
-  return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
-}
-
-if (import.meta.main) {
-  const ref = process.argv.find((a) => a.startsWith("--ref="))?.slice(6);
-  const repo = resolve(import.meta.dir, "..");
-  const tree = ref ? await treeOf(ref, repo) : { dir: resolve(process.argv.slice(2).find((a) => !a.startsWith("--")) ?? repo), done: () => {} };
-  try {
-    console.log(JSON.stringify(await capture(tree.dir, { timing: process.argv.includes("--timing") }), null, 2));
-  } finally {
-    tree.done();
-  }
-}
-void readdirSync;

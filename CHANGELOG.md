@@ -3,6 +3,36 @@
 All notable changes to HQ Office are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The new office has the land round it.** The OUTSIDE setting puts the garden and the valley or the town round the
+  building, and REROLL draws new land. Switching keeps the page. POWER SAVER holds the town still.
+
+### Fixed
+
+- **A second ⌘Enter, or a held one, no longer answers the next question.** After the reader moves on to the next
+  question, its send button waits a moment before it can be used.
+- **The keys act on what you touched last.** The card or the reader you used last carries a blue KEYS mark, and
+  ⌘Enter and 1 to 9 act on it. Before, they could answer the question in the reader while you were working on another
+  card.
+- **A card you can answer shows the whole question.** Its text, its link and its pictures all show in the list.
+- **Every question says what kind it is.** Each card and the reader say DECISION, ACTION or INFO.
+- **⌘Enter and 1 to 9 never answer a long question you have not opened.**
+- **Enter works on buttons and links again.** On its own, Enter opens the selected card.
+- **A blocking question always shows.** Whichever list you picked (Needs you, All, Rooms), it stays in view.
+- **On a phone, a new question shows as a banner.** When a question arrives while a question, update or room fills the
+  screen, a red banner shows at its top. Tap it to open the question.
+- **A reply clears only its own box.** A reply to an update, or a message to a room, clears only its own box, even if
+  you moved on before it was sent. A card's quick SEND stays off until its answer is sent.
+
+### Changed
+
+- **M opens the tier and priority menu.** E turns the office again, as Q does the other way.
+- **The inbox is built from what the server already has.** The server builds the owner's inbox from what it already
+  loaded, instead of querying again for every page update.
+
 ## [0.10.1] - 2026-10-26
 
 ### Fixed

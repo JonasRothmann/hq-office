@@ -1,26 +1,160 @@
-/* Colour and font tokens, the reset, the page wrapper and the handheld dialog box (.box). Light only. */
-/* One deliberate look: a handheld-era office. Light only. */
+/* Tokens (light, dark under the system or [data-theme]), the reset, the world canvas, and the glass every panel is made of. */
 :root {
   color-scheme: light;
-  --bg: #2b2f45;
-  --box: #f8f8f0;
-  --ink: #23233a;
-  --muted: #6a6a82;
-  --edge: #3c3c5a;
-  --edge-2: #a8a8c8;
-  --red: #d63c3c;
-  --amber: #e0901e;
-  --green: #2f9e57;
-  --blue: #3c6fd6;
-  --pixel: "Press Start 2P", ui-monospace, monospace;
-  --text: "Nunito", system-ui, -apple-system, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* glass */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-blur: blur(24px) saturate(180%);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 0 0 1px rgba(15, 20, 30, 0.08);
+  --glass-shadow: 0 10px 30px rgba(15, 20, 30, 0.14);
+  /* a card inside the glass: near-opaque, so text never sits on the busy world */
+  --surface: rgba(255, 255, 255, 0.94);
+  --surface-solid: #ffffff;
+  --surface-2: rgba(15, 20, 30, 0.045);
+  --surface-3: rgba(15, 20, 30, 0.08);
+  --field: #ffffff;
+  --hairline: rgba(15, 20, 30, 0.08);
+  --hairline-2: rgba(15, 20, 30, 0.14);
+  --card-shadow: 0 1px 2px rgba(15, 20, 30, 0.06), 0 0 0 1px rgba(15, 20, 30, 0.07);
+  --text: #16181d;
+  --text-2: #5b5f6a;
+  --text-3: #8b8f99;
+  --on-accent: #ffffff;
+  --focus: 0 0 0 2px var(--surface-solid), 0 0 0 4px rgba(62, 99, 221, 0.55);
+  /* status (shared with the world) and their 12% fills */
+  --st-red: #e5484d;
+  --st-amber: #f5a524;
+  --st-blue: #3e63dd;
+  --st-green: #30a46c;
+  --st-teal: #12a594;
+  --st-grey: #8b8d98;
+  --st-red-fill: rgba(229, 72, 77, 0.12);
+  --st-amber-fill: rgba(245, 165, 36, 0.14);
+  --st-blue-fill: rgba(62, 99, 221, 0.12);
+  --st-green-fill: rgba(48, 164, 108, 0.12);
+  --st-teal-fill: rgba(18, 165, 148, 0.12);
+  --st-grey-fill: rgba(139, 141, 152, 0.14);
+  --st-red-text: #ce2c31;
+  --st-amber-text: #a35200;
+  --st-blue-text: #3451b2;
+  --st-green-text: #18794e;
+  --violet: #8e4ec6;
+  --violet-fill: rgba(142, 78, 198, 0.12);
+  /* size */
+  --row: 30px;
+  --radius: 14px;
+  --radius-s: 8px;
+  --gap: 12px;
+  /* type */
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* the page behind the world, until it mounts */
+  --page-bg: linear-gradient(160deg, #eef1f6 0%, #e7ebf2 45%, #efe9e2 100%);
+  /* older names, still read by markup the behaviour modules write (var(--muted), var(--red), ...) */
+  --ink: var(--text);
+  --muted: var(--text-2);
+  --red: var(--st-red);
+  --amber: var(--st-amber);
+  --green: var(--st-green);
+  --blue: var(--st-blue);
+  --box: var(--surface);
+  --edge: var(--hairline-2);
+  --edge-2: var(--hairline);
+  --bg: var(--surface-solid);
 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --glass-bg: rgba(24, 25, 30, 0.60);
+    --glass-blur: blur(24px) saturate(160%);
+    --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.5);
+    --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --surface: rgba(30, 31, 37, 0.94);
+    --surface-solid: #1d1e23;
+    --surface-2: rgba(255, 255, 255, 0.05);
+    --surface-3: rgba(255, 255, 255, 0.09);
+    --field: #16171b;
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-2: rgba(255, 255, 255, 0.14);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.07);
+    --text: #ececf1;
+    --text-2: #a0a3ad;
+    --text-3: #6f727c;
+    --focus: 0 0 0 2px var(--surface-solid), 0 0 0 4px rgba(112, 140, 255, 0.7);
+    --st-red-fill: rgba(229, 72, 77, 0.18);
+    --st-amber-fill: rgba(245, 165, 36, 0.16);
+    --st-blue-fill: rgba(62, 99, 221, 0.2);
+    --st-green-fill: rgba(48, 164, 108, 0.18);
+    --st-grey-fill: rgba(139, 141, 152, 0.18);
+    --st-red-text: #ff8589;
+    --st-amber-text: #ffca16;
+    --st-blue-text: #9eb1ff;
+    --st-green-text: #3dd68c;
+    --violet-fill: rgba(142, 78, 198, 0.22);
+    --page-bg: linear-gradient(160deg, #15171c 0%, #191b22 50%, #1d1a19 100%);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --glass-bg: rgba(24, 25, 30, 0.60);
+  --glass-blur: blur(24px) saturate(160%);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.5);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --surface: rgba(30, 31, 37, 0.94);
+  --surface-solid: #1d1e23;
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --field: #16171b;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-2: rgba(255, 255, 255, 0.14);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --text: #ececf1;
+  --text-2: #a0a3ad;
+  --text-3: #6f727c;
+  --focus: 0 0 0 2px var(--surface-solid), 0 0 0 4px rgba(112, 140, 255, 0.7);
+  --st-red-fill: rgba(229, 72, 77, 0.18);
+  --st-amber-fill: rgba(245, 165, 36, 0.16);
+  --st-blue-fill: rgba(62, 99, 221, 0.2);
+  --st-green-fill: rgba(48, 164, 108, 0.18);
+  --st-grey-fill: rgba(139, 141, 152, 0.18);
+  --st-red-text: #ff8589;
+  --st-amber-text: #ffca16;
+  --st-blue-text: #9eb1ff;
+  --st-green-text: #3dd68c;
+  --violet-fill: rgba(142, 78, 198, 0.22);
+  --page-bg: linear-gradient(160deg, #15171c 0%, #191b22 50%, #1d1a19 100%);
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--text); }
-a { color: var(--blue); }
-button { font: inherit; color: inherit; cursor: pointer; }
-.wrap { max-width: 1680px; margin: 0 auto; padding-block: 14px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
-/* the handheld dialog box */
-.box { background: var(--box); border: 4px solid var(--edge); border-radius: 10px; box-shadow: inset 0 0 0 3px var(--box), inset 0 0 0 5px var(--edge-2); padding: 14px 16px; min-width: 0; }
-.px { font: 10px/1.6 var(--pixel); letter-spacing: .02em; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100vh; background: var(--page-bg); background-attachment: fixed; color: var(--text); font: 400 13px/1.45 var(--font); font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+a { color: var(--st-blue-text); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+::selection { background: rgba(62, 99, 221, 0.25); }
+
+/* the world: the full window, behind everything (the world lane draws into it) */
+.world { position: fixed; inset: 0; z-index: 0; display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; }
+
+/* glass: what is behind it, blurred and saturated, a light inner edge, a hairline and a soft shadow */
+.glass, .hqdown, .toast {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  border: 0;
+  border-radius: var(--radius);
+}
+/* a box is a panel or a part of one; it takes its look from where it sits */
+.box { min-width: 0; }
+/* labels: small caps weight, tracked */
+.k, .lbl { font: 600 11px/1.2 var(--font); letter-spacing: 0.04em; color: var(--text-2); }
+.num, .v, .count, .timer { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.px { font: 600 12px/1.3 var(--font); letter-spacing: 0.02em; }
+.toast { position: fixed; z-index: 80; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); padding: 10px 14px; color: var(--text); }
+/* seen by screen readers only */
+.vh { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .hqdown, .toast { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

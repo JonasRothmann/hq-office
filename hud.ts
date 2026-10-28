@@ -4,6 +4,18 @@
 //           [--secret NAME ...]   ask the owner for named secrets, filled in on the question card
 //           [--item TEXT ...]     a checklist; an item naming a PR (#123) ticks itself when it merges, and the
 //                                 question closes itself ("all done") when every item is done
+//           [--blocking|--nonblocking]   blocking: the lane cannot go on with that work without the answer; it is
+//                                 locked there until answered. The default is non-blocking.
+//           [--priority urgent|high|normal|low]   orders the panel within a tier (default normal)
+//           [--to lead|owner]     lead: the asking lane's lead answers first and the owner gets it on a timeout;
+//                                 owner (the default): the owner answers
+//   hud answer ID TEXT --token T             a lead answers a question it holds; T is the token typed in with it
+//                                            (the owner answers on the page)
+//   hud escalate ID --token T [--reason R]   a lead passes a question it holds to the owner now
+//   hud escalate ID --hq [--reason R]        HQ passes a question a lead holds to the owner now
+//   hud held --token T [--json]              the questions the lead holding T holds, each with its own token
+//   hud tier ID blocking|nonblocking [--priority P]   move an open question between tiers (not a locked blocking
+//   hud tier ID --priority P                          one) or re-prioritise it; the owner can do the same on the page
 // ask ledger: change an open question instead of withdrawing and reposting it
 //   hud update ID [--title T] [--body B] [--opt A --opt B] [--rec A] [--link URL] [--lane L]   only the fields given;
 //                                --lane L moves it to lane L, --lane hq (or "") takes it off every lane
@@ -12,6 +24,9 @@
 //   hud item ID add TEXT         add an item to an open question
 //   hud lane NAME [--title T] [--machine M] [--pane P] [--issue OPE-1] [--pr 123] [--phase running|waiting|parked|done] [--note N]
 //           [--parent OTHER]      the lane it reports to; --parent hq (or "") puts it straight under HQ
+//           [--model M] [--effort E] [--subagents N] [--context USED[/MAX]]   the lane's vitals for its desk HUD, e.g.
+//                                 --model claude-opus-5-5 --effort high --subagents 3 --context 412k/1M; a report wins
+//                                 over what the lane's transcript says until the transcript changes
 //   hud rm-lane NAME     its reports move up to the lane it reported to (or HQ)
 //   hud tree [--json]    the lanes under HQ, each with its level name and status
 //   hud withdraw ID [--reason R]
@@ -37,6 +52,7 @@
 //   hud room create|brief|artifact|say|read|list|archive ...   `hud room` prints the usage
 import { GUIDE } from "./src/hq-guide.ts";
 import { treeText } from "./src/lane-tree.ts";
+import { oneLine, quoteAgentText } from "./src/agent-text.ts";
 import { atText, expiresText } from "./src/client/secrets/expiry.js";
 import { restartTime } from "./src/server/secrets.ts";
 
@@ -71,9 +87,55 @@ async function call(method: string, path: string, body?: unknown) {
 function dueAt(hhmm?: string) {
   if (!hhmm) return undefined;
   const [h, m] = hhmm.split(":").map(Number);
+  if (!/^\d{1,2}(:\d{2})?$/.test(hhmm) || h > 23 || (m ?? 0) > 59) {
+    console.error(`--due: give a time today as HH:MM, such as 17:30, not "${hhmm}"`);
+    process.exit(2);
+  }
   const d = new Date();
   d.setHours(h, m ?? 0, 0, 0);
   return d.getTime();
+}
+
+// A token count as people write it: 412000, 412k, 1M, 1.5m.
+function tokenCount(text: string, flag: string): number {
+  const m = text.trim().match(/^(\d+(?:\.\d+)?)([km]?)$/i);
+  if (!m) {
+    console.error(`${flag}: give a token count such as 412000, 412k or 1M, not "${text}"`);
+    process.exit(2);
+  }
+  return Math.round(Number(m[1]) * ({ "": 1, k: 1e3, m: 1e6 } as Record<string, number>)[m[2].toLowerCase()]);
+}
+
+// hud lane's vitals flags as the body of POST /api/lanes/:name/vitals, or null when none is given. Checked here,
+// before anything is sent, so a bad value changes nothing.
+function vitalsOf(flags: Record<string, string[]>, one: (k: string) => string | undefined) {
+  if (!["model", "effort", "subagents", "context"].some((k) => k in flags)) return null;
+  const body: Record<string, string | number> = {};
+  const model = one("model"), effort = one("effort");
+  if (model) body.model = model;
+  if (effort) body.effort = effort;
+  if ("subagents" in flags) {
+    const n = Number(one("subagents"));
+    if (!/^\d+$/.test(one("subagents") ?? "") || !Number.isSafeInteger(n)) {
+      console.error(`--subagents: give a whole number, not "${one("subagents")}"`);
+      process.exit(2);
+    }
+    body.subagents = n;
+  }
+  if ("context" in flags) {
+    const [used, max, extra] = (one("context") ?? "").split("/");
+    if (extra !== undefined || !used) {
+      console.error(`--context: give USED or USED/MAX, such as 412k/1M, not "${one("context")}"`);
+      process.exit(2);
+    }
+    body.contextUsed = tokenCount(used, "--context");
+    if (max !== undefined) body.contextMax = tokenCount(max, "--context");
+  }
+  if (!Object.keys(body).length) {
+    console.error("--model and --effort need a value");
+    process.exit(2);
+  }
+  return body;
 }
 
 const [cmd, ...argv] = process.argv.slice(2);
@@ -81,7 +143,16 @@ const { flags, rest, one } = parse(argv);
 
 switch (cmd) {
   case "ask": {
+    // --blocking and --nonblocking take no value.
+    const tierWords = argv.filter((a) => a === "--blocking" || a === "--nonblocking");
+    if (new Set(tierWords).size > 1) {
+      console.error("give --blocking or --nonblocking, not both");
+      process.exit(2);
+    }
+    const { flags, one } = parse(argv.filter((a) => !tierWords.includes(a)));
     const out = await call("POST", flags.item ? "/api/ledger/asks" : "/api/asks", {
+      tier: tierWords[0]?.slice(2),
+      priority: one("priority"),
       lane: one("lane"),
       kind: one("kind"),
       title: one("title"),
@@ -92,14 +163,82 @@ switch (cmd) {
       due: dueAt(one("due")),
       secrets: flags.secret ?? [],
       items: flags.item,
+      to: one("to"),
     });
-    console.log(`ask #${out.id}`);
+    console.log(out.holder ? `ask #${out.id} with ${out.holder} (its lead) until ${new Date(out.escalateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, then the owner` : `ask #${out.id}`);
+    for (const s of out.skipped ?? []) console.log(`  skipped ${s.lane}: ${s.why}`);
+    break;
+  }
+  case "answer": {
+    // TEXT is the words after the ID, or stdin when it is piped. Checked before anything is read or sent. The token is
+    // the one typed into the lead with the question: it names the lead, so no --as is needed.
+    const [id, ...words] = rest;
+    const token = one("token");
+    const usage = () => {
+      console.error("usage: hud answer ID TEXT --token T  (TEXT on stdin when piped; the owner answers on the page)");
+      process.exit(2);
+    };
+    if (!/^\d+$/.test(id ?? "") || !token) usage();
+    const text = (await textArg(words.length ? words.join(" ") : undefined)).trim();
+    if (!text) usage();
+    await call("POST", `/api/asks/${id}/answer`, { answer: text, token, by: one("as") });
+    console.log(`ask #${id} answered`);
+    break;
+  }
+  case "escalate": {
+    // A lead passes on what it holds with its token; HQ with --hq (a switch: it takes no value).
+    const hq = argv.includes("--hq");
+    const p = parse(argv.filter((a) => a !== "--hq"));
+    const token = p.one("token");
+    if (!/^\d+$/.test(p.rest[0] ?? "") || hq === !!token) {
+      console.error("usage: hud escalate ID --token T [--reason R]   (HQ: hud escalate ID --hq [--reason R])");
+      process.exit(2);
+    }
+    const out = await call("POST", `/api/asks/${p.rest[0]}/escalate`, hq ? { hq: true, reason: p.one("reason") } : { token, by: p.one("as"), reason: p.one("reason") });
+    console.log(out.escalated ? `ask #${out.id} escalated to the owner` : `ask #${out.id} is already with the owner`);
+    break;
+  }
+  case "held": {
+    // --json takes no value. The token of any question the lead holds names the lead.
+    const json = argv.includes("--json");
+    const token = parse(argv.filter((a) => a !== "--json")).one("token");
+    if (!token) {
+      console.error("usage: hud held --token T [--json]");
+      process.exit(2);
+    }
+    const out = await call("GET", `/api/asks/held?${new URLSearchParams({ token })}`);
+    if (json) {
+      console.log(JSON.stringify(out, null, 2));
+      break;
+    }
+    if (!out.asks.length) {
+      console.log(`nothing held by ${oneLine(out.lane)}`);
+      break;
+    }
+    // Another agent's text: every line of it quoted (src/agent-text.ts), so none of it can read as a command here.
+    const PRIORITY = ["urgent", "high", "normal", "low"];
+    for (const a of out.asks) {
+      console.log(`#${a.id} from ${oneLine(a.lane)} · ${a.tier}, ${PRIORITY[a.priority]} · to the owner at ${new Date(a.escalate_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · token ${a.token}`);
+      const options = a.options?.length ? ["", `options: ${a.options.join(" / ")}${a.recommended ? ` (HQ pick: ${a.recommended})` : ""}`] : [];
+      console.log(quoteAgentText([a.title, ...(a.body ? ["", a.body] : []), ...options].join("\n")));
+    }
+    console.log(`answer: hud answer ID "<answer>" --token T · not yours to decide: hud escalate ID --token T --reason "<why>" (T: the token on its line)`);
     break;
   }
   case "update":
     await call("POST", `/api/asks/${rest[0]}/update`, { title: one("title"), body: one("body"), options: flags.opt, recommended: one("rec"), link: one("link"), lane: one("lane") });
     console.log(`ask #${rest[0]} updated`);
     break;
+  case "tier": {
+    const [id, tier] = rest;
+    if (!/^\d+$/.test(id ?? "") || (tier !== undefined && tier !== "blocking" && tier !== "nonblocking") || (tier === undefined && one("priority") === undefined)) {
+      console.error("usage: hud tier ID blocking|nonblocking [--priority urgent|high|normal|low]  |  hud tier ID --priority P");
+      process.exit(2);
+    }
+    const out = await call("POST", `/api/asks/${id}/tier`, { tier, priority: one("priority"), by: "hq" });
+    console.log(`ask #${out.id}: ${out.tier}${out.locked ? " (locked)" : ""}, priority ${out.priority}`);
+    break;
+  }
   case "comment":
     await call("POST", `/api/asks/${rest[0]}/comment`, { text: rest.slice(1).join(" ") });
     break;
@@ -113,7 +252,8 @@ switch (cmd) {
     }
     break;
   }
-  case "lane":
+  case "lane": {
+    const vitals = vitalsOf(flags, one);
     await call("POST", "/api/lanes", {
       name: rest[0],
       title: one("title"),
@@ -126,7 +266,12 @@ switch (cmd) {
       parent: one("parent"),
     });
     console.log(`lane ${rest[0]}`);
+    if (vitals) {
+      await call("POST", `/api/lanes/${encodeURIComponent(rest[0])}/vitals`, vitals);
+      console.log(`vitals ${Object.entries(vitals).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+    }
     break;
+  }
   case "tree": {
     const { lanes } = await call("GET", "/api/state");
     const view = lanes.map((l: any) => ({ name: l.name, parent: l.parent, depth: l.depth, level: l.level, status: l.status, path: l.path }));
@@ -208,7 +353,7 @@ switch (cmd) {
     await roomCmd(argv);
     break;
   default:
-    console.log("usage: hud ask|update|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
+    console.log("usage: hud ask|answer|escalate|held|update|tier|comment|item|lane|rm-lane|tree|withdraw|event|tell|say|inbox|ack|wait|state|sync|secret|track|done|pause|resume|board|room|guide");
     console.log("HQ: run `hud guide` for how to reach the owner (through the HUD, never only in your terminal).");
 }
 

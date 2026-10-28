@@ -10,6 +10,7 @@ import { addStatePart } from "./state.ts";
 import { board } from "./work-board.ts";
 import { parsePr } from "./board.ts";
 import { createAsk } from "./asks.ts";
+import { leads } from "./ask-routes.ts";
 import type { Ask } from "./types.ts";
 import { underHq } from "../lane-tree.ts";
 
@@ -61,7 +62,11 @@ export function updateAsk(id: number, body: any) {
   db.query(`UPDATE asks SET ${set.join(", ")} WHERE id = ?`).run(...values, id);
   db.query("INSERT INTO ask_edits (ask_id, edited_at) VALUES (?, ?) ON CONFLICT (ask_id) DO UPDATE SET edited_at = excluded.edited_at").run(id, Date.now());
   event("hq", `edited ask #${id} (${set.map((s) => s.split(" ")[0]).join(", ")}): ${body.title ?? ask.title}`, ask.lane);
-  if (moved !== undefined && moved !== (ask.lane ?? null)) event("hq", `moved ask #${id} to ${moved ?? "HQ (no lane)"}`, moved ?? ask.lane);
+  if (moved !== undefined && moved !== (ask.lane ?? null)) {
+    event("hq", `moved ask #${id} to ${moved ?? "HQ (no lane)"}`, moved ?? ask.lane);
+    // A lead held it: the lead drops it, and it is routed again from the new lane (decision D20).
+    leads.moved(id);
+  }
 }
 
 // ---- comments ----

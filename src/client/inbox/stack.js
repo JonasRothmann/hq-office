@@ -1,0 +1,289 @@
+// The stack: the owner's inbox (S.inbox) as one floating list, as tall as its content. Blocking questions first, then
+// open ones, then HQ's updates and the rooms. A short question is answered on its card, which shows all of it; anything
+// longer opens in the reader beside it. The filter (Needs you, All, Rooms) is kept in this browser, and never hides a
+// blocking question. The keys act on one target, marked: the card used last, or the reader.
+import { emit, on } from "../core/bus.js";
+import { $, keepPlace, keepScroll, pageScrolls, toast } from "../core/dom.js";
+import { S } from "../core/state.js";
+import { esc, setHTML, setText } from "../core/format.js";
+import { linkify } from "../core/text.js";
+import { markdown } from "../core/markdown.js";
+import { post } from "../core/net.js";
+import { chime, messageChime } from "../sound/sound.js";
+import { drafts, opened } from "./drafts.js";
+import { age } from "./clock.js";
+import { askOf, kindTag, laneColor, pick, ready, sendAnswer, sendLabel } from "../reader/ask.js";
+import { close, current, show } from "../reader/shell.js";
+
+const list = $("hud"), below = $("below");
+const FILTERS = ["needs", "all", "rooms"];
+export let filter = (() => { try { const f = localStorage.getItem("hq-filter"); return FILTERS.includes(f) ? f : "needs"; } catch { return "needs"; } })();
+export let focusKey = null; // the card J and K move between
+let used = null; // where the owner acted last: "stack" (focusKey's card) or "reader"
+
+export function setFilter(f) {
+  if (!FILTERS.includes(f) || f === filter) return;
+  filter = f;
+  try { localStorage.setItem("hq-filter", f); } catch {}
+  render();
+}
+
+const GROUPS = [
+  ["blocking", "Blocking"],
+  ["open", "Open"],
+  ["leads", "With leads"],
+  ["updates", "From HQ"],
+  ["rooms", "Rooms"],
+];
+// Needs you keeps the item the reader shows listed while it shows, even once it is read. A blocking question shows
+// under every filter: a filter saved in this browser must never hide one.
+export const shown = () => {
+  const reading = readerKey(current);
+  return (S?.inbox ?? []).filter((i) => filter === "all" || i.group === "blocking" || i.tier === "blocking" || (filter === "rooms" ? i.kind === "room" : i.needsYou || i.group === "leads" || i.key === reading));
+};
+const PRIO = ["URGENT", "HIGH", "", "LOW"];
+
+// ---- the cards ----
+
+function shapeChips(i) {
+  const s = i.shape ?? {}, out = [];
+  if (s.lines > 3) out.push(`${s.lines} lines`);
+  if (s.tables) out.push(s.tables === 1 ? "table" : `${s.tables} tables`);
+  if (s.code) out.push(s.code === 1 ? "code" : `${s.code} code blocks`);
+  if (i.links?.length) out.push(i.links.length === 1 ? "1 link" : `${i.links.length} links`);
+  return out.map((t) => `<span class="shape">${esc(t)}</span>`).join("");
+}
+function laneHead(i) {
+  return `<span class="dot" style="background:${laneColor(i.lane)}"></span><b class="lname">${esc(i.lane || "HQ")}</b>`;
+}
+
+// A link on a short card: a room on this HUD by its address, anything else in a new tab.
+function linkChip(l) {
+  const out = l.kind === "room" ? "" : ` target="_blank" rel="noopener"`;
+  return `<a class="lchip" href="${esc(l.url)}"${out}><b>${esc(l.title)}</b>${l.host ? `<small>${esc(l.host)}</small>` : ""}</a>`;
+}
+
+function askCard(i) {
+  const a = askOf(i.ref);
+  if (!a) return "";
+  const d = drafts.get(a.id) || {}, blocking = i.group === "blocking";
+  const prio = PRIO[i.priority] ? `<span class="tag prio p${esc(i.priority)}">${PRIO[i.priority]}</span>` : "";
+  const lock = blocking && i.locked ? `<span class="tag waits" title="${esc(i.lane)} cannot go on without the answer">${esc(i.lane)} waits</span>` : "";
+  // With a lead: its name, and the time the question comes to the owner if the lead does not answer it first.
+  const lead = i.holder ? `<span class="tag lead" title="${esc(i.holder)} holds this question. It comes to you if they do not answer it.">→ ${esc(i.holder)}</span>` : "";
+  const toLead = i.escalateAt ? `<span class="tolead">to you at ${esc(new Date(i.escalateAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}</span>` : "";
+  // Short: all of it (the body is at most 200 characters, its links, its images), its options and the send button on
+  // the card. Long: a preview and what the reader holds.
+  const quick = i.short
+    ? `${a.body ? `<div class="sbody md">${markdown(a.body, true)}</div>` : ""}${i.links?.length ? `<div class="slinks">${i.links.map(linkChip).join("")}</div>` : ""}${a.options.length ? `<div class="sopts">${a.options.map((o, n) => `<button class="opt${d.opt === o ? " sel" : ""}" type="button" data-opt="${esc(o)}">${n < 9 ? `<kbd>${n + 1}</kbd>` : ""}${esc(o)}${a.recommended === o ? `<span class="pick">HQ PICK</span>` : ""}</button>`).join("")}</div>` : ""}
+       <div class="qfoot"><button class="link" type="button" data-reply>Reply…</button><button class="send${a.kind !== "decision" ? " go" : ""}" type="button" data-quick${ready(a, d) ? "" : " disabled"}>${sendLabel(a)}</button></div>`
+    : `${i.preview ? `<p class="pv">${esc(i.preview)}</p>` : ""}<div class="shapes">${shapeChips(i)}<span class="open">Open ›</span></div>`;
+  return `<article class="item ask${blocking ? " blocking" : ""}${i.short ? " short" : ""}${i.holder ? " held" : ""}" data-key="${esc(i.key)}" data-ask="${esc(a.id)}" data-lane="${esc(a.lane || "")}" data-created="${esc(a.created_at)}" data-due="${esc(a.due || "")}">
+    <div class="meta">${laneHead(i)}${lead}${kindTag(a)}${prio}${lock}${(a.secrets ?? []).length ? `<span class="tag secret">SECRETS</span>` : ""}<span class="due"></span><span class="spacer"></span>${i.holder ? toLead : `<span class="timer"></span>`}</div>
+    <h3 class="st">${linkify(i.title)}</h3>${quick}
+  </article>`;
+}
+function updateCard(i) {
+  return `<article class="item upd${i.unread ? " unread" : ""}" data-key="${esc(i.key)}" data-upd="${esc(i.ref)}">
+    <div class="meta">${laneHead(i)}${i.unread ? `<span class="tag new">NEW</span>` : ""}<span class="spacer"></span><span class="age" data-since="${esc(i.at)}"></span></div>
+    <h3 class="st">${linkify(i.title)}</h3>${i.preview && i.preview !== i.title ? `<p class="pv">${esc(i.preview)}</p>` : ""}
+  </article>`;
+}
+function roomCard(i) {
+  const r = (S.rooms ?? []).find((x) => x.slug === i.ref), n = r?.unread ?? 0;
+  return `<article class="item rrow${n ? " unread" : ""}${r?.archivedAt ? " archived" : ""}" data-key="${esc(i.key)}" data-room="${esc(i.ref)}">
+    <div class="meta"><span class="rk">ROOM</span><b class="lname">${esc(i.lane || "")}</b>${r?.members?.length ? `<span class="plus">+${esc(r.members.length)}</span>` : ""}${n ? `<span class="tag new">${esc(n)} NEW</span>` : ""}<span class="spacer"></span>${i.at ? `<span class="age" data-since="${esc(i.at)}"></span>` : ""}</div>
+    <h3 class="st">${esc(i.title)}</h3>${i.preview ? `<p class="pv">${esc(i.preview)}</p>` : ""}
+  </article>`;
+}
+const CARD = { question: askCard, update: updateCard, room: roomCard };
+
+function emptyHtml() {
+  if (filter === "rooms") return `<div class="empty"><b>No rooms yet.</b>HQ opens one with hud room create.</div>`;
+  if (filter === "all") return `<div class="empty"><b>Nothing here yet.</b>Questions, HQ's updates and rooms land here.</div>`;
+  return `<div class="empty"><b>Nothing waits on you.</b>Every worker is at its desk or waiting on HQ or CI. Questions land here.</div>`;
+}
+
+export function render() {
+  if (!S?.inbox) return;
+  const items = shown();
+  for (const b of $("filters").querySelectorAll("[data-filter]")) {
+    b.classList.toggle("on", b.dataset.filter === filter);
+    b.setAttribute("aria-selected", String(b.dataset.filter === filter));
+  }
+  const needs = S.inbox.filter((i) => i.kind === "question" && !i.holder).length, rooms = S.inbox.filter((i) => i.kind === "room" && i.unread).length;
+  setText($("fNeeds"), needs || "");
+  setText($("fRooms"), rooms || "");
+  const unreadUpdates = items.some((i) => i.kind === "update" && i.unread);
+  const html = items.length ? GROUPS.map(([g, label]) => {
+    const its = items.filter((i) => i.group === g);
+    if (!its.length) return "";
+    const action = g === "updates" && unreadUpdates ? `<button class="link" type="button" data-readall>Mark all read</button>` : "";
+    return `<div class="grp ${g}"><h4>${label} <span class="n">${its.length}</span></h4>${action}</div>${its.map((i) => CARD[i.kind](i)).join("")}`;
+  }).join("") : emptyHtml();
+  // What you read stays put: on a desktop the list scrolls itself, under 1151px the page does.
+  const place = pageScrolls() ? keepPlace(list, "data-key") : keepScroll(list, "data-key");
+  setHTML(list, html);
+  place();
+  if (focusKey && !items.some((i) => i.key === focusKey)) focusKey = null;
+  marks();
+  renderBelow();
+}
+// The focused card (J and K), the one the reader shows, and the one target of the keys.
+export const readerKey = (c) => (c ? `${c.kind === "question" ? "ask" : c.kind}:${c.ref}` : null);
+// What the keys act on: the card used last, unless the reader was used since (or shows that same card).
+export function keyTarget() {
+  const card = focused();
+  if (used !== "reader" && card && focusKey !== readerKey(current)) return { where: "stack", item: card };
+  if (current) return { where: "reader" };
+  return card ? { where: "stack", item: card } : null;
+}
+function marks() {
+  const on = readerKey(current), t = keyTarget();
+  for (const el of list.querySelectorAll(".item")) {
+    el.classList.toggle("focus", el.dataset.key === focusKey);
+    el.classList.toggle("on", el.dataset.key === on);
+    el.classList.toggle("target", t?.where === "stack" && el.dataset.key === focusKey);
+  }
+  $("reader").classList.toggle("target", t?.where === "reader");
+}
+
+// A question below the fold: a red pill at the stack's foot goes to the next one.
+export function renderBelow() {
+  const edge = list.getBoundingClientRect().bottom;
+  const hidden = [...list.querySelectorAll(".ask")].filter((el) => el.getBoundingClientRect().bottom > edge + 1);
+  below.hidden = !hidden.length || list.scrollHeight <= list.clientHeight;
+  setText(below, `+${hidden.length} ${hidden.length === 1 ? "QUESTION" : "QUESTIONS"} OUT OF VIEW`);
+  below.onclick = () => hidden[0]?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+list.addEventListener("scroll", renderBelow, { passive: true });
+new ResizeObserver(renderBelow).observe(list);
+
+// ---- opening, moving, answering ----
+
+const itemByKey = (key) => (S?.inbox ?? []).find((i) => i.key === key) ?? null;
+// Opens an item in the reader: "question:12", "update:5", "room:slug", or a pill's "tell" and "work".
+export function open(key, opts = {}) {
+  const [kind, ...rest] = String(key).split(":"), ref = rest.join(":");
+  if (kind === "room") { emit("room:go", ref); if (opts.focus) setTimeout(() => document.querySelector("#roomView .rsend textarea")?.focus(), 0); return; }
+  if (kind === "question" || kind === "ask") show("question", Number(ref), opts);
+  else if (kind === "update") show("update", Number(ref), opts);
+  else show(kind, null, opts);
+}
+const keyToReader = (key) => key.replace(/^ask:/, "question:");
+// J and K: the next or previous card; the reader follows when it is open.
+export function move(step) {
+  const keys = shown().map((i) => i.key);
+  if (!keys.length) return;
+  const from = focusKey ?? readerKey(current);
+  const at = keys.indexOf(from);
+  focusKey = keys[at < 0 ? (step > 0 ? 0 : keys.length - 1) : Math.max(0, Math.min(keys.length - 1, at + step))];
+  used = "stack";
+  marks();
+  list.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.scrollIntoView({ block: "nearest" });
+  if (current && ["question", "update", "room"].includes(current.kind)) open(keyToReader(focusKey));
+}
+export const focused = () => itemByKey(focusKey);
+export const openFocused = (opts) => { if (focusKey) open(keyToReader(focusKey), opts); };
+
+list.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (t.closest("[data-select]") || t.closest("a")) return;
+  if (t.closest("[data-readall]")) { try { await post("/api/updates/read-all", {}); } catch (err) { toast(err.message); } return; }
+  const card = t.closest(".item");
+  if (!card) return;
+  focusKey = card.dataset.key;
+  used = "stack";
+  marks();
+  const id = Number(card.dataset.ask);
+  const opt = t.closest(".opt");
+  if (opt && id) { pick(id, opt.dataset.opt); return; }
+  const quick = t.closest("[data-quick]");
+  if (quick && id) { sendAnswer(id, quick); return; }
+  open(keyToReader(card.dataset.key), { focus: !!t.closest("[data-reply]") });
+});
+$("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (b) setFilter(b.dataset.filter); });
+
+// A pick (here or in the reader) redraws that card's options and its send button.
+on("draft", (id) => {
+  const card = list.querySelector(`.ask.short[data-ask="${CSS.escape(String(id))}"]`), a = askOf(id);
+  if (!card || !a) return;
+  const d = drafts.get(id) || {};
+  for (const b of card.querySelectorAll(".opt")) b.classList.toggle("sel", b.dataset.opt === d.opt);
+  const send = card.querySelector("[data-quick]");
+  if (send) send.disabled = !ready(a, d);
+});
+on("reader", () => {
+  used = current ? "reader" : "stack";
+  if (current?.kind === "question" && String(current.ref) === banner.dataset.ask) hideBanner();
+  if (!current) hideBanner();
+  if (filter === "needs") render(); else marks();
+});
+// Using the reader (a click, a field, a button) makes it the keys' target.
+for (const type of ["pointerdown", "focusin", "click"]) $("reader").addEventListener(type, (e) => { if (used !== "reader" && !banner.contains(e.target)) { used = "reader"; marks(); } });
+
+// ---- what is new: the chime, and the stack back on what needs you ----
+
+// On a phone the reader covers the stack: a question that arrives meanwhile shows as a banner at the reader's top,
+// and a tap opens it.
+const narrow = matchMedia("(max-width: 1150px)");
+const banner = document.createElement("button");
+banner.type = "button";
+banner.className = "rbanner";
+banner.hidden = true;
+$("reader").prepend(banner);
+function showBanner(a) {
+  banner.dataset.ask = a.id;
+  setHTML(banner, `<b>NEW QUESTION</b><span class="who">${esc(a.lane || "HQ")}</span><span class="t">${esc(a.title)}</span>`);
+  banner.hidden = false;
+}
+function hideBanner() { banner.hidden = true; delete banner.dataset.ask; }
+banner.addEventListener("click", () => { const id = Number(banner.dataset.ask); hideBanner(); if (askOf(id)) open(`question:${id}`); });
+
+let seenAsks = null, seenUpdates = null;
+function announce(keys) {
+  if (!keys || keys.has("open")) {
+    // Only the asks the owner holds: a lead's question chimes when it reaches the owner (then it is fresh here).
+    const mine = S.open.filter((a) => !a.holder), ids = new Set(mine.map((a) => a.id));
+    const fresh = seenAsks ? mine.filter((a) => !seenAsks.has(a.id)) : [];
+    if (fresh.length) {
+      chime();
+      if (filter === "rooms") setFilter("needs");
+      if (current && narrow.matches) showBanner(fresh.reduce((x, y) => (y.created_at > x.created_at ? y : x)));
+    }
+    if (banner.dataset.ask && !ids.has(Number(banner.dataset.ask))) hideBanner();
+    seenAsks = ids;
+  }
+  if (!keys || keys.has("updates")) {
+    const unread = new Set((S.updates ?? []).filter((u) => !u.read_at).map((u) => u.id));
+    if (seenUpdates && [...unread].some((id) => !seenUpdates.has(id))) messageChime();
+    seenUpdates = unread;
+  }
+}
+
+on("state", (S, keys) => {
+  announce(keys);
+  if (!keys || keys.has("inbox") || keys.has("open") || keys.has("lanes")) render();
+});
+
+// The top bar's FROM HQ opens the newest update (or All, to show them).
+document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]");
+  if (go?.dataset.go === "updates") {
+    const u = (S?.inbox ?? []).find((i) => i.kind === "update" && i.unread) ?? (S?.inbox ?? []).find((i) => i.kind === "update");
+    if (!u?.unread && filter !== "all") setFilter("all");
+    if (u) open(`update:${u.ref}`);
+    return;
+  }
+  const read = e.target.closest("[data-read]");
+  if (read) { open(read.dataset.read); return; }
+  const pill = e.target.closest("[data-open]");
+  if (pill) {
+    const kind = pill.dataset.open;
+    if (current?.kind === kind) { close(); return; }
+    open(kind, { focus: kind === "tell" });
+  }
+});
+// The reader the page had open before a reload opens again once the state is in.
+const reopen = opened;
+if (reopen) { const off = on("state", () => { off(); if (reopen.kind !== "room") open(`${reopen.kind}:${reopen.ref ?? ""}`.replace(/:$/, "")); }); }

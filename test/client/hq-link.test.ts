@@ -42,7 +42,7 @@ beforeAll(async () => {
   await server.post("/api/sync", {}); // HQ seen in w8:p1
   page = await newSession(chrome.cdp, errors);
   await page.s("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`!!document.querySelector("#noteText")`);
 }, 30_000);
 
@@ -67,11 +67,11 @@ test.skipIf(!chromeFound)("HQ's name dropped: the banner shows on the next sync,
   expect(text).toContain('NAME w8:p1 "hq"');
   expect(await page.evaluate("document.title")).toBe("HQ ISN'T RECEIVING · HQ Office");
   expect(await page.evaluate(`document.querySelector("#noteText").placeholder`)).toContain("HQ isn't receiving");
-  // The banner takes a row of its own: the questions column still reaches the bottom of the window.
-  const bottom = await page.evaluate(`Math.round(document.querySelector(".desk").getBoundingClientRect().bottom)`);
-  expect(bottom).toBeLessThanOrEqual(900);
-  expect(bottom).toBeGreaterThan(800);
-  expect(await page.evaluate(`${banner}.getBoundingClientRect().height`)).toBeLessThan(110);
+  // The banner takes a row of its own right of the stack, which stays where it was; the reader opens under it.
+  await page.evaluate(`document.getElementById("pTell").click()`);
+  const geo = await page.evaluate(`(() => { const d = document.querySelector(".desk").getBoundingClientRect(), b = ${banner}.getBoundingClientRect(), r = document.getElementById("reader").getBoundingClientRect();
+    return { deskTop: Math.round(d.top), besideStack: b.left >= d.right, readerUnder: r.top >= b.bottom, height: b.height < 110 }; })()`);
+  expect(geo).toEqual({ deskTop: 12, besideStack: true, readerUnder: true, height: true });
 });
 
 test.skipIf(!chromeFound)("a note sent meanwhile is held, listed in the banner and marked HELD", async () => {

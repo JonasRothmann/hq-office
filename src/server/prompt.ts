@@ -20,6 +20,21 @@ const CHOSEN = /^[❯›>▶]\s*\d+[.)]\s+\S/;
 const ASKING = /\b(?:do you want to|would you like to)\b.*\?|\bquestion \d+\/\d+|\b\d+ unanswered\b|enter to (?:select|submit|confirm)|\besc to cancel\b/i;
 const GENERIC = /^(?:do you want to|would you like to)\b/i;
 
+// A hop token (decision D20) must never reach the excerpt, which goes to hud.db, /api/state and HQ (review finding 7):
+// a lead stopped at its approval prompt for `hud answer 12 "yes" --token T` shows T. The value after --token (or
+// --token=) is hidden on the raw tail, before lines are cut, so a box edge, a line break or a wrap between the flag
+// and its value does not save it. ANSI codes are gone by then. A value that runs right to the line's end (a wrap
+// inside it) takes the hex digits that start the next line too; only hex, so the next line's words and options stay.
+const EDGE_CH = "│┃|";
+const TOKEN_FLAG = new RegExp(
+  `--token(?:[ \\t]*=[ \\t]*|[\\s${EDGE_CH}]+)["']?[^\\s"'${EDGE_CH}]+(?:[${EDGE_CH}]?\\n[ \\t]*[${EDGE_CH}]?[ \\t]*[0-9a-fA-F]+(?=[\\s"'${EDGE_CH}]|$))*["']?`,
+  "g",
+);
+// A bare hop token (32 hex digits), as in "Your token for this question is T" typed into the lead.
+const BARE_TOKEN = /\b[0-9a-f]{32}\b/gi;
+const HIDDEN = "[token hidden]";
+const hideTokens = (tail: string) => tail.replace(ANSI, "").replace(/\r/g, "").replace(TOKEN_FLAG, `--token ${HIDDEN}`).replace(BARE_TOKEN, HIDDEN);
+
 const clean = (s: string) => s.replace(ANSI, "").replace(/\r/g, "").replace(EDGE, "").replace(/\s+/g, " ").trim();
 const short = (s: string) => (s.length > MAX_CHARS ? s.slice(0, MAX_CHARS - 1) + "…" : s);
 const bare = (s: string) => s.replace(/^[❯›>▶]\s*/, "");
@@ -28,7 +43,7 @@ const bare = (s: string) => s.replace(/^[❯›>▶]\s*/, "");
 // agent is blocked, so any numbered choice or trailing question will do; otherwise the tail must also show words only
 // a prompt shows, and the chosen option must sit near the bottom (an answered prompt scrolls away).
 export function promptIn(tail: string, known = false): string | null {
-  const lines = tail.split("\n").map(clean);
+  const lines = hideTokens(tail).split("\n").map(clean);
   const filled = lines.map((l, i) => [l, i] as const).filter(([l]) => l);
   if (!known && !ASKING.test(lines.join("\n"))) return null;
   // The last block of options: the chosen one (or, when herdr says blocked, any option) nearest the bottom.

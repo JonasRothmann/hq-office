@@ -1,0 +1,55 @@
+/* The desk HUD: glass chips over the desks, under every panel. Two dense rows; one row when compact; the lane's title too when lifted. */
+.dh-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.dh-chip {
+  position: absolute; left: 0; top: 0; z-index: 1; display: block; min-width: 150px; max-width: 300px; margin: 0; padding: 5px 8px 6px;
+  border: 0; font: 400 11px/15px var(--font); color: var(--text-2); text-align: left; white-space: nowrap;
+  cursor: pointer; pointer-events: auto; will-change: transform; -webkit-tap-highlight-color: transparent;
+  --tone: var(--st-grey); --tone-text: var(--text-2);
+}
+.dh-chip.glass { border-radius: 9px; }
+.dh-chip:focus-visible { outline: none; box-shadow: var(--glass-edge), var(--focus), var(--glass-shadow); }
+.dh-chip[data-tone="red"] { --tone: var(--st-red); --tone-text: var(--st-red-text); }
+.dh-chip[data-tone="amber"] { --tone: var(--st-amber); --tone-text: var(--st-amber-text); }
+.dh-chip[data-tone="blue"] { --tone: var(--st-blue); --tone-text: var(--st-blue-text); }
+.dh-chip[data-tone="green"] { --tone: var(--st-green); --tone-text: var(--st-green-text); }
+.dh-chip[data-tone="teal"] { --tone: var(--st-teal); --tone-text: var(--st-teal); }
+
+.dh-r1 { display: flex; align-items: center; gap: 6px; font: 600 12px/16px var(--font); color: var(--text); }
+.dh-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tone); flex: none; }
+.dh-name { min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.dh-blk { flex: none; height: 14px; min-width: 14px; padding: 0 3px; border-radius: 4px; background: var(--st-red); color: #fff; display: inline-flex; align-items: center; justify-content: center; font: 600 10px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.dh-st { margin-left: auto; padding-left: 8px; font: 600 10px/16px var(--font); text-transform: uppercase; letter-spacing: 0.04em; color: var(--tone-text); }
+.dh-title { display: none; }
+.dh-r2 { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
+.dh-subs { display: inline-flex; align-items: center; gap: 2px; }
+.dh-sd { width: 6px; height: 6px; border-radius: 50%; background: var(--st-grey); }
+.dh-sd.opus { background: var(--violet); }
+.dh-sd.sonnet { background: var(--st-teal); }
+.dh-sd.haiku { background: var(--st-amber); }
+.dh-cnt { margin-left: 2px; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); }
+.dh-subs.none .dh-cnt { color: var(--text-3); }
+.dh-ctx { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.dh-track { flex: none; width: 34px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.dh-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-2); }
+.dh-chip[data-ctx="high"] .dh-fill { background: var(--st-amber); }
+.dh-chip[data-ctx="full"] .dh-fill { background: var(--st-red); }
+.dh-n { font: 400 10px/15px var(--mono); font-variant-numeric: tabular-nums; }
+.dh-mini { display: none; }
+
+/* waiting on the owner: a red edge */
+.dh-chip.wait { box-shadow: var(--glass-edge), 0 0 0 1.5px color-mix(in srgb, var(--st-red) 70%, transparent), var(--glass-shadow); }
+
+/* compact: the far zoom, or desks too close for full chips */
+.dh-chip.compact { min-width: 0; padding: 3px 7px 4px; }
+.dh-chip.compact .dh-r1 { font-size: 11px; line-height: 15px; gap: 5px; }
+.dh-chip.compact .dh-name { max-width: 110px; }
+.dh-chip.compact .dh-r2, .dh-chip.compact .dh-st { display: none; }
+.dh-chip.compact .dh-mini { display: inline-flex; margin-left: 2px; }
+.dh-chip.compact .dh-track { width: 24px; }
+
+/* lifted: hover or focus; full, in front, with the lane's title */
+.dh-chip.hot { z-index: 3; box-shadow: var(--glass-edge), var(--glass-shadow), var(--glass-shadow); }
+.dh-chip.hot.wait { box-shadow: var(--glass-edge), 0 0 0 1.5px color-mix(in srgb, var(--st-red) 70%, transparent), var(--glass-shadow), var(--glass-shadow); }
+.dh-chip.hot:focus-visible { box-shadow: var(--glass-edge), var(--focus), var(--glass-shadow), var(--glass-shadow); }
+.dh-chip.hot .dh-name { max-width: 260px; }
+.dh-chip.hot .dh-title { display: block; max-width: 280px; margin: 1px 0 2px; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }

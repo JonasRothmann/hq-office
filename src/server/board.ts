@@ -316,7 +316,7 @@ export function createBoard(opts: {
   function view() {
     const t = now();
     const lanes = new Map((db.query("SELECT * FROM lanes").all() as any[]).map((l) => [l.name, l]));
-    const asks = db.query("SELECT id, lane, title, body, status, created_at, answered_at FROM asks WHERE status != 'withdrawn'").all() as any[];
+    const asks = db.query("SELECT * FROM asks WHERE status != 'withdrawn'").all() as any[];
     const all = rows();
     // An ask names an item by its issue key or one of its PR numbers, in the title or the body.
     const prNums = (it: any) => it.prs.map((k: string) => parsePr(k, repo)?.number).filter(Boolean) as number[];
@@ -383,7 +383,7 @@ export function createBoard(opts: {
       } else if (openAsks.length) {
         state = "owner";
         const a = openAsks.find((x) => named.get(x.id)!.has(it.issue)) ?? openAsks[0];
-        why = `ask #${a.id}: ${a.title}`;
+        why = `ask #${a.id}${a.holder ? ` (with ${a.holder}, its lead)` : ""}: ${a.title}`;
       } else if (prs.some((p: any) => p.state === "OPEN" && p.ci === "running")) {
         state = "ci";
         why = "a check is running";

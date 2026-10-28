@@ -1,0 +1,464 @@
+# Decisions: the 3D office and question tiers
+
+The owner was away for this build and asked for every blocking call to be made and written down here with its reason.
+Newest last. The spec these serve is `docs/spec-3d-office.md`.
+
+## D1. The "original pixel art only" rule becomes "original art only"
+
+The rewrite replaces the pixel room with a 3D office, which the owner asked for. The old rule existed so the page
+never shipped copied sprites, names or logos from a real game. That reason still holds, so the rule keeps its point
+and drops only the medium: original art only, made in this repo, in the spirit of late-90s life-sim games, never
+copied models, sprites, textures, names, logos or UI from a real game. `AGENTS.md` changes in the same PR.
+
+## D2. Tiers are new columns on `asks`, added the way earlier columns were
+
+The owner allowed a table change if it is the simplest way, additive only. It is: the panel's order is one
+`ORDER BY` in `state.ts`, and a side table would need a join in every reader of asks. The columns (`tier`,
+`priority`, `tier_locked`, `tier_by`, `tier_at`) are added in `db.ts` with defaults, like `secrets` and `parent`
+before them. Nothing is dropped or renamed, and existing asks read as non-blocking, normal, unlocked. The owner was
+not available to confirm; this is said in the PR body.
+
+## D3. A blocking ask is locked; a non-blocking one is movable
+
+From the brief: a fully blocking question blocks its lane, and the lane cannot change that, but the lane keeps doing
+its other work. A non-blocking one does not stop the lane, and the owner or HQ can move it between tiers later. So
+the lock follows who made it blocking: the asking lane (`--blocking`) locks it; an owner or HQ who promotes a
+non-blocking ask can demote it again. Priority is ordering only and can always change. If the owner meant that
+nobody, including the asking lane, should be able to set blocking after the fact, this is one flag to change.
+
+## D4. `hud ask` defaults to non-blocking
+
+Today an open ask on an idle lane makes that lane `needs_you`, and HQ's habits are built on that. A default of
+non-blocking keeps that behaviour exactly and adds blocking as a stronger, explicit signal.
+
+## D5. Lane vitals come from the agent's own transcript, with self-report as override
+
+herdr reports an agent's kind, status, session id and working directory, but not its model, effort, tokens or
+subagents. Claude Code writes all of them into its session transcript (`~/.claude/projects/<cwd>/<session>.jsonl`
+and a `subagents/` folder beside it). The server reads the tail of that file for the model and the last usage, and
+the subagents folder for running subagents (running until its meta file says `finished`, or quiet for 10 minutes).
+Current Claude 5 models run a 1M context window although their ids carry no `[1m]`, so the max comes from a small
+table by model family. Other agents, and lanes on other machines, report through
+`hud lane NAME --model --effort --subagents --context`. Effort is on every assistant line of the transcript (`effort`); the Claude settings' `effortLevel` is the fallback.
+Transcript text never leaves `vitals.ts`. Vitals are kept in a new table, `lane_vitals`, so the `lanes` table is
+untouched.
+
+## D6. three.js is vendored, bundled once, served as a plain module
+
+The repo has no build step and the page must work offline. three.js r186 ships no minified module build, so
+`build/three.module.js` was bundled and minified once with `bun build --minify` into
+`src/client/vendor/three/three.module.min.js` (750 KB, MIT licence beside it). An import map in the shell maps
+`three` to it. No CDN.
+
+## D7. Behaviour modules stay; the presentation is rewritten
+
+"Full rewrite" is read as the whole look and layout: the world, the glass shell, every stylesheet, the desk HUD. The
+modules that answer questions, send notes, upload images and handle secrets are tested and are the point of the
+page; they keep their logic and IDs and get new markup and styles where the layout needs it. Rewriting them from
+scratch overnight would risk the one thing the page must never break.
+
+## D8. The suite's browser tests time out under this machine's load, not because of a defect
+
+On a clean `main` (v0.10.1), `bun test` gave 212 pass, 33 fail, all 5 s timeouts in Chrome tests, while the load
+average was 140 to 177 from other workspaces. The same files pass alone (`test/client/page.test.ts`: 4 pass). Browser
+test files are therefore also run one file at a time, and both results are recorded in `docs/STATUS.md`.
+
+## D9. Sims 1 is a reference for the look, not a source of assets
+
+The owner pointed at FreeSims and suggested downloading sprites from the game. The game's sprites, models and
+textures are EA's and cannot ship in an MIT repo, and D1 forbids copied art. The research reads how Sims 1 builds its
+look (camera, projection, wall modes, proportions, palette, lighting, how people and objects are drawn) and records
+measurable values in `docs/research/sims1-look.md`. The office is then built to those values with our own models.
+
+## D10. Look B, Nordic-Japanese, over look A, Sims-faithful
+
+The design round built both looks on the same camera, scale and cutaway, in day and night
+(`docs/design/shots/`). B was chosen: pale oak, white walls, shoji, andon lanterns and tatami read as the small
+Scandinavian and Japanese startup the brief asks for, while A's checker floors, red rugs and brick read as a
+suburban house from 2000. B's calm palette also lets the status colours and the glass panels stand out. What makes
+it read as Sims 1 (the 30° 2:1 view, tall back walls over small people, low capped front walls, per-room light) is
+shared by both.
+
+## D11. The pixel room's extras go with it
+
+The hero, the hero's hat, the seasons and event rooms, the weather and the Office and Arena level themes were all
+drawn by the pixel room. They are retired with it rather than ported, so the first 3D version is about the brief
+(offices per lane, desk HUDs, subagents, waiting versus working). Their saved settings stay in the settings table,
+untouched, so they can come back as 3D features without a migration.
+
+## D12. Team rooms, not a room per lane
+
+The owner looked at the first build and said lanes do not need their own rooms. With a 5 m by 4 m office per lane,
+twelve lanes made a campus of small cells: the camera had to pull back so far that the workers were a few pixels
+tall, and most of the floor was empty rooms. The plan now seats lanes at desks in team rooms of four (7 m by 5 m, two
+facing pairs), one team per room, a second room for a team past four, and lanes with no tree sharing rooms of four.
+
+- **Readable figures.** Twelve lanes are three rooms instead of twelve offices, so the view fits a third of the floor
+  and every worker and desk chip is larger on screen. Growth still means more rooms, never one bigger floor; the
+  stages count rooms.
+- **A Sims-house feel.** A few lived-in rooms with people working side by side reads like a household in the
+  reference; a row of identical one-person cells read like a storage unit.
+- **Rooms that mirror the lane tree.** A top-level lane and everyone under it sit together, so the office shows
+  who works with whom at a glance, which a room per lane never did.
+
+What a lane owns is now its desk: `deskAnchor(lane)`, `addToWorld(obj, lane)`, the subagent balls and picking all
+key on the desk, not the room. `window.__world` lists `rooms` (`{ id, team, lanes }`) and `desks` instead of
+`offices`.
+
+## D13. The interior: Nordic studio as the base, with Tokyo's best pieces grafted in
+
+Two designers dressed the same showroom (`docs/design/nordic/`, `docs/design/tokyo/`) after the owner said the
+office must first look like a proper, cool office. Nordic is the base: its people read as people (faces, hair,
+varied clothes, clear poses), and its rooms feel lived in (bike, dog bed, enamel pendants, pinboard, books, plants
+at three heights). Grafted from Tokyo: the wall band (skirting, timber battens, rail) that gives even the cut-down
+walls detail, noren in doorways, the raised tatami lounge and tea corner in the break area, the pegboard workbench
+with a 3D printer, the lit sign, and the stone lantern and maple in the garden. Together they make the Scandinavian
+and Japanese mix the brief asks for.
+
+## D14. Procedural surroundings: nature or city, seeded per installation
+
+The owner asked for generated surroundings. A pure, seeded generator (`src/client/office/outside/gen.js`, moved there with `city.js` at RFC 12 step 6) makes a
+river valley (hills, forest, a river with a bridge) or a neighbourhood (streets, crossings, other buildings, cars and
+people walking), and `build.js` draws it with instancing (12 to 24 draw calls). The seed defaults to the owner's
+name, so a page always shows the same place; a setting picks nature, city or off. The office's own lot and garden
+stay with the interior; the generator never places anything on it, and it grows the land only when the office
+outgrows it.
+
+## D15. Japandi, not Nordic with grafts
+
+The owner saw both showrooms and asked to merge them into one Japandi design, balanced half and half, instead of the
+Nordic studio with a few Japanese pieces (D13). Japandi here means warm neutrals (oat, sand, warm white plaster, pale
+oak and ash) with dark accents (smoked oak, charcoal, blackened steel) and a few muted earthy ones (rust, sage,
+indigo, ochre); light timber, washi, linen, wool, stone and ceramics; fewer, better objects with room between them,
+low furniture and clean lines. The walls carry Tokyo's band (skirting, battens, rail) under plaster, with slatted oak
+feature walls and shoji screens as dividers; paper pendants and lanterns hang beside one or two dark-metal or ceramic
+pendants; doorways have noren. Nordic's people stay (faces, hair, poses), dressed in the same palette. The lot's
+garden is raked gravel, moss, a stone lantern, a maple, birches and a timber deck and path. D13's grafts stay; the
+saturated Nordic colours and the clutter go. The "city" surroundings (D14) become Copenhagen, restyled in their own
+lane.
+
+## D16. The 3D world is an isolated package, `@hq/world`; HQ content stays in the app as packs
+
+The owner asked for the 3D world to be its own isolated package that the app uses. It lives in `packages/world/`
+with its own `package.json` (`exports`: `.`, `./model`, `./packs/starter`; three.js as a peer and nothing else),
+README, AGENTS guide, tests, lab and CLIs. It imports nothing from the app, and it knows nothing about lanes, asks,
+the bus or HQ: it speaks lots, rooms, objects, slots, characters, acts and events. The app reaches it only through
+the import map (`@hq/world`, `@hq/world/model`), which a new route file (`src/server/routes/packages.ts`) serves
+from `packages/*/src` and `packages/*/packs`. Tests on both sides fail on a crossing: a package file importing
+outside the package, or an app file deep-importing it.
+
+Three shapes were compared: one package with the engine and the office's content, an engine package with content
+kept in the app, and an engine package plus a package per content pack. The first makes every new chair an engine
+change. The third makes every new pack touch four shared places, for one consumer. The engine package with a pack
+contract was chosen. Content comes as packs (`definePack`, one file per object, ids prefixed by pack), catalogs
+are built per world with no global registry, and a pack imports only public entries. So HQ's Japandi pack, the
+office layout from the lane tree and the outside generator stay app-side, and any of them can later move to its own
+package unchanged. The public API is `api.txt` plus world format 1, versioned 0.x, and a test fails when it changes
+without the changelog.
+
+Inside the package, what moves runs in a small ECS of its own (`createEcs`, `createSim`; no dependency), and what
+stands still stays plain data. The lot (grid, floors, walls, openings, rooms) is a pure model with pure functions
+over it. Placed objects and characters are entities whose components are plain JSON (`body`, `anim`, `queue`,
+`holding`, one component per step in progress). Systems run in a fixed order, one file each (sequence, stand, walk,
+turn, enter, loop, wait, anim), and createWorld's three.js side only mirrors components onto meshes. Three designs
+were compared: a model plus a scene graph with one step interpreter, a pure ECS, and this hybrid. The interpreter
+and the hybrid were both built and given the same new behaviour, a visit to another desk (2.12). The interpreter
+is smaller (79 code lines against 207) and touched one file fewer. The hybrid lets a host add components and
+systems without editing the package, and its whole state saves and loads as JSON. The numbers were close, and the
+owner prefers an ECS, so the hybrid was chosen. The app's adapter sets components and passes its own systems; it
+never edits engine systems.
+
+## D17. The HUD as a stack and a reader: what was decided beyond the spec
+
+The full-height column of four tabs is gone. The stack (`src/client/inbox/`) lists `S.inbox` as tall as its content;
+the reader (`src/client/reader/`) shows one item in full beside it. These choices were made while building it:
+
+- Layout. On a desktop the window is a grid of three columns: the stack (340px), the reader's column, and the dock
+  (the worker card over the pills, 340px). The reader starts under the status pill, is at most 640px wide and as tall
+  as its item. It never covers the stack. With the world on it stops 44px above the window's foot, where the world's
+  turn buttons sit. `.desk` is the stack alone, so the world's inset is the stack's width; the reader floats over the
+  office and the desk chips hide under it. Making the inset follow the open reader waits for the engine work.
+- Needs you lists the blocking and open questions, unread updates and rooms with new lane messages. Its count is the
+  number of open questions. The item the reader shows stays listed while it shows, even once it is read, so the
+  reader and its card stay paired.
+- A blocking question shows under every filter, Rooms included. The filter is kept in this browser, and a saved Rooms
+  hid every question after a reload. We chose this over resetting the filter on load: a reset covers only a reload,
+  while a question can also turn blocking, or arrive, under Rooms.
+- A question is short when it has no secrets, at most four options, a body of at most 200 characters and no table,
+  code or heading (`isShort` in `src/server/owner-inbox.ts`). A short card shows all of it: the body, its links as
+  chips, its images as thumbnails, its options and SEND. Anything longer shows a preview, its shape (lines, tables,
+  code, links) and opens in the reader. Every card and the reader's head name the kind: DECISION, ACTION or INFO.
+- Answered from the reader, the reader moves on to the next question in the stack's order, or closes.
+- FROM HQ is no longer a separate feed: updates are inbox items. The top bar's FROM HQ opens the newest unread one.
+  SENT AND ANSWERED and the secrets drop moved into Tell HQ's view. Replying to an update stays (a note that starts
+  with `re: #uID`); replying to your own note is dropped.
+- A room in the reader is one scroll: its head (owner, work, who sits at the table), the brief folded after 12 lines
+  with ALL N LINES, the shelf, the thread, and the send box pinned at the foot. The rail fold, the strip of room tabs
+  and the phone's CHAT, BRIEF and SHELF tabs are gone. Pills show rooms with new messages (up to three) and the room
+  that is open. On a desktop a room no longer pauses the office; on a phone the reader covers it and it rests.
+- Keys work only while no text field has focus. Esc steps back in this order: a dialog, the tier menu, the text
+  field, the reader, the worker card. J and K move through the stack; with the reader open it follows them. Enter
+  opens the selected card, and only when no button, link or tab has focus: Enter on a control is the control's. M
+  opens the tier and priority menu. Q and E stay the office's (they turn it), so no inbox key shadows them.
+- The keys act on one target, marked KEYS: the card or the reader the owner used last (a click, a pick, J or K, a
+  field). Cmd-Enter and 1 to 9 act on it and nothing else. A long card is never their target outside the reader:
+  they say to open it first. Before, the reader's question won over a card just used, so a pick on one card and
+  Cmd-Enter answered another.
+- No send on a question the reader moved to by itself. When an answer lands the next question can sit where the last
+  one was with its send ready (an ACTION's DONE, an INFO's OK, a pick kept from before). That question is unconfirmed:
+  its send button is off and Cmd-Enter and 1 to 9 do not send it, however long it waits, until the owner touches it
+  (a click in its view, a pick, typing, R). A question the owner opened is confirmed from the start. Held keys do not
+  repeat a send or a pick. We chose a touch rule over a timer: a timer failed under load and let a stray press send
+  "done" later. We chose it over making the advance wait for the send: the advance already waits for it, and the
+  stray press comes after (a second Cmd-Enter, or a double click that lands on the next card's SEND).
+- A send in flight keeps its button off until the server answers, whatever redraws it. A reply to an update and a
+  message to a room clear only the box they were sent from, though the reader may have moved on.
+- On a phone the reader covers the stack. A question that arrives meanwhile shows as a red banner at the reader's top
+  (the newest one); a tap opens it. The chime alone was easy to miss.
+- `S.inbox` is built from what `state()` already loaded (`S.open`, `S.updates`, `S.rooms`): a state part gets the
+  state built so far. The shelves are read for the listed rooms only, once per state version. A link whose URL is
+  only on the shelf of a room archived more than 7 days ago is no longer named after that shelf.
+- Link cards are built only from what the server knows (the link's kind, host, who linked it, a shelf it is also
+  on). Nothing is fetched from another site; a picture shows only when it is on this HUD.
+
+The owner chose this design, B (the stack and the reader), from the three in the proposal on 2026-10-27.
+
+## D18. The office on the engine, behind a setting: an adapter with the classic renderer's calls
+
+Step 4 of the migration (`docs/engine/rfc.md`, 12). The owner's OFFICE setting picks the renderer: CLASSIC (the
+default, `src/client/world/world.js`) or NEW (`src/client/office-view/view.js` on `@hq/world`). These choices were
+made while building it:
+
+- **Same calls, not a new contract.** `mountOffice(canvas, opts)` answers what `mountWorld` answers (`setLanes`,
+  `setHq`, `setTheme`, `setSelected`, `setPerformance`, `setPaused`, `setInsets`, `rotate`, `fit`, `inspect`,
+  `roomWalls`, `workerOf`). `world/index.js` keeps the insets, the keys, the turn buttons and `window.__world`, and
+  changes one line: which module it imports. Both renderers bind to `world/api.js` the same way, so the desk chips
+  and `addToWorld` never know which one draws. `deskAnchor` is the desk's `hud` anchor, `project` is the engine's,
+  `addToWorld` is `attach` to `desk:<lane>`, and `onFrame` runs on the engine's `frame` event.
+- **Its own folder, with no `index.js`.** The page loads every `src/client/<name>/index.js`, so `office-view/` has
+  `view.js` instead and is fetched only when OFFICE is NEW. The RFC named `src/client/office/adapter.js`; we kept
+  `office/` pure (no three.js, no DOM), so the headless tests of the generator stay headless.
+- **One renderer per page.** A canvas holds one WebGL context, so changing OFFICE reloads the page. A browser with no
+  copy of the settings waits for the server's before it picks, so it never mounts the wrong one first.
+  `?office=new` or `?office=classic` picks for one page, for tests and shots.
+- **State to `apply`.** Every state change builds the doc again with `officeDoc(lanes, last)` and hands it to
+  `world.apply`. The same doc twice does nothing; a new lane adds a desk, a chair, a worker and its act. Nothing is
+  rebuilt by the adapter itself. `officeDoc` now also returns `origin`, where the layout's (0, 0) lies on the lot, so
+  `roomWalls` can name the engine's wall edges.
+- **PERFORMANCE as a host system.** The engine draws only on change. A small system (`hq/pace`) says it is busy 30
+  times a second (SMOOTH) or 15 (BALANCED), so workers type and balls hop as before; POWER SAVER says nothing, and
+  the office draws only when something moves or changes. Motion still draws at display rate.
+- **Two engine additions, both additive.** Insets (`createWorld({ insets })`, `camera.setInsets`): the view centres
+  in the part the stack and the top bar leave free, and `fit()` fits there. The old renderer had them; the engine's
+  `offset` alone could not be changed after creation. `pause(on)`: a phone's reader covers the office, and nothing
+  steps or draws until it closes.
+- **The new office keeps right of the open reader.** D17 let the reader float over the office until the engine
+  came. With the reader open, the inset is the reader's right edge, and the office eases there and fits; when it
+  closes, the office eases back. The first shots showed why: with the reader floating, more than half of a 12-lane
+  office and half its desk chips were under it. The engine's three zoom steps are coarse, so a 12-lane office is
+  wider than the space right of the reader at the far zoom and runs off the right edge a little. The classic
+  renderer keeps D17's behaviour.
+- **Kept from the classic renderer.** The subagent balls are `world/balls.js`'s `Balls`, on desk frames attached to
+  `desk:<lane>`; they move to `office-view/` when `world/` goes. Input is the engine's own (`bindInput`), so its zoom
+  and wheel reach the page as the engine has them; a pick or hover maps `lane:`, `desk:` and `chair:` ids back to
+  lanes, and an empty desk is no one's. A drag or a wheel stops the view following the fit, as before. The selected worker gets a ring on
+  the floor, attached to its character, so it follows the worker.
+- **Not yet.** The land round the office (OUTSIDE, step 6): NEW shows the plain lot, and the settings say so. The
+  walk to the lead's desk: the place for it is the act table in `office/acts.js`. Per-room light at night, the
+  status lights on desks and the marker over a worker who waits on the owner are the classic renderer's only.
+
+## D19. Attach and threads: uploads as URLs, a thread is a room the HUD keeps
+
+Steps 4 and 5 of the HUD build plan (attach, then threads and replying to a lane). These choices were made while
+building them:
+
+- One upload route for everything. `POST /api/uploads` (`src/server/uploads.ts`) takes any file of a known type up to
+  25 MB, the rooms' cap. The type comes from the name's extension (or the content type when the name has none) and the
+  bytes must match it: a PNG starts like a PNG, a PDF like a PDF, a text file is UTF-8 without NUL bytes. Anything
+  else is refused: 413 for size, 415 for type. Programs and disk images are never kept. A refusal is final on the
+  page; only a network failure offers RETRY.
+- The page and the lanes get URLs, never paths. The reply is `{ url, href, name, kind, type, size }`: `url` is
+  `/uploads/NAME` for the page, `href` the same file on this server's address as the page reached it, for a lane on
+  another machine. The stored name has a random part, so it cannot be guessed. Files are served sandboxed with
+  `nosniff`, like a room's files; a zip downloads. A sent attachment is `[image: href]` for an image and
+  `[title](href)` for a file, a shelf item or a titled link. A draft kept from before keeps working: its URL stands in.
+- One + menu on every send box, built by `composer()` in `src/client/images/images.js`: upload a file, an image or
+  screenshot (re-encoded as before, 10 MB), a link or artifact URL (a card in the tray), an item from a room's shelf.
+  The menu is a popover, so the reader's scrolling box never clips it. Its link row is no form: the menu sits inside
+  Tell HQ's form, and a nested form would send the note. ⌘U opens the menu of the box with the cursor, else of the
+  KEYS target.
+- Drop and paste follow the keys. A drop on a box goes to that box, a drop on a stack card to that card's item, and a
+  drop anywhere else to the KEYS target (D17); a paste with no field focused goes there too. `keys.js` tells
+  `images.js` the target through `setDropTarget`, so the attach module does not import the stack (that cycle broke
+  the drafts' load order). A hint names the item: "Drop to attach to: TITLE".
+- A thread is a room the HUD keeps. A reply on question 12 opens room `thread-q12` (update 5: `thread-u5`), owned by
+  the item's lane, or HQ when it has none. No table changes. Delivery, AWAY · KEPT, RETRY and read marks are the rooms'
+  own, and a lane answers with `hud room say thread-q12`. HQ cannot create a room whose slug starts with `thread-`.
+  We chose this over a table of replies: that would have duplicated the delivery path and its tests.
+- A thread shows with its item. `S.rooms` lists thread rooms with `thread: { kind, ref }`; the inbox folds a thread
+  into its question or update (`item.thread`) while that is listed, and lists it as a room once the item is gone, so
+  a lane's late reply still reaches the owner. The pills never show a thread.
+- Who a reply goes to. A question's reply goes to its lane by default; an update's to HQ, as the `re: #uID` note it
+  always was. The To chip switches either to the other. A question's box has REPLY (to the thread, the question stays
+  open) beside its SEND (the answer).
+- Reopen. `POST /api/asks/ID/reopen` (in `routes/threads.ts`, so `asks.ts` is untouched) sets an answered question back
+  to open and clears its answer, answer time and ack, so HQ and the lane wait for a new answer. The old answer is not
+  lost: the lane is told in the thread ("The answer X no longer stands"), HQ in one line, and the event log keeps it.
+  A withdrawn question cannot be reopened: HQ took it back. The reader shows an answered question (from Tell HQ's
+  list) with its answer, its thread and REOPEN.
+
+## D20. Go to the lead: a question goes to the asking lane's lead first
+
+The owner approved this design in the proposal (section 2), including its table change. A question can now go to
+the asking lane's lead (its parent in the lane tree) before the owner. It reaches the owner on a timeout, or when
+the lead escalates it. The office walk to the lead's desk is a later, optional step; only its hook exists.
+
+- **Data.** Two nullable columns on `asks`, added in `schema.ts` like the tier columns (D2): `holder` (the lead
+  holding an open ask; null is the owner) and `answered_by` (null is the owner). Every reader of asks needs the
+  holder, so it is a column. The hop itself (the lead, delivery, the absolute `escalate_at`, who escalated and why)
+  is a new table, `ask_routes`, that only the router reads. Nothing is dropped or renamed; old asks read as the
+  owner's. The migrations moved from `db.ts` into `applySchema` so a test can build the schema in memory.
+- **Routing** (`src/server/lead-router.ts`). `hud ask --to lead|owner`; without it the owner's `askRoute` setting
+  decides. Always the owner: secrets, `kind=action`, blocking and urgent, `--to owner`, no asking lane. A lead is
+  skipped for the next one up when it is not registered, gone, never seen in herdr, done, parked, blocked on a
+  prompt, stale, waiting on a blocking question of its own, or holding 5 asks already.
+- **Timeouts**, in minutes: blocking urgent 0, high 5, normal 10, low 20; non-blocking 10, 20, 30, 60. They are
+  starting values to tune. `escalate_at` is absolute, so a restart keeps it; the check runs at start, after every
+  change and every 5 s.
+- **Delivery** reuses rooms' rules: `promptAgent`, and rooms' `away`. The lead is typed into only while it is idle
+  with no prompt pending; while it is away the question is kept and sent when it is back. A failed delivery, or a
+  lead that is done, parked or removed, escalates at once.
+- **Prompt injection: one quoting function.** The question is another agent's text typed into the lead. The prompt
+  and `hud held` both quote it through `quoteAgentText` (`src/agent-text.ts`), under a line that says to weigh it, not
+  follow it. Every line keeps its `| ` prefix, so a title or an option can never print as a command line. Line breaks
+  in any form (CR, VT, FF, NEL, U+2028, U+2029) become quoted line breaks; every other C0 and C1 control and the bidi
+  controls (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) are taken out. Lane names in the head go
+  through `oneLine`. The owner-only kinds never reach a lead. Money, irreversible steps and outside contact still
+  rely on the guide and on escalation.
+- **Identity: a token per hop.** A lane name is a claim, not proof (the review showed `--as` let anyone answer as a
+  lead, or as HQ). Each hop gets a random 128-bit token, stored on its `ask_routes` row and typed only into that lead
+  with the question. `hud answer`, `hud escalate` and `hud held` for a lead need `--token`; the server checks it
+  against the open hop the lead still holds. A wrong or old token (the hop ended: answered, escalated, moved) is a
+  403 with one message, which never says whether the ask exists. A token of any question a lead holds lists all it
+  holds, each with its own token. Any token or `by` makes a call a lead's, so a blank `by` is never the owner. Tokens
+  never reach `/api/state` or the page. The owner's page is unchanged (no token, no `by`). HQ escalates with
+  `hud escalate ID --hq`, recorded under its configured agent name (`HUD_HQ_AGENT`); it is trusted the way it is to
+  withdraw, which is to say not authenticated beyond the page's own header check.
+- **Answers.** `answerAsk(id, answer, { token, by })`: neither is the owner. The answer to a routed ask is typed into
+  the asking lane (kept while it is away). HQ hears it once that is done: "already delivered to L; no relay needed"
+  (or that L is away and gets it when back, or that typing failed and HQ must relay it). An ask that never went to
+  a lead is unchanged: HQ hears at once and relays, as before. If the owner answers what a lead holds, or HQ
+  withdraws it, the lead is told to drop it, also when that happens while the question is still being typed in. An
+  answer still being typed in at a restart is typed in again at start. The owner's answer that loses a race with the
+  lead's is refused with who answered first; the page keeps the draft and offers it to HQ as a follow-up note.
+- **Changes while a lead holds it.** Raised to blocking and urgent, it goes to the owner at once. Moved to another
+  lane, the old lead drops it and it is routed again from the new lane, as the next hop.
+- **The owner's view.** `needs_you` counts only what the owner holds; a lane whose questions are all with its lead
+  is `with_lead`. The stack lists lead-held questions under "With leads", answerable, with the lead and "to you at
+  HH:MM", and chimes only when one reaches the owner.
+
+The open questions, answered:
+
+- **Top-level lanes.** HQ is never a lead. A top-level lane's question goes to the owner, as before. HQ already
+  sees every ask, and a lead role would load the agent that coordinates everyone.
+- **Escalation goes straight to the owner**, not up the tree. One hop keeps the worst wait to one timeout and is
+  easy to explain; a three-level tree could otherwise hold a blocking question for three timeouts. Routing still
+  climbs past an unavailable lead, once, when the question is asked.
+- **Default route: the owner.** Nothing changes until the owner sets `askRoute` to `lead` (POST /api/settings).
+  Flip the default after a week of watching what leads answer.
+
+The walk: `src/client/office/acts.js` has a `visit-lead` row, marked `off`, and `actFor(..., { visitLead })` uses it
+for `with_lead`. A later setting turns it on. The walk itself needs a visit pose, a general errand and same-room
+routing first (the proposal lists them).
+
+## D21. The engine office is the only office
+
+The office on `@hq/world` (`src/client/office-view/`, D18) reached the classic renderer's features, so it became the
+only office and the classic renderer was deleted in the same change, with no way back to it.
+
+- **Removed.** The OFFICE setting and its row, the `?office=` parameter and the reload that switched renderers;
+  `src/client/world/` except `index.js` (the page's side: insets, keys, turn and fit buttons, `window.__world`),
+  `api.js` (the door other areas use) and `world.css`; `world/outside/`, the classic lab (`scripts/world-lab.ts`,
+  `docs/design/world-lab.html`, `showroom.js`, `outside/lab.html`), `scripts/world-shots.ts`, the RoundedBoxGeometry
+  addon and `test/client/world-plan.test.ts` (its layout checks moved to `office-plan.test.ts`). The subagent balls
+  moved to `office-view/balls.js`. A server that still holds an `office` setting keeps it unused. The page always keeps
+  the office right of the open reader.
+- **Light at night.** Each team room and the HQ suite get one host lamp over their middle (`view.addLamp`, a new
+  engine call: a spot light lit by night only, left out of the land outside). A room is lit while any of its lanes
+  is active and dim when all are parked or gone, as the classic office did. A dim lamp is set to 0, never removed,
+  because a change in the number of lights recompiles every shader (`office-view/lamps.js`).
+- **Status lights and badges.** A small paper lantern on each live desk glows in its lane's status colour (the
+  colours the HUD uses). Over the worker hangs the classic badge: a round disc with a short tail and a glyph, never a
+  diamond or crystal. Red `!` when the lane waits on the owner (or any of its questions blocks), amber `hq` on HQ's
+  turn, a clock while it waits on CI or its lead. A worker waiting on the owner also stands and waves beside its desk
+  (`office/acts.js`), so it reads differently from one that types (`office-view/marks.js`).
+- **Fit right of the reader.** With 13 zoom stops from 16 px per metre, a 12-lane office (an indoor box of 26 by
+  12 m) did not fit right of the open reader at 1280 by 800 (364 px free) and only just at 1440 by 900. The engine's
+  ladder gained two stops below 16 (11.3 and 13.5), on the same 2^(1/4) steps; the named stops keep their scale.
+  The office stays small there, and the desk chips name every lane.
+- **Hover.** The engine highlighted any object under the pointer. A new `hoverTarget` option chooses what a hover
+  highlights: a live lane's desk or chair, and its desk when the pointer is on the worker. Other furniture, empty
+  desks and the land highlight nothing.
+- **Seen from far.** Subagent balls, desk lanterns and badges keep a minimum size on screen (4 px radius for a ball)
+  however far the camera is (`office-view/size.js`), and the balls are unlit, so they read in both themes.
+- **Tests.** `test/client/world.test.ts` covers the engine office, with `office-view.test.ts` folded into it.
+
+routing first (the proposal lists them). The owner decided on 2026-10-27 that the walk stays optional: routing works without it, and a setting turns it on.
+
+## D22. Fixes from the final review of the HUD half, and the limits left
+
+An independent review of the server and panel half of this branch (everything but the 3D office) found two must-fix
+problems and several should-fix ones. Each fix below has a test ported from the review's probe that failed before it.
+
+- **No agent value reaches the page's markup raw.** An ask's `due` and `created_at` were stored as sent and put into
+  HTML attributes, so any local agent could add an attribute (and a script) to the page where the owner pastes
+  secrets. The server now parses `due` at the boundary (`asks.ts`): ms, digits, `HH:MM` today, or an ISO date or
+  date-time, stored as a number; anything else is a 400. `created_at` is always the server's clock. On the page, every
+  data value put into an attribute or `innerHTML` goes through `esc()`; a sweep of the panels fixed every hit it found,
+  not only the two named. `hud ask --due` refuses a malformed time instead of sending nothing.
+- **A thread follows its item** (amends D19). Before every post into a thread, its room is set to the item's current
+  lane (HQ for none), with no other member, and opened again if HQ archived it. A reply and a reopen after
+  `hud update --lane` reach the new lane; the old lane is no longer in the thread.
+- **Reopen is all or nothing.** It checks first, writes the reopen and the thread's message in one transaction, and
+  types into the lane and tells HQ only after the commit. The old answer is cut to 500 characters in that message, so
+  a long one cannot stop a reopen; the event log keeps it whole. A lead's old answer is quoted. A checklist question
+  that closed itself (every item done) cannot be reopened: the ledger can only add to an open question, so the owner
+  replies in its thread and HQ asks a new one.
+- **An answer's delivery belongs to that answer** (amends D20). A send into the asking lane checks, when it finishes,
+  that the ask still holds the answer it typed (same `answered_at`, text and author); only then does it mark it sent
+  and tell HQ. A newer answer, given while an older one was being typed in, goes in after it, one text at a time. HQ
+  hears that the superseded answer reached the lane and no longer stands, and then the current answer, so its last
+  word is the current one. No table changed.
+- **Other agents' text reaches HQ quoted.** A lead's answer and its escalation reason go to HQ through
+  `quoteAgentText`, as they go to the asking lane; lane names and titles in HQ's lines and in text typed into lanes
+  (the drop line, the thread prompt, room titles) go through `oneLine`.
+- **A new tier recomputes a held question's timer**: from the hop's start with the new tier and priority, never later
+  than the time already typed into the lead.
+- **Tokens never reach an excerpt.** `prompt.ts` hides `--token VALUE`, `--token=VALUE` and any bare 32-hex run in a
+  pane's tail before the excerpt is made, across ANSI codes, box edges and wraps.
+- **Lane names.** A new lane's name is letters, digits, dot, underscore or hyphen, a letter or digit first, at most 64;
+  anything else is a 400. A lane registered before keeps its name.
+- **Pictures from this HUD only.** A room's shelf image and a link card's picture are fetched only from this page's
+  origin (`/uploads/`, `/room-files/`); any other host is a link card.
+- The stack opens a room through the bus (`room:go`) instead of importing the rooms panel.
+
+**The re-parent limit.** There is no authentication between local agents, and this does not add one (D20 says the
+same of HQ). Any local agent that can call the API can change any lane's parent, and with `askRoute=lead` (or
+`hud ask --to lead`) that makes it the lane's lead: the lane's next question goes to it, with a valid token, and its
+answer is typed into the lane as its lead's. What limits it: a change of an existing lane's parent is an event in the
+log ("now reports to X (was Y)") and one line to HQ, which ends "If you did not move it, check who did"; and a
+re-parent never moves a question a lead already holds: it stays with that hop until answered or escalated, and
+escalation goes to the owner, never up the new tree. With `askRoute=owner`, the default, only a question asked with
+`--to lead` goes to a lead at all.
+
+**Known and left:**
+- A room named `thread-qN` that HQ made before this branch is taken over as question N's thread after the upgrade
+  (review nit 9).
+- Thread rooms are never archived; once their item is gone they stay listed under Rooms (review nit 10).
+- `inbox/` and `reader/` still import each other as folders (the stack reads the reader's state; the reader imports
+  `inbox/drafts.js` and `inbox/clock.js`). Breaking it means moving those two files to a neutral folder.
+  `renderSecrets` and `renderSecretTimes` are still called from other folders, as on main.
+- The screenshot tools (`scripts/room-hash.ts`) seed asks with `created_at`, which the server now ignores: seeded
+  questions' ages count from the real time.
+- Reopening a secrets question tells HQ the old answer no longer stands, but the first value stays readable until it
+  expires.

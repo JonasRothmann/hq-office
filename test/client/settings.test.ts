@@ -1,6 +1,7 @@
 // The owner's settings in a real browser against a temporary server: settings remembered by a browser from before
-// the server kept them are sent up once; after a cleared browser the server's settings come back; a change on the
-// page reaches the server, and a change on the server reaches the page. Needs Chrome; skipped without it.
+// the server kept them are sent up once (with the pixel room's old choices passed along untouched); after a cleared
+// browser the server's settings come back; a change on the page reaches the server, and a change on the server
+// reaches the page. Needs Chrome; skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -17,10 +18,11 @@ const until = async (expr: string, ms = 8000) => {
 };
 const serverSettings = async () => (await (await fetch(`${server.base}/api/settings`)).json()).settings;
 const open = async () => {
-  await page.s("Page.navigate", { url: `${server.base}/` });
+  await page.s("Page.navigate", { url: `${server.base}/?world=off` });
   await until(`document.getElementById("alerts")?.textContent.startsWith("SOUND") && !!document.getElementById("card")?.innerHTML`);
 };
-const shownHero = () => page.evaluate(`(() => { const p = document.getElementById("settings"); if (p.hidden) document.getElementById("settingsBtn").click(); return document.querySelector('[data-set="hero"].on')?.dataset.val; })()`);
+const shownPerformance = () => page.evaluate(`(() => { const p = document.getElementById("settings"); if (p.hidden) document.getElementById("settingsBtn").click(); return document.querySelector('[data-set="performance"].on')?.dataset.val; })()`);
+const LEVELS = "Manager, Lead, Engineer";
 
 beforeAll(async () => {
   if (!chromeFound) return;
@@ -39,47 +41,49 @@ afterAll(async () => {
 });
 
 test.skipIf(!chromeFound)("settings this browser remembered from before are sent up once", async () => {
-  // A page of this origin that is not the office, to write what an older version left in local storage.
+  // A page of this origin that is not the office, to write what an older version left in local storage: the pixel
+  // room's choices and OFFICE (the renderer choice the office no longer has), which go up and are ignored.
   await page.s("Page.navigate", { url: `${server.base}/api/settings` });
   await until(`document.readyState === "complete"`);
-  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto" })); localStorage.setItem("hq-sound", "1")`);
+  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "IVY", season: "winter", hat: "auto", performance: "balanced", office: "classic" })); localStorage.setItem("hq-sound", "1")`);
   expect(await serverSettings()).toEqual({});
   await open();
   for (let i = 0; i < 100 && !Object.keys(await serverSettings()).length; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS, outside: "nature", office: "classic" });
   expect(await page.evaluate(`document.getElementById("alerts").textContent`)).toBe("SOUND ON");
   await until(`localStorage.getItem("hq-sound") === null`);
-  expect(await shownHero()).toBe("IVY");
+  expect(await shownPerformance()).toBe("balanced");
 });
 
 test.skipIf(!chromeFound)("after the browser's data is cleared, the server's settings come back", async () => {
   await page.evaluate(`localStorage.clear()`);
   await open();
   await until(`document.getElementById("alerts").textContent === "SOUND ON"`);
-  expect(await shownHero()).toBe("IVY");
-  expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).season`)).toBe("winter");
-  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
+  expect(await shownPerformance()).toBe("balanced");
+  expect(await page.evaluate(`JSON.parse(localStorage.getItem("hq-settings")).performance`)).toBe("balanced");
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: true, performance: "balanced", levels: LEVELS, outside: "nature", office: "classic" });
 });
 
 test.skipIf(!chromeFound)("the server's settings win over a different copy in the browser", async () => {
-  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ hero: "MARA", season: "summer", hat: "none", sound: false }))`);
+  await page.evaluate(`localStorage.setItem("hq-settings", JSON.stringify({ performance: "saver", sound: false }))`);
   await open();
-  await until(`JSON.parse(localStorage.getItem("hq-settings")).hero === "IVY"`);
-  expect(await shownHero()).toBe("IVY");
-  expect((await serverSettings()).hero).toBe("IVY");
+  await until(`JSON.parse(localStorage.getItem("hq-settings")).performance === "balanced"`);
+  expect(await shownPerformance()).toBe("balanced");
+  expect((await serverSettings()).performance).toBe("balanced");
 });
 
 test.skipIf(!chromeFound)("a change on the page reaches the server, and one on the server reaches the page", async () => {
-  await page.evaluate(`document.querySelector('[data-set="hero"][data-val="KENJI"]').click()`);
-  for (let i = 0; i < 100 && (await serverSettings()).hero !== "KENJI"; i++) await Bun.sleep(50);
-  expect((await serverSettings()).hero).toBe("KENJI");
+  await page.evaluate(`document.querySelector('[data-set="performance"][data-val="saver"]').click()`);
+  for (let i = 0; i < 100 && (await serverSettings()).performance !== "saver"; i++) await Bun.sleep(50);
+  expect((await serverSettings()).performance).toBe("saver");
   await page.evaluate(`document.getElementById("alerts").click()`);
   for (let i = 0; i < 100 && (await serverSettings()).sound !== false; i++) await Bun.sleep(50);
   expect((await serverSettings()).sound).toBe(false);
-  await server.post("/api/settings", { settings: { hero: "MARA", sound: true } });
-  await until(`document.querySelector('[data-set="hero"].on')?.dataset.val === "MARA" && document.getElementById("alerts").textContent === "SOUND ON"`);
+  await server.post("/api/settings", { settings: { performance: "smooth", sound: true } });
+  await until(`document.querySelector('[data-set="performance"].on')?.dataset.val === "smooth" && document.getElementById("alerts").textContent === "SOUND ON"`);
+  // RESET puts back what the page offers; the old choices stay on the server, unused
   await page.evaluate(`document.querySelector("[data-reset]").click()`);
-  for (let i = 0; i < 100 && (await serverSettings()).hero !== "YOU"; i++) await Bun.sleep(50);
-  expect(await serverSettings()).toEqual({ hero: "YOU", season: "auto", hat: "auto", sound: false, performance: "smooth", levels: "Manager, Lead, Engineer", theme: "office" });
+  for (let i = 0; i < 100 && (await serverSettings()).sound !== false; i++) await Bun.sleep(50);
+  expect(await serverSettings()).toEqual({ hero: "IVY", season: "winter", hat: "auto", sound: false, performance: "smooth", levels: LEVELS, outside: "nature", office: "classic" });
   expect(errors).toEqual([]);
 });

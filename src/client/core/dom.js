@@ -8,7 +8,7 @@ export function toast(msg) {
   setTimeout(() => t.remove(), 2400);
 }
 // Under 1151px the page scrolls, not the panels (core/layout.css), so a panel built again can move what is on screen.
-// On a phone, MESSAGES and FROM HQ are the exception: each has a bounded height and scrolls inside itself.
+// The reader is the exception: a full-screen sheet whose body scrolls inside itself.
 export const phone = () => matchMedia("(max-width: 1150px) and (pointer: coarse)").matches;
 export const pageScrolls = () => !matchMedia("(min-width: 1151px)").matches;
 // Call before a panel is built again; call what it returns after. The first item of the panel on screen that is

@@ -1,10 +1,10 @@
-// ROOMS in Chrome against a temporary server: the tab's count of rooms with new lane messages and its list; a room
-// as a place you go to (its address #room/SLUG, BACK TO OFFICE, Esc, the browser's back button, a reload, the strip
-// of rooms), with the question column untouched; an open room's lanes, brief, shelf and thread; the thread keeping
-// its height beside a long brief and many artifacts, with no scroll area inside another; line breaks in messages;
-// the rail's fold, remembered; writing to the owner and to a member; the pixel strip; and the phone: a full-screen
-// view with CHAT, BRIEF and SHELF (no zoom, no sideways page, the newest message in view, no jump when a message
-// lands while you read older ones). Needs Chrome; skipped without it.
+// ROOMS in Chrome against a temporary server: the stack's Rooms filter, its count of rooms with new lane messages and
+// a pill for each; a room as a place you go to in the reader (its address #room/SLUG, the close button, Esc, the
+// browser's back button, a reload, the pills), with the stack untouched; an open room's lanes, brief, shelf and
+// thread; one scroll in the reader, the brief folded after 12 lines, the send box pinned under it; line breaks in
+// messages; writing to the owner and to a member; who sits at the table; and the phone: the reader full screen (no
+// zoom, no sideways page, the newest message in view, no jump when a message lands while you read older ones). Needs
+// Chrome; skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -25,13 +25,13 @@ const size = (width: number, height: number, mobile: boolean) => Promise.all([
   page.s("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: 5 }),
 ]);
 const load = async (hash = "") => {
-  await page.s("Page.navigate", { url: `${server.base}/${hash}` });
-  await until(`!!document.getElementById("card")?.innerHTML && !!window.__roomsReady`);
+  await page.s("Page.navigate", { url: `${server.base}/?world=off${hash}` });
+  await until(`!!document.getElementById("card")?.innerHTML && !!window.__roomsReady && !!document.querySelector("#hud")`);
 };
 const press = (key: string) => page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, bubbles: true }))`);
-const inRoom = (slug: string) => `location.hash === "#room/${slug}" && !document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .room")).display === "none" && !!document.querySelector("#roomView .rthread [data-rmsg], #roomView .rthread .empty:not(:empty)")`;
-const inOffice = `location.hash === "" && document.getElementById("roomView").hidden && getComputedStyle(document.querySelector(".stage > .room")).display !== "none"`;
-const qcol = `JSON.stringify((({ x, y, width, height }) => [x, y, width, height])(document.querySelector(".desk").getBoundingClientRect()))`;
+const inRoom = (slug: string) => `location.hash === "#room/${slug}" && !document.getElementById("reader").hidden && !document.getElementById("roomView").hidden && !!document.querySelector("#roomView .rthread [data-rmsg], #roomView .rthread .empty:not(:empty)")`;
+const inOffice = `location.hash === "" && document.getElementById("reader").hidden`;
+const stack = `JSON.stringify((({ x, y, width }) => [x, y, width])(document.querySelector(".desk").getBoundingClientRect()))`;
 
 const LONG_BRIEF = Array.from({ length: 12 }, (_, i) => `### Part ${i + 1}\nA paragraph that goes on for a while about part ${i + 1}, so that the brief is far longer than the screen.\n- a point\n- another point`).join("\n\n");
 
@@ -56,8 +56,6 @@ beforeAll(async () => {
   for (let i = 1; i <= 20; i++) await server.post("/api/rooms/ope-9/say", { text: `Step ${i} of the export is done.` });
   await server.post("/api/rooms/ope-9/say", { text: "First line\nsecond line\n\nA new paragraph\n- one\n- two" });
   page = await newSession(chrome.cdp, errors);
-  // A flag the test waits on: the rooms module has run.
-  await page.s("Page.addScriptToEvaluateOnNewDocument", { source: `new MutationObserver((_, o) => { if (document.querySelector("#rooms .rlist") && document.getElementById("roomView")) { window.__roomsReady = true; o.disconnect(); } }).observe(document, { subtree: true, childList: true });` });
   await page.s("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] });
   await size(1440, 900, false);
   await load();
@@ -68,96 +66,111 @@ afterAll(async () => {
   await chrome?.close();
 });
 
-test.skipIf(!chromeFound)("the ROOMS tab counts rooms with new lane messages, and lists the rooms", async () => {
-  await until(`document.getElementById("qtRooms").textContent === "2" && !document.getElementById("qtRooms").hidden`);
-  await click('[data-qtab="rooms"]');
-  await until(`!!document.querySelector('#rooms [data-room="ope-7"]')`);
-  const row = await page.evaluate(`document.querySelector('[data-room="ope-7"]').innerText`);
+test.skipIf(!chromeFound)("the Rooms filter counts rooms with new lane messages and lists them; each has a pill", async () => {
+  await until(`document.getElementById("fRooms").textContent === "2"`);
+  await click('[data-filter="rooms"]');
+  await until(`!!document.querySelector('#hud [data-room="ope-7"]')`);
+  const row = await page.evaluate(`document.querySelector('#hud [data-room="ope-7"]').innerText`);
   expect(row).toContain("Search relevance");
   expect(row).toContain("alpha");
   expect(row).toContain("14 NEW");
-  expect(row).toContain("+2 LANES");
+  expect(row).toContain("+2");
+  expect(await page.evaluate(`[...document.querySelectorAll("#roomPills .pill")].map((p) => p.innerText.replace(/\\s+/g, " ").trim()).sort()`)).toEqual(["ROOM Billing export 21", "ROOM Search relevance 14"]);
 });
 
-test.skipIf(!chromeFound)("a room is a place: the list goes there, the address names it, BACK, Esc and the browser's back return, the questions never move", async () => {
-  const before = await page.evaluate(qcol);
-  await click('[data-room="ope-7"]');
+test.skipIf(!chromeFound)("a room is a place: the stack goes there, the address names it, close, Esc and the browser's back return, the stack never moves", async () => {
+  const before = await page.evaluate(stack);
+  await click('#hud [data-room="ope-7"]');
   await until(inRoom("ope-7"));
-  // The question column and Tell HQ are where they were; the office is gone from the stage.
-  expect(await page.evaluate(qcol)).toBe(before);
-  expect(await page.evaluate(`getComputedStyle(document.querySelector(".tell")).display !== "none" && getComputedStyle(document.querySelector(".stage > .under")).display === "none"`)).toBe(true);
-  expect(await page.evaluate(`document.querySelector('[data-room="ope-7"]').classList.contains("here")`)).toBe(true);
-  // BACK TO OFFICE
+  // The stack is where it was; its row and the room's pill are lit.
+  expect(await page.evaluate(stack)).toBe(before);
+  expect(await page.evaluate(`[document.querySelector('#hud [data-room="ope-7"]').classList.contains("on"), document.querySelector('#roomPills [data-read="room:ope-7"]').classList.contains("on")]`)).toEqual([true, true]);
+  // the close button
   await click("[data-room-back]");
   await until(inOffice);
-  expect(await page.evaluate(qcol)).toBe(before);
+  expect(await page.evaluate(stack)).toBe(before);
   // Esc
-  await click('[data-room="ope-7"]');
+  await click('#hud [data-room="ope-7"]');
   await until(inRoom("ope-7"));
   await press("Escape");
   await until(inOffice);
   // The browser's back button, then forward
-  await click('[data-room="ope-7"]');
+  await click('#hud [data-room="ope-7"]');
   await until(inRoom("ope-7"));
   await page.evaluate("history.back()");
   await until(inOffice);
   await page.evaluate("history.forward()");
   await until(inRoom("ope-7"));
-  // The strip of rooms moves straight to another one, with its new messages marked; one back is the office.
-  const chip = await page.evaluate(`document.querySelector('#roomView [data-room-go="ope-9"]').innerText`);
+  // A pill moves straight to another room, with its new messages counted; one back is the office.
+  const chip = await page.evaluate(`document.querySelector('#roomPills [data-read="room:ope-9"]').innerText`);
   expect(chip).toContain("Billing export");
   expect(chip).toContain("21");
-  await click('#roomView [data-room-go="ope-9"]');
+  await click('#roomPills [data-read="room:ope-9"]');
   await until(inRoom("ope-9"));
   await page.evaluate("history.back()");
   await until(inOffice);
-  // A reload at a room's address opens it; BACK then leaves it.
+  // J and K walk the stack with the reader open, from room to room.
+  const [one, two] = await page.evaluate(`[...document.querySelectorAll("#hud .rrow")].map((r) => r.dataset.room)`);
+  await click(`#hud [data-room="${one}"]`);
+  await until(inRoom(one));
+  await press("j");
+  await until(inRoom(two));
+  await press("k");
+  await until(inRoom(one));
+  await click("[data-room-back]");
+  await until(inOffice);
+  // A reload at a room's address opens it; the close button then leaves it.
   await load("#room/ope-7");
   await until(inRoom("ope-7"));
   await click("[data-room-back]");
   await until(inOffice);
   // An address with no such room: back to the office, and a word why.
   await load("#room/nope");
-  await until(`location.hash === "" && document.getElementById("roomView").hidden && [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("NO ROOM NOPE"))`);
+  await until(`location.hash === "" && document.getElementById("reader").hidden && [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("NO ROOM NOPE"))`);
 });
 
 test.skipIf(!chromeFound)("an open room: lanes with level and away, brief as markdown and inert, three cards, the thread at its newest", async () => {
   await load("#room/ope-7");
   await until(`document.querySelectorAll("#roomView .rthread [data-rmsg]").length === 14 && !!document.querySelector("#roomView .rbrief .md")`);
+  await Bun.sleep(300);
   const v = await page.evaluate(`(() => {
-    const r = document.getElementById("roomView"), md = r.querySelector(".rbrief .md");
-    const last = [...r.querySelectorAll(".rthread [data-rmsg]")].pop().getBoundingClientRect(), t = r.querySelector(".rthread").getBoundingClientRect();
+    const r = document.getElementById("roomView"), md = r.querySelector(".rbrief .md"), body = r.querySelector(".rv-body").getBoundingClientRect();
+    const last = [...r.querySelectorAll(".rthread [data-rmsg]")].pop().getBoundingClientRect();
     return {
-      lanes: [...r.querySelectorAll(".rtop .rlane")].map((b) => b.innerText.replace(/\\s+/g, " ").trim()),
+      owner: [...r.querySelectorAll(".who .rlane")].map((b) => b.innerText.replace(/\\s+/g, " ").trim()),
+      seats: [...r.querySelectorAll(".rvseats .rlane")].map((b) => b.innerText.replace(/\\s+/g, " ").trim()),
       h: md.querySelector("h4")?.textContent, ticks: md.querySelectorAll(".tick.on").length, links: [...md.querySelectorAll("a")].map((a) => a.getAttribute("href")),
       scripts: md.querySelectorAll("script").length, text: md.textContent,
-      font: (() => { const f = (e) => { const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.lineHeight]; }; return { body: f(md.querySelector("p")), item: f(md.querySelector("li")), message: f(r.querySelector(".rthread .msg .text p")), label: getComputedStyle(r.querySelector(".rbrief .k")).fontFamily }; })(),
+      font: (() => { const f = (e) => { const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.lineHeight]; }; return { body: f(md.querySelector("p")), item: f(md.querySelector("li")), message: f(r.querySelector(".rthread .msg .text p")), label: (({ fontSize, fontWeight }) => [fontSize, fontWeight])(getComputedStyle(r.querySelector(".rbrief .k"))) }; })(),
       code: md.querySelector(".codebox pre")?.textContent, copy: !!md.querySelector(".codebox .copy"),
       cards: [...r.querySelectorAll(".art")].map((a) => a.className.replace("art ", "")),
-      lastInView: last.bottom <= t.bottom + 1 && last.top >= t.top - 1 && t.bottom <= innerHeight,
+      lastInView: last.bottom <= body.bottom + 1 && last.top >= body.top - 1 && body.bottom <= innerHeight,
       sendInView: r.querySelector("[data-room-send]").getBoundingClientRect().bottom <= innerHeight,
       pageScroll: document.documentElement.scrollHeight > innerHeight,
     };
   })()`);
-  // The owner first, then the members (added together: by name).
-  expect(v.lanes).toEqual(["alpha MANAGER OWNER", "bravo MANAGER AWAY", "golf MANAGER"]);
+  // The owner in the head, then everyone at the table: the owner of the HUD first, then the room's lanes by name.
+  expect(v.owner).toEqual(["alpha MANAGER OWNER"]);
+  expect(v.seats).toEqual(["Tester HEAD", "alpha MANAGER", "bravo MANAGER AWAY", "golf MANAGER"]);
   expect(v.h).toBe("Plan");
   expect(v.ticks).toBe(1);
   expect(v.links).toEqual(["https://example.com/doc"]);
   expect(v.scripts).toBe(0);
-  // The brief reads like a message: the text font and size, the pixel font for its label only; code in a code box.
+  // The brief reads like a message: the text font and size, the label style (11px, weight 600) for its label only;
+  // code in a code box.
   expect(v.font.body).toEqual(v.font.message);
   expect(v.font.item).toEqual(v.font.message);
-  expect(v.font.body[0]).not.toContain("Press Start");
-  expect(v.font.label).toContain("Press Start");
+  expect(v.font.body[0]).toContain("Inter");
+  expect(v.font.label).toEqual(["11px", "600"]);
+  expect(v.font.body[1]).not.toBe("11px");
   expect(v.code).toBe("bun test");
   expect(v.copy).toBe(true);
   expect(v.text).toContain("<script>");
   expect(await page.evaluate("window.pwned")).toBeUndefined();
   expect(v.cards).toEqual(["image", "link", "claude-artifact"]);
   expect(v).toMatchObject({ lastInView: true, sendInView: true, pageScroll: false });
-  // Opening it marked the lanes' messages seen.
-  await until(`!document.querySelector('#roomView [data-room-go="ope-7"] .tag')`);
+  // Opening it marked the lanes' messages seen: its pill and its row stop counting them.
+  await until(`!document.querySelector('#roomPills [data-read="room:ope-7"] .tag') && !document.querySelector('#hud [data-room="ope-7"] .tag.new')`);
   await click(".art.image [data-art-preview]");
   await until(`document.getElementById("imgPreview")?.open && document.querySelector("#imgPreview figcaption").textContent === "Screenshot"`);
   // Esc closes the preview, not the room.
@@ -166,28 +179,29 @@ test.skipIf(!chromeFound)("an open room: lanes with level and away, brief as mar
   expect(await page.evaluate(inRoom("ope-7"))).toBe(true);
 });
 
-test.skipIf(!chromeFound)("the thread keeps its height beside a long brief and six artifacts; each pane scrolls on its own", async () => {
+test.skipIf(!chromeFound)("one scroll in the reader: the brief folded after 12 lines, the shelf, the thread at its newest; the send box pinned under it", async () => {
   await load("#room/ope-9");
   await until(`document.querySelectorAll("#roomView .rshelf .art").length === 6 && document.querySelectorAll("#roomView .rthread [data-rmsg]").length === 21`);
+  await Bun.sleep(300);
   const v = await page.evaluate(`(() => {
-    const r = document.getElementById("roomView"), t = r.querySelector(".rthread"), rail = r.querySelector(".rvrail"), send = r.querySelector(".rsend");
-    const tr = t.getBoundingClientRect(), rr = rail.getBoundingClientRect(), sr = send.getBoundingClientRect(), vr = r.getBoundingClientRect();
-    const scrolls = (e) => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1;
-    const ancestors = (e) => { const a = []; for (let p = e.parentElement; p; p = p.parentElement) a.push(p); return a; };
-    const last = [...t.querySelectorAll("[data-rmsg]")].pop().getBoundingClientRect();
+    const r = document.getElementById("roomView"), body = r.querySelector(".rv-body"), send = r.querySelector(".rsend"), reader = document.getElementById("reader").getBoundingClientRect();
+    const br = body.getBoundingClientRect(), sr = send.getBoundingClientRect();
+    const last = [...r.querySelectorAll(".rthread [data-rmsg]")].pop().getBoundingClientRect();
     return {
-      threadH: tr.height, viewH: vr.height,
-      overlap: !(rr.right <= tr.left || rr.left >= tr.right || rr.bottom <= tr.top || rr.top >= tr.bottom),
-      sendBelow: sr.top >= tr.bottom - 1 && sr.bottom <= innerHeight,
-      threadScrolls: scrolls(t), railScrolls: scrolls(rail),
-      nested: [t, rail].some((e) => ancestors(e).some((a) => /auto|scroll/.test(getComputedStyle(a).overflowY) && a !== document.documentElement && a !== document.body))
-        || [...t.querySelectorAll("*"), ...rail.querySelectorAll("*")].some((e) => /auto|scroll/.test(getComputedStyle(e).overflowY)),
-      newest: last.bottom <= tr.bottom + 1,
+      clamped: !!r.querySelector(".rbrief .md.clamp"), fold: r.querySelector("[data-brief-fold]").textContent,
+      bodyScrolls: getComputedStyle(body).overflowY === "auto" && body.scrollHeight > body.clientHeight,
+      nested: [...body.querySelectorAll("*")].some((e) => /auto|scroll/.test(getComputedStyle(e).overflowY)),
+      sendBelow: sr.top >= br.bottom - 1 && sr.bottom <= innerHeight,
+      newest: last.bottom <= br.bottom + 1,
+      inWindow: reader.bottom <= innerHeight,
       pageScroll: document.documentElement.scrollHeight > innerHeight,
     };
   })()`);
-  expect(v.threadH).toBeGreaterThan(v.viewH * 0.5);
-  expect(v).toMatchObject({ overlap: false, sendBelow: true, threadScrolls: true, railScrolls: true, nested: false, newest: true, pageScroll: false });
+  expect(v.fold).toMatch(/^ALL \d+ LINES$/);
+  expect(v).toMatchObject({ clamped: true, bodyScrolls: true, nested: false, sendBelow: true, newest: true, inWindow: true, pageScroll: false });
+  // ALL N LINES unfolds it, and it stays so for this room.
+  await click("[data-brief-fold]");
+  await until(`!document.querySelector("#roomView .rbrief .md.clamp") && document.querySelector("[data-brief-fold]").textContent === "FOLD THE BRIEF"`);
 });
 
 test.skipIf(!chromeFound)("a message's line breaks show: a break for a new line, a paragraph for a blank one, lists and code as markdown", async () => {
@@ -199,33 +213,13 @@ test.skipIf(!chromeFound)("a message's line breaks show: a break for a new line,
   await until(`[...document.querySelectorAll("#roomView .msg.you")].some((m) => m.querySelector(".text").innerHTML === "<p>one<br>two</p><p>three</p>")`);
 });
 
-test.skipIf(!chromeFound)("the rail folds and opens, and this browser remembers it", async () => {
-  const width = () => page.evaluate(`document.querySelector("#roomView .rthread").getBoundingClientRect().width`);
-  const open = await width();
-  await click("[data-rail-toggle]");
-  await until(`getComputedStyle(document.querySelector("#roomView .rvrail")).display === "none"`);
-  expect(await width()).toBeGreaterThan(open + 200);
-  expect(await page.evaluate(`localStorage.getItem("hq-room-rail")`)).toBe("folded");
-  expect(await page.evaluate(`document.querySelector("[data-rail-toggle]").getAttribute("aria-expanded")`)).toBe("false");
-  await load("#room/ope-9");
-  await until(inRoom("ope-9"));
-  expect(await page.evaluate(`getComputedStyle(document.querySelector("#roomView .rvrail")).display`)).toBe("none");
-  await click("[data-rail-toggle]");
-  await until(`getComputedStyle(document.querySelector("#roomView .rvrail")).display !== "none"`);
-  expect(await page.evaluate(`localStorage.getItem("hq-room-rail")`)).toBeNull();
-});
-
-test.skipIf(!chromeFound)("the strip draws the room's lanes at a table, and the office rests while a room covers it", async () => {
+test.skipIf(!chromeFound)("the seats name who is at the table: the owner at its head, then the owning lane and its members (by name when added together), each one selectable", async () => {
   await load("#room/ope-7");
   await until(inRoom("ope-7"));
-  const v = await page.evaluate(`(() => {
-    const c = document.querySelector("#roomView .rvpix"), g = c.getContext("2d"), d = g.getImageData(0, 0, c.width, c.height).data;
-    let colours = new Set(); for (let i = 0; i < d.length; i += 4 * 97) colours.add(d[i] << 16 | d[i + 1] << 8 | d[i + 2]);
-    return { w: c.width, h: c.height, cssW: c.getBoundingClientRect().width, colours: colours.size };
-  })()`);
-  expect(v.h).toBe(48 * 3);
-  expect(Math.abs(v.w / 3 * 2 - v.cssW)).toBeLessThan(4); // two screen pixels per art pixel
-  expect(v.colours).toBeGreaterThan(8);
+  const seats = await page.evaluate(`[...document.querySelectorAll("#roomView .rvseats .rlane")].map((b) => [b.querySelector("b").textContent, b.dataset.select ?? null])`);
+  expect(seats).toEqual([["Tester", null], ["alpha", "alpha"], ["bravo", "bravo"], ["golf", "golf"]]);
+  await page.evaluate(`document.querySelector('#roomView .rvseats [data-select="golf"]').click()`);
+  await until(`document.querySelector("#card h3")?.textContent === "golf"`);
 });
 
 test.skipIf(!chromeFound)("writing: to the owner by default, to a member with To:, kept for a lane that is away", async () => {
@@ -248,48 +242,76 @@ test.skipIf(!chromeFound)("writing: to the owner by default, to a member with To
   expect(thread.messages.slice(-3).map((m: any) => [m.to, m.delivery])).toEqual([["alpha", "sent"], ["golf", "sent"], ["bravo", "away"]]);
 });
 
-test.skipIf(!chromeFound)("phone: a full-screen room with CHAT, BRIEF and SHELF; no zoom, no sideways page; the thread opens at its newest and keeps your place", async () => {
+test.skipIf(!chromeFound)("phone: the room in the reader, full screen; no zoom, no sideways page; the thread opens at its newest and keeps your place", async () => {
   await size(390, 664, true);
   await load("#room/ope-7");
   await until(`!!document.querySelector("#roomView .rthread [data-rmsg]") && !!document.querySelector("#roomView .rbrief .md")`);
-  // The thread settles at its newest message once the view has its size (a frame after the room is drawn).
-  await until(`(() => { const t = document.querySelector("#roomView .rthread"); return t.scrollHeight - t.scrollTop - t.clientHeight < 2; })()`, 3000);
-  const shown = (sel: string) => `(() => { const e = document.querySelector(${JSON.stringify(sel)}); const r = e.getBoundingClientRect(); return getComputedStyle(e).display !== "none" && r.width > 0 && r.height > 0; })()`;
+  // The room settles at its newest message once the view has its size (a frame after the room is drawn).
+  const BODY = `document.querySelector("#roomView .rv-body")`;
+  await until(`(() => { const b = ${BODY}; return b.scrollHeight - b.scrollTop - b.clientHeight < 2; })()`, 3000);
   const v = await page.evaluate(`(() => {
-    const view = document.getElementById("roomView").getBoundingClientRect();
-    const t = document.querySelector("#roomView .rthread"), s = getComputedStyle(t), last = [...t.querySelectorAll("[data-rmsg]")].pop().getBoundingClientRect(), tr = t.getBoundingClientRect();
+    const view = document.getElementById("reader").getBoundingClientRect(), b = ${BODY}, br = b.getBoundingClientRect();
+    const last = [...document.querySelectorAll("#roomView .rthread [data-rmsg]")].pop().getBoundingClientRect();
     return {
       full: Math.round(view.left) === 0 && Math.round(view.top) === 0 && Math.round(view.width) === innerWidth && Math.round(view.height) === innerHeight,
-      tabs: [...document.querySelectorAll("#roomView [data-ptab]")].map((b) => b.textContent),
       select: parseFloat(getComputedStyle(document.querySelector("[data-room-to]")).fontSize),
       textarea: parseFloat(getComputedStyle(document.querySelector("#roomView .rsend textarea")).fontSize),
       sendInView: document.querySelector("[data-room-send]").getBoundingClientRect().bottom <= innerHeight,
       wide: document.documentElement.scrollWidth > innerWidth,
-      overflowY: s.overflowY, bounded: t.scrollHeight > t.clientHeight,
-      newest: last.bottom <= tr.bottom + 1 && last.top >= tr.top - 1,
+      overflowY: getComputedStyle(b).overflowY, bounded: b.scrollHeight > b.clientHeight,
+      newest: last.bottom <= br.bottom + 1 && last.top >= br.top - 1,
     };
   })()`);
-  expect(v).toEqual({ full: true, tabs: ["CHAT", "BRIEF", "SHELF (3)"], select: 16, textarea: 16, sendInView: true, wide: false, overflowY: "auto", bounded: true, newest: true });
-  expect(await page.evaluate(shown("#roomView .rvrail"))).toBe(false);
-  // BRIEF: the lanes, the work and the brief; SHELF: the shelf alone; CHAT again: the thread and the send box.
-  await click('[data-ptab="brief"]');
-  expect(await page.evaluate(`[${shown("#roomView .rbrief")}, ${shown("#roomView .rtop")}, ${shown("#roomView .rshelf")}, ${shown("#roomView .rthread")}]`)).toEqual([true, true, false, false]);
-  await click('[data-ptab="shelf"]');
-  expect(await page.evaluate(`[${shown("#roomView .rshelf")}, ${shown("#roomView .rbrief")}, ${shown("#roomView .rthread")}, document.querySelectorAll("#roomView .art").length]`)).toEqual([true, false, false, 3]);
-  await click('[data-ptab="chat"]');
-  expect(await page.evaluate(`[${shown("#roomView .rthread")}, ${shown("#roomView .rsend")}, ${shown("#roomView .rvrail")}]`)).toEqual([true, true, false]);
+  expect(v).toEqual({ full: true, select: 16, textarea: 16, sendInView: true, wide: false, overflowY: "auto", bounded: true, newest: true });
   // Reading older messages: a new one lands below, and what you read stays where it was.
-  await page.evaluate(`(() => { const t = document.querySelector("#roomView .rthread"); t.scrollTop = 0; t.dispatchEvent(new Event("scroll")); })()`);
   const first = `document.querySelector('#roomView .rthread [data-rmsg]')`;
+  await page.evaluate(`(() => { const b = ${BODY}; b.scrollTop += ${first}.getBoundingClientRect().top - b.getBoundingClientRect().top - 20; b.dispatchEvent(new Event("scroll")); })()`);
+  await Bun.sleep(100);
   const before = await page.evaluate(`[${first}.dataset.rmsg, ${first}.getBoundingClientRect().top]`);
   await server.post("/api/rooms/ope-7/say", { text: "One more finding, while you read." });
   await until(`[...document.querySelectorAll("#roomView .rthread [data-rmsg]")].some((m) => m.innerText.includes("while you read"))`);
   const after = await page.evaluate(`[${first}.dataset.rmsg, ${first}.getBoundingClientRect().top]`);
   expect(after[0]).toBe(before[0]);
   expect(Math.abs(after[1] - before[1])).toBeLessThan(2);
-  // The back button returns to the page as it was, with the questions.
+  // Content that lands late (a picture, a font, a message) makes the thread taller: at the newest it stays there,
+  // and once the owner has scrolled up the same growth leaves them where they put it.
+  const AT_FOOT = `(() => { const b = ${BODY}; return b.scrollHeight - b.scrollTop - b.clientHeight < 2; })()`;
+  const late = (px: number) => page.evaluate(`(() => { const pad = document.createElement("div"); pad.className = "late"; pad.style.height = "${px}px"; document.querySelector("#roomView .rthread").append(pad); })()`);
+  await page.evaluate(`(() => { const b = ${BODY}; b.scrollTop = b.scrollHeight; })()`);
+  await until(AT_FOOT, 3000);
+  await late(700);
+  await Bun.sleep(150);
+  expect(await page.evaluate(AT_FOOT)).toBe(true);
+  await page.evaluate(`(() => { const b = ${BODY}; b.scrollTop = b.scrollHeight - b.clientHeight - 400; })()`);
+  await Bun.sleep(150);
+  expect(await page.evaluate(`(() => { const b = ${BODY}; return b.scrollHeight - b.scrollTop - b.clientHeight; })()`)).toBeGreaterThan(40);
+  const put = await page.evaluate(`${BODY}.scrollTop`);
+  await late(700);
+  await Bun.sleep(150);
+  expect(await page.evaluate(`${BODY}.scrollTop`)).toBe(put);
+  // The close button returns to the page as it was, with the stack.
   await click("[data-room-back]");
   await until(inOffice);
-  expect(await page.evaluate(`getComputedStyle(document.documentElement).overflowY !== "hidden" && document.querySelector(".qwrap").getBoundingClientRect().height > 0`)).toBe(true);
+  expect(await page.evaluate(`getComputedStyle(document.documentElement).overflowY !== "hidden" && document.querySelector(".desk").getBoundingClientRect().height > 0`)).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test.skipIf(!chromeFound)("a shelf image shows as a picture only when this HUD serves it; one on another host is a link card, never fetched", async () => {
+  // A room of its own, with no lane messages, so the counts the tests above check stay as they are.
+  await server.post("/api/rooms", { slug: "ope-11", title: "Pictures", owner: "alpha" });
+  const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+  const up = await (await fetch(`${server.base}/api/uploads?name=chart.png`, { method: "POST", headers: { "content-type": "image/png", "x-hud": "1" }, body: png })).json();
+  await server.post("/api/rooms/ope-11/artifacts", { title: "Uploaded chart", url: new URL(up.url, server.base).href, kind: "image" });
+  await server.post("/api/rooms/ope-11/artifacts", { title: "Tracking pixel", url: "https://images.example.net/pixel.png", kind: "image" });
+  // A full load at the desktop size, not a hash change on the page as it is: its state may not have the new room yet.
+  await size(1440, 900, false);
+  await page.s("Page.navigate", { url: "about:blank" });
+  await load("#room/ope-11");
+  await until(`document.querySelectorAll("#roomView .rshelf .art").length === 2`);
+  const cards = await page.evaluate(`[...document.querySelectorAll("#roomView .rshelf .art")].map((a) => ({ title: a.querySelector(".at").textContent, img: a.querySelector("img")?.getAttribute("src") ?? null, href: a.querySelector("a")?.getAttribute("href") ?? null }))`);
+  expect(cards).toEqual([
+    { title: "Tracking pixel", img: null, href: "https://images.example.net/pixel.png" },
+    { title: "Uploaded chart", img: new URL(up.url, server.base).href, href: null },
+  ]);
+  expect(await page.evaluate(`performance.getEntriesByType("resource").some((e) => e.name.includes("images.example.net"))`)).toBe(false);
 });
