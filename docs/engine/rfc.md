@@ -1136,7 +1136,7 @@ done; step 4 has not started.
      seed, go to the engine with `setScenery`. The doc always lists the land pack, and while the land shows, the
      lot's ground takes the lawn (`LAWN`). Switching keeps the page and the WebGL context. A lot that changes lays the
      land again round it, keeping the last land (`landFor`'s `prev`). PERFORMANCE sets `setIdleFps` (smooth 30,
-     balanced 15, saver 0), so in a power saver the town holds still. `test/client/office-view.test.ts` checks city
+     balanced 15, saver 0), so in a power saver the town holds still. `test/client/world.test.ts` checks city
      under 220 calls and the switch to nature.
    - Left for later: traffic behaviour (cars wait at no junction or zebra, and walkers' legs do not swing) and paving
      textures (setts, slabs and asphalt are flat colours).
