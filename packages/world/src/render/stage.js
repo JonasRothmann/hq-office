@@ -97,11 +97,16 @@ export function createStage(canvas, { antialias = true } = {}) {
 
   function setShadowBox(b) { box = b; fitShadow(); }
 
-  // Lamps: one light per object with a light anchor, at `at` in world space, aimed straight down, lit by night only.
+  // Lamps: one light per object with a light anchor (or the host's, view.addLamp), at `at` in world space, aimed
+  // straight down, lit by night only. Each keeps its own base intensity and colour (null: the palette's `lamp`); its
+  // light is that base times the night. Spot lights, so the outdoor materials leave them out (materials.js).
   const lamps = new Set();
   let night = 0, lampColor = "#ffe3ad";
-  function addLamp(at) {
-    const l = new THREE.SpotLight(lampColor, LAMP.intensity * night, LAMP.reach, LAMP.angle, LAMP.penumbra, LAMP.decay);
+  const light = (l) => { const o = l.userData.lamp; l.intensity = o.intensity * night; l.color.set(o.color ?? lampColor); };
+  function addLamp(at, o = {}) {
+    const l = new THREE.SpotLight(lampColor, 0, o.reach ?? LAMP.reach, o.angle ?? LAMP.angle, o.penumbra ?? LAMP.penumbra, o.decay ?? LAMP.decay);
+    l.userData.lamp = { intensity: o.intensity ?? LAMP.intensity, color: o.color ?? null };
+    light(l);
     l.position.set(...at);
     l.target.position.set(at[0], 0, at[2]);
     scene.add(l, l.target);
@@ -109,6 +114,12 @@ export function createStage(canvas, { antialias = true } = {}) {
     l.target.updateMatrixWorld();
     lamps.add(l);
     return l;
+  }
+  // { intensity?, color? }: a new base; color null follows the palette again
+  function setLamp(l, o) {
+    if (o.intensity !== undefined) l.userData.lamp.intensity = o.intensity;
+    if (o.color !== undefined) l.userData.lamp.color = o.color;
+    light(l);
   }
   function removeLamp(l) { scene.remove(l, l.target); l.dispose(); lamps.delete(l); }
 
@@ -128,7 +139,7 @@ export function createStage(canvas, { antialias = true } = {}) {
     hemi.intensity = 1.2 * f;
     scene.background = new THREE.Color(palette?.bg ?? "#dfe6ea");
     lampColor = palette?.lamp ?? lampColor;
-    for (const l of lamps) { l.intensity = LAMP.intensity * night; l.color.set(lampColor); }
+    for (const l of lamps) light(l);
     fitShadow();
     return { night };
   }
@@ -138,5 +149,5 @@ export function createStage(canvas, { antialias = true } = {}) {
     renderer.setSize(bw, bh, false);
   }
 
-  return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, addLamp, removeLamp, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };
+  return { renderer, scene, sun, ambient, hemi, setTime, setShadowBox, resize, addLamp, setLamp, removeLamp, invalidateShadows: () => { renderer.shadowMap.needsUpdate = true; } };
 }

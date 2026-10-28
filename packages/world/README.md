@@ -2,7 +2,7 @@
 
 An engine for Sims-like 3D lots in the browser. You describe a lot as data: tiles, floors, walls on tile edges, doors and
 windows, objects from a catalog, characters, and what they do. The engine checks it, finds the rooms, plans walks
-through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, a ladder of 13 zoom
+through doors, and draws it with three.js in the Sims 1 view: orthographic, 30° down, four 90° turns, a ladder of 15 zoom
 stops, and walls up, cut away or down.
 
 There is no build step. The modules are plain ES modules. three.js is a peer: the host's import map maps `three` to
@@ -20,7 +20,12 @@ world.act("ada", { do: "visit", target: "chair-3", wait: 4, then: { do: "sit", t
 world.on("pick", (hit) => console.log(hit));   // { kind: "object" | "character" | "tile", id, tile }
 world.camera.fitBox(world.roomBox("kitchen")); // eased; camera.focusOn(x, z) centres on a point
 world.apply(nextDoc);                          // an edited doc: only what changed is rebuilt, the sim keeps running
+const lamp = world.addLamp([4.5, 2.4, 3.5]);   // a host's lamp: lit by night like the lamps in objects
+lamp.set({ intensity: 0 });                    // keep it and turn it off: removing a light recompiles shaders
 ```
+
+`createWorld(canvas, world, { hoverTarget: (hit) => id })` chooses which object's highlight shows for what the
+pointer is over (default: the object under it; null: none). `world.hover` still returns and emits the raw pick.
 
 ## Edits at run time
 
@@ -107,7 +112,7 @@ bun packages/world/tools/catalog.ts [path/to/pack/index.js]  # list objects: foo
 bun packages/world/tools/shot.ts path/to/x.world.js --rot 1 --zoom near --theme dark --time 21:00 --walls cutaway --advance 6000 --out x.jpg
 bun packages/world/tools/serve.ts                            # the lab: http://127.0.0.1:4791/?world=/path/x.world.js
 bun packages/world/tools/proof.ts --out shots                # the turn, pan, wall-mode, walk, night, sizing and idle proofs
-cd packages/world && bun test                                # the package's tests (no browser, no three.js)
+cd packages/world && bun test                                # the package's tests (no browser, except lamps.test.ts, which draws in Chrome when it finds one)
 ```
 
 `shot.ts` and `proof.ts` need Chrome (`CHROME_BIN` if it is not in the usual place); WebGL runs on SwiftShader, so no
@@ -117,7 +122,7 @@ GPU is needed. The tools find three.js through `--three`, `HQ_WORLD_THREE`, a `n
 ## Promises
 
 - The camera's height is constant during a turn, and the focus stays on the same screen point; turns never refit or zoom.
-- Zoom moves between the stops of `ZOOMS`, 16 to 128 px per metre, each about 19 % closer than the last. `ZOOM_STOPS`
+- Zoom moves between the stops of `ZOOMS`, 11.3 to 128 px per metre, each about 19 % closer than the last. `ZOOM_STOPS`
   names three (`far`, `mid`, `near`). A zoom toward the cursor keeps the ground under it within a device pixel, and a
   turn mid-zoom keeps the zoom's target.
 - The canvas's backing store is exactly its device-pixel box (ResizeObserver's `devicePixelContentBoxSize`, or a

@@ -1,4 +1,5 @@
-// The HUD runs without the 3D office: /?world=off never requests three.js or anything under world/, the question
+// The HUD runs without the 3D office: /?world=off never requests three.js, the engine (@hq/world) or the office that
+// is drawn on it (office/, office-view/), nor anything under world/ but its entry; the question
 // cards render and can be answered (a short one on its card, a long one in the reader), and there are no page errors. A page loaded without the flag in a Chrome with no
 // WebGL does the same, so work on the panels never pays for the world. Needs Chrome (CHROME_BIN); skipped without it.
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -17,9 +18,11 @@ const until = async (expr: string, ms = 8000) => {
 };
 const state = async () => (await fetch(`${server.base}/api/state`)).json();
 // Every resource the page asked for that belongs to the 3D office. The page always loads the world's entry (index.js,
-// the small switch that decides whether the world starts) and its stylesheet; everything else is the world itself.
+// the small switch that decides whether the world starts) and its stylesheet; everything else is the world itself:
+// three.js, the engine, the office's generator and its view.
 const WORLD_ENTRY = /^\/src\/client\/world\/(index\.js|world\.css)$/.source;
-const WORLD_RESOURCES = `performance.getEntriesByType("resource").map((r) => new URL(r.name).pathname).filter((p) => p.startsWith("/src/client/vendor/three/") || (p.startsWith("/src/client/world/") && !new RegExp(${JSON.stringify(WORLD_ENTRY)}).test(p)))`;
+const WORLD_DIRS = ["/src/client/vendor/three/", "/packages/world/", "/src/client/office/", "/src/client/office-view/"];
+const WORLD_RESOURCES = `performance.getEntriesByType("resource").map((r) => new URL(r.name).pathname).filter((p) => ${JSON.stringify(WORLD_DIRS)}.some((d) => p.startsWith(d)) || (p.startsWith("/src/client/world/") && !new RegExp(${JSON.stringify(WORLD_ENTRY)}).test(p)))`;
 // Every resource the page asked for that is a page module, so an empty list cannot mean nothing was measured.
 const PAGE_RESOURCES = `performance.getEntriesByType("resource").filter((r) => r.name.includes("/src/client/inbox/")).length`;
 
@@ -39,7 +42,7 @@ afterAll(async () => {
   await chrome?.close();
 });
 
-test.skipIf(!chromeFound)("?world=off: no resource of the world or of three.js is requested", async () => {
+test.skipIf(!chromeFound)("?world=off: no resource of the world, the engine or three.js is requested", async () => {
   expect(await page.evaluate(`document.documentElement.dataset.world`)).toBe("off");
   expect(await page.evaluate(PAGE_RESOURCES)).toBeGreaterThan(0);
   expect(await page.evaluate(WORLD_RESOURCES)).toEqual([]);
@@ -71,7 +74,7 @@ test.skipIf(!chromeFound)("?world=off: the question cards render and an answer g
   expect(errors).toEqual([]);
 });
 
-test.skipIf(!chromeFound)("without the flag and without WebGL, three.js is still not fetched", async () => {
+test.skipIf(!chromeFound)("without the flag and without WebGL, neither three.js nor the engine is fetched", async () => {
   await page.s("Page.navigate", { url: `${server.base}/` });
   await until(`document.querySelectorAll("#hud .item").length > 0 && window.__world?.unavailable === true`);
   expect(await page.evaluate(`document.documentElement.dataset.world`)).toBe("off");

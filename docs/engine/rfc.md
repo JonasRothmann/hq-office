@@ -18,7 +18,7 @@ Goals:
 - Lots on a 1 m tile grid: floors per tile, walls on tile edges, doors and windows as wall openings, rooms found from
   the walls, objects placed by catalog id, tile and facing, and characters that walk, sit and use things.
 - The Sims 1 view (`docs/research/sims1-look.md`): orthographic, 30° pitch (2:1 tile diamonds), yaw 45° + n·90°,
-  a ladder of 13 zoom stops from 16 to 128 px/m (far, mid and near at 22.6, 45.3, 90.5), walls 2.95 m with a 0.35 m kerb when cut, walls up / cutaway / down.
+  a ladder of 15 zoom stops from 11.3 to 128 px/m (far, mid and near at 22.6, 45.3, 90.5), walls 2.95 m with a 0.35 m kerb when cut, walls up / cutaway / down.
 - A picture that holds still: no shimmer when panning, no bob when turning, no z-fighting, no frame cap judder.
 - Agents can build worlds and objects in minutes, check them without a browser, and see them headlessly.
 
@@ -444,8 +444,9 @@ every 220 ms. The old renderer zooms freely with the wheel and feels finer. Free
 at any ppm), but `fitBox`, the lab's buttons and the shots would land on arbitrary scales. So the engine keeps
 stops, and makes them finer:
 
-- `ZOOMS` is `16·2^(k/4)` for k = 0..12, rounded to 0.1 px/m: 16 to 128, each stop about 19 % closer than the last.
-  The rounding keeps the old three values exactly, as stops 2, 6 and 10. `ZOOM_STOPS` names them `far`, `mid` and
+- `ZOOMS` is `16·2^(k/4)` for k = -2..12, rounded to 0.1 px/m: 11.3 to 128, each stop about 19 % closer than the last.
+  The two stops below 16 let a 12-lane office fit right of the reader at 1280×800 (316 px free inside the margins).
+  The rounding keeps the old three values exactly, as stops 4, 8 and 12. `ZOOM_STOPS` names them `far`, `mid` and
   `near`, so the lab's buttons, `shot.ts --zoom near` and old intent still read. `cam.zoom` is an index into the
   ladder, and the default is `mid`.
 - `fitCamera` (and `fitBox`) picks the closest stop at which the box fits at every rotation, from the whole ladder,
@@ -796,7 +797,7 @@ darkening), then rich (time of day, lamps, AO) only if a laptop keeps 60 fps whi
   with its fix and exits non-zero on errors. It also runs the coplanar lint on the world as built, for every rotation
   and wall mode.
 - **Errors that name the fix** (2.9), each with a stable `code` so tests and agents can match on it.
-- **A headless shot CLI.** `bun packages/world/tools/shot.ts <world> --rot 0..3 --zoom far|mid|near|0..12 --theme light|dark
+- **A headless shot CLI.** `bun packages/world/tools/shot.ts <world> --rot 0..3 --zoom far|mid|near|0..14 --theme light|dark
   --time 14:00 --walls up|cutaway|down --out x.jpg`. It serves the root and the package, opens the lab in headless
   Chrome on SwiftShader (the same approach as `scripts/room-hash.ts`, reimplemented in `tools/chrome.ts` because the
   package may not import the app), steps the world with a manual clock and writes the frame.

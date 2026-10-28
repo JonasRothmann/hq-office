@@ -3,14 +3,13 @@
 // subagent count and context; on the world, no two chips overlap and none touches the question column, at the
 // default and the far zoom; hover lifts a chip with the lane's title, a click selects the lane.
 //
-// The chips' content is HTML from the state and needs no world. Where they are drawn needs the page to mount the
-// world: the tests marked [world] check nothing (and print why) on a page without it (no window.__world).
-// WebGL runs on SwiftShader. Needs Chrome (CHROME_BIN to point at one); skipped without it.
+// The chips' content is HTML from the state and needs no world; where they are drawn is over the office, which the
+// page mounts. WebGL runs on SwiftShader. Needs Chrome (CHROME_BIN to point at one); skipped without it.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Cdp, findChrome, newSession, startServer } from "../../scripts/room-hash.ts";
+import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
 import { shortModel, tokens } from "../../src/client/desk-hud/format.js";
 import { crowding, place } from "../../src/client/desk-hud/layout.js";
 
@@ -50,22 +49,6 @@ describe("desk HUD placement", () => {
   });
 });
 
-// Chrome with WebGL on SwiftShader, as scripts/world-shots.ts starts it.
-async function startChrome() {
-  const bin = findChrome()!;
-  const profile = mkdtempSync(join(tmpdir(), "hq-deskhud-chrome-"));
-  const proc = Bun.spawn([bin, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--mute-audio", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"], { stdout: "ignore", stderr: "ignore" });
-  let port = "";
-  for (let i = 0; i < 300 && !port; i++) {
-    try { port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]; } catch {}
-    if (!port) await Bun.sleep(100);
-  }
-  if (!port) throw new Error("Chrome did not start");
-  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-  const cdp = await Cdp.open(version.webSocketDebuggerUrl);
-  return { cdp, close: async () => { cdp.ws.close(); proc.kill(); await proc.exited; rmSync(profile, { recursive: true, force: true }); } };
-}
-
 const chromeFound = !!findChrome();
 const claudeDir = mkdtempSync(join(tmpdir(), "hq-deskhud-claude-"));
 let chrome: Awaited<ReturnType<typeof startChrome>>;
@@ -84,15 +67,6 @@ const until = async (expr: string, ms = 60_000) => {
   for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(100)) if (await page.evaluate(expr).catch(() => false)) return true;
   throw new Error(`timed out waiting for ${expr}`);
 };
-
-// Whether the page has mounted the world. The chips' content needs no world; where they are drawn does. Until the
-// shell mounts it (the world lane's integration), the tests marked [world] check nothing and say so.
-let world: boolean | undefined;
-async function hasWorld(test: string) {
-  world ??= await until(`!!window.__world || !!document.querySelector("#deskHud[data-live]")`, 20_000).catch(() => false);
-  if (!world) console.warn(`desk HUD: skipped "${test}": the page has not mounted the world (no window.__world)`);
-  return world;
-}
 
 // The four lanes and what each reports. golf works with a blocking question open; bravo waits on the owner.
 const LANES = [
@@ -119,7 +93,7 @@ const CLASHES = `(() => {
 
 beforeAll(async () => {
   if (!chromeFound) return;
-  chrome = await startChrome();
+  chrome = await startChrome({ webgl: true });
   page = await newSession(chrome.cdp, errors); // first: on a loaded machine a tab opened later can take its time
   server = await startServer(ROOT, { HUD_CLAUDE_DIR: claudeDir, HUD_HQ_HINT: "0", HUD_GH_BIN: "false" });
   for (const l of LANES) await server.post("/api/lanes", { name: l.name, title: l.title, phase: l.name === "charlie" ? "waiting" : "running", machine: "local" });
@@ -171,9 +145,8 @@ test.skipIf(!chromeFound)("dark: the chips take the dark glass", async () => {
   await page.evaluate(`delete document.documentElement.dataset.theme`);
 }, SLOW);
 
-// [world]: from here on the chips are drawn on the world, so these need the page to mount it.
-test.skipIf(!chromeFound)("[world] every chip shows, none overlaps another, none touches the question column or the pill", async () => {
-  if (!(await hasWorld("every chip shows"))) return;
+// From here on the chips are drawn over the office: the page mounts it.
+test.skipIf(!chromeFound)("every chip shows, none overlaps another, none touches the question column or the pill", async () => {
   await until(`document.querySelectorAll("#deskHud .dh-chip:not([hidden])").length === 4`, 120_000);
   await Bun.sleep(1500); // let the camera's fit ease in
   await shot("mid");
@@ -183,8 +156,7 @@ test.skipIf(!chromeFound)("[world] every chip shows, none overlaps another, none
   expect(errors).toEqual([]);
 }, SLOW);
 
-test.skipIf(!chromeFound)("[world] hover lifts a chip to full with the lane's title; a click selects the lane", async () => {
-  if (!(await hasWorld("hover lifts a chip"))) return;
+test.skipIf(!chromeFound)("hover lifts a chip to full with the lane's title; a click selects the lane", async () => {
   const at = await page.evaluate(`(() => { const r = document.querySelector('#deskHud .dh-chip[data-lane="golf"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
   await page.s("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
   await until(`document.querySelector('#deskHud .dh-chip[data-lane="golf"]').classList.contains("hot")`);
@@ -200,8 +172,7 @@ test.skipIf(!chromeFound)("[world] hover lifts a chip to full with the lane's ti
   expect(errors).toEqual([]);
 }, SLOW);
 
-test.skipIf(!chromeFound)("[world] zoomed out, every chip is one compact line, and still none overlaps", async () => {
-  if (!(await hasWorld("zoomed out"))) return;
+test.skipIf(!chromeFound)("zoomed out, every chip is one compact line, and still none overlaps", async () => {
   // wheel out over a bare part of the world
   const at = await page.evaluate(`(() => { for (let y = 860; y > 100; y -= 20) for (let x = 470; x < 1400; x += 20) if (document.elementFromPoint(x, y)?.id === "world") return { x, y }; return null; })()`);
   expect(at).not.toBeNull();

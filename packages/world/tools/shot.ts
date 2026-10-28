@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Render a world file headlessly and save the frame, so an agent can see what it built.
 //
-//   bun packages/world/tools/shot.ts <world.js> [--rot 0..3] [--zoom far|mid|near|0..12] [--theme light|dark] [--time 14:00]
+//   bun packages/world/tools/shot.ts <world.js> [--rot 0..3] [--zoom far|mid|near|0..14] [--theme light|dark] [--time 14:00]
 //        [--walls up|cutaway|down] [--focus ROOM] [--focus-on x,z] [--advance MS] [--size 1280x800] [--clean]
 //        [--root DIR] [--out shot.jpg]
 //

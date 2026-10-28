@@ -1,6 +1,6 @@
 // The office's layout, pure (no three.js, no engine): lanes in; team rooms of up to four desks, the HQ suite, the hall,
-// the break area, walls, doors and the growth stage out, with stable places. Today's 3D office
-// (src/client/world/plan.js) and the world doc generator (plan.js here) both read it.
+// the break area, walls, doors and the growth stage out, with stable places. The world doc generator (plan.js here)
+// reads it.
 //
 // Units are metres and one tile is one metre. x runs east, z runs south; a room is a rect of whole tiles.
 // A team (a top-level lane and everyone under it in the lane tree) shares a room; a team of more than four opens

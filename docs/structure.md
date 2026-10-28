@@ -7,7 +7,8 @@ own file, keeps the contracts between them in a few small modules, and lets a ne
 
 The split was done by `scripts/restructure.ts`, mechanically: every statement kept its text, its comments and its
 order. Only `export`, the imports and a few setters were added. The page computed the same styles as before the split.
-Since then the pixel room has been replaced by a three.js office (`src/client/world/`).
+Since then the pixel room has been replaced by a 3D office, drawn on the `@hq/world` engine (`packages/world/`,
+`src/client/office/`, `src/client/office-view/`) and mounted by `src/client/world/`.
 
 ## The map
 
@@ -20,8 +21,11 @@ public/index.html         the page shell: head, markup, <script type="module" sr
 src/client/               the page, plain ES modules and stylesheets, served as they are
   main.js                 loads every built-in area in the old order
   core/                   shared by every area: state, net, bus, formatting, rich text, base styles, layout
-  world/                  the 3D office (three.js): plan, rooms, furniture, people, camera, scene, api
-  office-view/            the office on the @hq/world engine, behind the OFFICE setting (D18): view.js
+  world/                  the page's side of the 3D office: index.js (mounts it, insets, keys, turn buttons,
+                          window.__world), api.js (the door other areas use), world.css
+  office/                 the office as a world doc for the @hq/world engine, pure: layout, plan, furnish, acts,
+                          the japandi pack, the land round it (outside/)
+  office-view/            the office on the engine in the page (D18): view.js (mountOffice) and its parts
   theme/                  light, dark or system theme
   vendor/three/           three.js r186, vendored (the page's import map points "three" here)
   inbox/                  the owner's inbox: the stack, the pills, the keys, drafts and the page clock
@@ -39,7 +43,7 @@ src/server/               the server, one file per concern
 test/                     the tests that were there, unchanged
   server/ client/         the server starts and serves; modules link; the page works; the office draws
 scripts/                  restructure.ts (the split), room-hash.ts (Chrome, test server and clock tools for browser tests),
-                          world-lab.ts, world-shots.ts, world-page-shots.ts, shell-shots.ts (the lab and screenshots)
+                          office-shots.ts, shell-shots.ts (screenshots)
 docs/                     this file
 ```
 
@@ -67,8 +71,8 @@ The contracts, the things several areas agree on, each live in one small module 
 | Events on the page | `src/client/core/bus.js` | `state`, `tick`, `theme`, `world:ready`, `world:select`, ...: where a feature hooks in |
 | Status words and colours | `src/client/core/status.js`, `src/server/lanes.ts` (`laneStatus`) | `needs_you`, `hq_turn`, `moving`, ... |
 | The office's door | `src/client/world/api.js` | `THREE`, `onFrame`, `deskAnchor`, `project`, `addToWorld`; the `world:*` events |
-| The office's layout | `src/client/world/plan.js` | pure: rooms, walls, cutaway, growth stages by lane count |
-| The office's colours and poses | `src/client/world/look.js` | colour tokens per theme, status colours, poses |
+| The office's layout | `src/client/office/layout.js` | pure: team rooms, walls, doors, growth stages by lane count |
+| The office as a world doc | `src/client/office/plan.js` (`officeDoc`), `src/client/office/acts.js` | stable ids per lane (`desk:<lane>`, ...); the act per status, a table |
 
 Mutable state that another module changes has a setter in the module that owns it (`setS`, ...): an imported binding is read-only, and a setter makes every outside write visible in a search.
 
@@ -136,8 +140,8 @@ an existing table is still a careful by-hand migration; the files only make new 
   reached from `main.js` or a feature's `index.js`, every file opens with a comment.
 - `test/client/page.test.ts`: in Chrome at 1440x900, no console errors, no page scroll, an answer and a note reach
   the server, the tabs, the worker card, settings and sound respond.
-- `test/client/world-plan.test.ts`: the office's plan (team rooms of four, stable desks, walls, cutaway, growth
-  stages), pure, no browser.
+- `test/client/office-plan.test.ts`: the office's layout (team rooms of four, stable desks, doors, growth stages) and
+  its world doc (valid, no z-fighting, a diff only where the layout moved), pure, no browser.
 - `test/client/world.test.ts`: in Chrome with WebGL on SwiftShader (`startChrome({ webgl: true })` from
   `scripts/room-hash.ts`): one desk per lane in team rooms at 1, 4, 9 and 18 lanes, a team of six in two rooms, the
   canvas draws, the walls nearest the camera are low and recomputed after a turn, clicking a worker opens its card and

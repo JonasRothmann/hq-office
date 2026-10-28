@@ -1,9 +1,13 @@
 # The land around the office
 
 Two seeded surroundings for the 3D office: a valley (`nature`) and a town (`city`). They frame the office and
-never reach into its lot. Code: `src/client/world/outside/`. Tests: `test/client/outside.test.ts`. Lab:
-`bun scripts/world-lab.ts`, then open `/docs/design/world-lab.html?scene=outside&mode=city&seed=7&lot=24x14`.
-Shots: `bun scripts/world-shots.ts --only=outside-` writes the JPEGs in this folder.
+never reach into its lot. Code: `src/client/office/outside/` (`gen.js` and `city.js` generate it, `scenery.js` and
+the land pack in `land/` draw it on the engine). Tests: `test/client/outside.test.ts`.
+
+These notes were written for the first office's renderer, since removed. Its half that drew the land (`build.js`,
+`city-build.js`, `movers.js`, `palette.js`, `outside.js` below), the lab that measured it and the script that took the
+JPEGs in this folder went with it; the JPEGs stay as a record. `bun scripts/office-shots.ts` shoots the land on the
+real page today (`docs/screens/office-wide-*.jpg` and `office-city-*.jpg`).
 
 ## How it works
 
@@ -82,66 +86,3 @@ gets 10 m of headroom, so offices added one at a time regenerate the land every 
 Generation takes 25–90 ms for nature (river and path distances are bucketed) and under 10 ms for the city. Nothing
 casts a real-time shadow. An InstancedMesh is culled as a whole, so these counts hold at every zoom. Parked bikes are the
 town's biggest triangle cost, so racks stand only in short rows near the lot.
-
-## Wiring it into the world (for the lead, at merge time)
-
-In `src/client/world/world.js`:
-
-```js
-import { mountOutside } from "./outside/outside.js";
-
-// The garden round the building that belongs to the office (the lot scatter, the garden lane). Nothing outside
-// comes nearer than this to the plan's bounds.
-const LOT_MARGIN = 6;
-const lotOf = (b) => ({ minX: b.minX - LOT_MARGIN, minZ: b.minZ - LOT_MARGIN, maxX: b.maxX + LOT_MARGIN, maxZ: b.maxZ + LOT_MARGIN, door: "s" });
-
-// in mountWorld, beside the other state:
-let outside = null, outsideMode = opts.outside ?? "nature", outsideSeed = opts.outsideSeed ?? "hq";
-
-// in build(), right after sc.setLights(L, p.bounds):
-if (outsideMode !== "off") {
-  if (!outside) outside = mountOutside(sc.scene, { mode: outsideMode, seed: outsideSeed, lot: lotOf(p.bounds), theme: L });
-  else outside.setLot(lotOf(p.bounds)); // a no-op unless the office outgrew its land
-}
-
-// in setTheme(t), before `if (p) build();`:
-outside?.setTheme(L);
-
-// in tick(), just before runFrame(now, dt):
-outside?.update(now, dt);
-
-// a new API method, listed in `api`:
-function setOutside(mode, seed) {
-  outsideMode = mode ?? outsideMode; outsideSeed = seed ?? outsideSeed;
-  if (outsideMode === "off") { outside?.dispose(); outside = null; if (p) sc.setLights(L, p.bounds); }
-  else if (!outside && p) outside = mountOutside(sc.scene, { mode: outsideMode, seed: outsideSeed, lot: lotOf(p.bounds), theme: L });
-  else { outside?.setMode(outsideMode); outside?.setSeed(outsideSeed); }
-  dirty = true;
-}
-
-// in dispose(): outside?.dispose();
-```
-
-`theme: L` passes the look tokens, so the lawn round the lot takes `L.ground.base` and the night takes `L.moon`, the
-same as the garden. In `src/client/world/index.js`, delete the bare `import "./outside/outside.js";` (it is there
-only so the module check reaches the folder before world.js imports it). Then pass the setting:
-
-```js
-world = mountWorld(canvas, { theme: effectiveTheme(), hq: hq.name, insets: insets(), outside: settings.outside, outsideSeed: settings.outsideSeed ?? (CONFIG.owner || "hq") });
-on("settings", (s) => { world.setPerformance(s.performance); world.setOutside(s.outside, s.outsideSeed ?? (CONFIG.owner || "hq")); });
-```
-
-In `src/client/settings/prefs.js`, add `outside: "nature"` to `DEFAULTS` and `OUTSIDE_CHOICES = ["nature", "city",
-"off"]`, checked in `withDefaults` like `performance`. Add `outside: OUTSIDE_CHOICES` to `SETTING_OPTIONS` in
-`panel.js`. No server change is needed: settings are free-form keys. The owner's name as the seed gives every
-installation its own land, stable across reloads. An optional `outsideSeed` setting lets the owner reroll it.
-
-Notes for the wiring:
-
-- In POWER SAVER the world draws only when something changes, so the outside's cars and water stand still. Leave
-  them out of `busy`.
-- `LOT_MARGIN` must cover whatever the garden lane draws round the building. Today `scatterLot` reaches about 4.5 m
-  past the bounds. If the garden grows, raise the margin. The outside follows on its next regeneration.
-- `outside.layout.path.entry` is where the nature path meets the lot's edge (the middle of the door side). A garden
-  path that ends there joins it.
-- `world.inspect()` can report `outside?.inspect()` (mode, seed, generated lot, meshes, instances) for tests.
