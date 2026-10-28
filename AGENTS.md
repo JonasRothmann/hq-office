@@ -52,7 +52,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - Do not reformat, rename or reorder code in files you do not own.
 - A change to the office must keep `bun test --timeout 90000 test/client/world.test.ts` passing (needs Chrome; WebGL runs on SwiftShader).
 - `bun test` passes before every commit; `test/client/modules.test.ts` catches a broken import before a browser does.
-- Work on the panels does not need the 3D office. Open `/?world=off`: the office is never imported, so neither three.js nor the engine is fetched. In a test, start Chrome with `startChrome()` and no `webgl`, and load `/?world=off`. Run `bun run test:hud`. Only office work needs `bun run test:world` (it runs the tests that use WebGL). Before a commit, `bun test` still runs both.
+- Work on the panels does not need the 3D office. Open `/?world=off`: the office is never imported, so neither three.js nor the engine is fetched. In a test, start Chrome with `startChrome()` and no `webgl`, and load `/?world=off`. Run `bun run test:hud`. Only office work needs `bun run test:world` (every office and engine test, the WebGL ones among them). Before a commit, `bun test` still runs both.
 
 ## How to add
 
