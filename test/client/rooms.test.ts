@@ -273,6 +273,22 @@ test.skipIf(!chromeFound)("phone: the room in the reader, full screen; no zoom, 
   const after = await page.evaluate(`[${first}.dataset.rmsg, ${first}.getBoundingClientRect().top]`);
   expect(after[0]).toBe(before[0]);
   expect(Math.abs(after[1] - before[1])).toBeLessThan(2);
+  // Content that lands late (a picture, a font, a message) makes the thread taller: at the newest it stays there,
+  // and once the owner has scrolled up the same growth leaves them where they put it.
+  const AT_FOOT = `(() => { const b = ${BODY}; return b.scrollHeight - b.scrollTop - b.clientHeight < 2; })()`;
+  const late = (px: number) => page.evaluate(`(() => { const pad = document.createElement("div"); pad.className = "late"; pad.style.height = "${px}px"; document.querySelector("#roomView .rthread").append(pad); })()`);
+  await page.evaluate(`(() => { const b = ${BODY}; b.scrollTop = b.scrollHeight; })()`);
+  await until(AT_FOOT, 3000);
+  await late(700);
+  await Bun.sleep(150);
+  expect(await page.evaluate(AT_FOOT)).toBe(true);
+  await page.evaluate(`(() => { const b = ${BODY}; b.scrollTop = b.scrollHeight - b.clientHeight - 400; })()`);
+  await Bun.sleep(150);
+  expect(await page.evaluate(`(() => { const b = ${BODY}; return b.scrollHeight - b.scrollTop - b.clientHeight; })()`)).toBeGreaterThan(40);
+  const put = await page.evaluate(`${BODY}.scrollTop`);
+  await late(700);
+  await Bun.sleep(150);
+  expect(await page.evaluate(`${BODY}.scrollTop`)).toBe(put);
   // The close button returns to the page as it was, with the stack.
   await click("[data-room-back]");
   await until(inOffice);

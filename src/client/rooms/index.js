@@ -396,7 +396,9 @@ body.addEventListener("scroll", () => {
   showEdges(body);
 }, { passive: true });
 body.addEventListener("load", toEnd, true);
-new ResizeObserver(toEnd).observe(body);
+// The body's own box does not grow with what is in it (it scrolls): watch its sections too, so late content re-pins.
+const grow = new ResizeObserver(toEnd);
+for (const el of [body, ...body.children]) grow.observe(el);
 on("attach", (k) => { if (openSlug && k === key(openSlug)) sendState(); });
 on("more", (k) => { if (openSlug && String(k).startsWith("room") && detail) renderThread(detail, roomOf(openSlug)); });
 on("state", (S, keys) => { if (!keys || keys.has("rooms")) route(); });
