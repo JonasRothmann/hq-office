@@ -36,7 +36,7 @@ const until = async (expr: string, ms = 60_000) => {
   for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(50)) if (await page.evaluate(expr).catch(() => false)) return true;
   throw new Error(`timed out waiting for ${expr}`);
 };
-// What alpha's worker does: its pose, whether it is out of its office, and the badge over its head.
+// What alpha's worker does: its pose (the clip it loops), whether it is off to the break area, and its badge.
 const PROBE = `(() => { const w = __world.worker("alpha"); return { pose: w.pose, out: w.out, marker: w.marker }; })()`;
 
 beforeAll(async () => {
@@ -64,8 +64,8 @@ test.skipIf(!chromeFound)("a blocked lane: BLOCKED in the top bar, a raised hand
   await until(`!!document.querySelector("#sBlocked:not([hidden])")`);
   expect(await page.evaluate(`document.querySelector("#sBlocked .k").textContent + " " + document.querySelector("#sBlocked .v").textContent`)).toBe("BLOCKED 1");
   // The office: beside its desk, hand raised, under the red badge.
-  await until(`(${PROBE}).pose === "raise"`);
-  expect(await page.evaluate(PROBE)).toEqual({ pose: "raise", out: null, marker: { color: "#e5484d", glyph: "!" } });
+  await until(`(${PROBE}).pose === "wave"`);
+  expect(await page.evaluate(PROBE)).toEqual({ pose: "wave", out: false, marker: { color: "#e5484d", glyph: "!" } });
   // The card: clicking the count selects the lane, and its card shows what it asks and where.
   await page.evaluate(`document.querySelector("#sBlocked").click()`);
   await until(`!!document.querySelector("#card .prompt")`);

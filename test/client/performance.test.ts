@@ -42,7 +42,10 @@ beforeAll(async () => {
   for (let i = 0; i < 600 && !(await page.evaluate("!!window.__hq && __hq.ready() && window.__world?.desks?.length === 4").catch(() => false)); i++) await Bun.sleep(100);
   await page.evaluate("document.fonts.ready.then(() => true)");
   await page.evaluate(`__hq.advance(20, ${STEP})`); // the first frames: state, the camera settling
-}, 120_000);
+  // the workers walk in to their chairs: the office is idle once every one sits typing
+  for (let i = 0; i < 40 && !(await page.evaluate(`__world.desks.every((l) => __world.worker(l)?.step === "loop") && !__world.inspect().turning`)); i++) await page.evaluate(`__hq.advance(30, ${STEP})`);
+  await page.evaluate(`__hq.advance(10, ${STEP})`);
+}, 600_000);
 
 afterAll(async () => {
   await server?.stop();
