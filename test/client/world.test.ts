@@ -7,8 +7,9 @@
 // and badges grow and still draw; rooms of four, more rooms as the company grows (spec F3), a team of six in a second
 // room beside its first; beside the open reader the office keeps right of it and keeps moving, and on a phone it rests;
 // the walls nearest the camera cut down to the kerb and recomputed after a quarter turn (F4); OUTSIDE puts the town
-// round the office within the draw budget and swaps it for the valley on the same context. No console errors. Needs
-// Chrome.
+// round the office within the draw budget and swaps it for the valley on the same context; a lane removed or renamed
+// while it works, and the theme flipped, log nothing; a click on a worker's badge opens its card. No console errors.
+// Needs Chrome.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { findChrome, newSession, startChrome, startServer } from "../../scripts/room-hash.ts";
@@ -387,5 +388,58 @@ test.skipIf(!chromeFound)("the walls nearest the camera are low, and a quarter t
   expect(after.every((s) => s === "en")).toBe(true);
   await key("q");
   await until(`__world.rotation === 0 && !__world.inspect().turning`);
+  expect(errors).toEqual([]);
+}, SLOW);
+
+// A lane removed while it works (its act is pending): the office drops its desk and logs nothing.
+test.skipIf(!chromeFound)("a lane removed while it works leaves the office and logs no console error", async () => {
+  const n = await page.evaluate("__world.desks.length");
+  expect(await page.evaluate(`__world.desks.includes(${q(name(5))})`)).toBe(true);
+  await server.post("/api/lanes/delete", { name: name(5) });
+  await until(`__world.desks.length === ${n - 1} && !__world.desks.includes(${q(name(5))})`);
+  expect(errors).toEqual([]);
+}, SLOW);
+
+test.skipIf(!chromeFound)("a lane renamed (removed, and another added in its place) logs no console error", async () => {
+  const n = await page.evaluate("__world.desks.length");
+  await server.post("/api/lanes/delete", { name: name(6) });
+  await server.post("/api/lanes", { name: `${name(6)}-renamed`, phase: "waiting", title: "Renamed", machine: "local" });
+  await until(`__world.desks.length === ${n} && __world.desks.includes(${q(`${name(6)}-renamed`)}) && !__world.desks.includes(${q(name(6))})`);
+  expect(errors).toEqual([]);
+}, SLOW);
+
+// The badge over a worker, in client px where a click on its disc lands, for a lane with a badge and a canvas
+// point nothing covers. The badge sprite names its worker (view.js's marks.js sets userData.entity).
+const BADGE_POINT = `(async () => {
+  const { THREE, project } = await import("/src/client/world/api.js");
+  const c = document.getElementById("world"), r = c.getBoundingClientRect();
+  const sprites = [];
+  __scene.getObjectByName("characters").traverse((o) => { if (o.name === "marker" && o.userData.entity) sprites.push(o); });
+  for (const b of sprites) {
+    const lane = b.userData.entity.replace(/^lane:/, "");
+    if (!__world.desks.includes(lane) || !__world.worker(lane).marker) continue;
+    const p = b.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.31, 0)); // the disc's middle, above its tail
+    const q = project(p), x = r.left + q.x, y = r.top + q.y;
+    if (q.visible && document.elementFromPoint(x, y) === c) return { lane, x, y };
+  }
+  return null;
+})()`;
+
+test.skipIf(!chromeFound)("clicking a worker's badge opens its card, as a click on the worker does", async () => {
+  await page.evaluate(SCENE);
+  await until(`!!window.__cam`);
+  const target = await page.evaluate(BADGE_POINT);
+  expect(target).not.toBeNull();
+  for (const type of ["mousePressed", "mouseReleased"]) await page.s("Input.dispatchMouseEvent", { type, x: target.x, y: target.y, button: "left", clickCount: 1 });
+  await until(`document.querySelector("#card h3")?.textContent === ${q(target.lane)} && !document.getElementById("card").hasAttribute("data-closed")`);
+  await key("Escape");
+  await until(`document.getElementById("card").hasAttribute("data-closed")`);
+  expect(errors).toEqual([]);
+}, SLOW);
+
+test.skipIf(!chromeFound)("flipping the theme twice redraws the office and logs no console error", async () => {
+  const frames = await page.evaluate("__world.inspect().frames");
+  for (let i = 0; i < 2; i++) await page.evaluate(`document.getElementById("themeBtn").click()`);
+  await until(`document.documentElement.dataset.theme === "dark" && __world.inspect().frames > ${frames}`);
   expect(errors).toEqual([]);
 }, SLOW);
