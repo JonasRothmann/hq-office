@@ -55,6 +55,8 @@ All notable changes to `@hq/world`'s public API (the names in `api.txt` and the 
   shadow map (movers cast no shadows). Its clock runs only while `idleFps` is above 0, so at 0 the land holds still
   (a power saver) instead of jumping ahead when something else draws. `view.setIdleFps(fps)` changes the rate while
   the view runs. `inspect()` reports `scenery: { pieces, batches, movers, time }`.
+- `createWorld` takes `pickable(id)`: a hit on an object or character it refuses is skipped, and `pick` returns what
+  is behind it, so a piece in front of a character no longer swallows the click. Default: everything is pickable.
 
 ### Fixed
 

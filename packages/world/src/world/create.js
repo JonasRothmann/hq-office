@@ -41,6 +41,10 @@ const STEP = 1000 / 60;   // ms, the simulation step of the manual clock
  *                                           host's panels cover: the view centres in the rest, and fits into it
  * @property {boolean} [startActs]           run the world's acts at once (default true)
  * @property {import("../sim/ecs.js").System[]} [systems]   the host's own systems, run after the engine's step systems
+ * @property {(id: string) => boolean} [pickable]   whether a hit on this object or character counts. A hit that does not
+ *                                           count is skipped, and pick returns what is behind it (the next hit, or a
+ *                                           tile), so a piece in front of a character does not swallow the click.
+ *                                           Default: every object and character is pickable
  * @property {(hit: { kind: "object"|"character"|"tile", id?: string, tile: number[] } | null) => string|null} [hoverTarget]
  *                                           which object's highlight shows for what the pointer is over (what pick
  *                                           returns, or null): an object id, or null for none. An id that is not an
@@ -57,6 +61,7 @@ export function createWorld(canvas, world, opts = {}) {
   const events = new Map();
   let hovered = null;
   const hoverTarget = opts.hoverTarget ?? ((hit) => (hit?.kind === "object" ? hit.id : null));
+  const pickable = opts.pickable ?? (() => true);
   const emit = (name, data) => { for (const fn of events.get(name) ?? []) { try { fn(data); } catch (e) { console.error(`world ${name} handler failed`, e); } } };
 
   // --- size: the backing store is the canvas's device-pixel box exactly
@@ -380,7 +385,7 @@ export function createWorld(canvas, world, opts = {}) {
     const x = clientX - r.left, y = clientY - r.top;
     ray.setFromCamera(new THREE.Vector2((x / r.width) * 2 - 1, -(y / r.height) * 2 + 1), camera);
     for (const m of meshes.values()) m.refreshBounds();
-    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => { const id = entityOf(h); return id && !hung.has(id); }); // not a piece hidden on a cut wall
+    const hit = ray.intersectObjects([charGroup, objectsGroup], true).find((h) => { const id = entityOf(h); return id && !hung.has(id) && pickable(id); }); // not a piece hidden on a cut wall, nor one the host does not pick
     const ground = unproject(pose, [x, y], FLOOR_Y);
     const tile = [Math.floor(ground[0]), Math.floor(ground[2])];
     const lot = driver.lot;
