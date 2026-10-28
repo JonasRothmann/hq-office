@@ -6,8 +6,8 @@ the land pack in `land/` draw it on the engine). Tests: `test/client/outside.tes
 
 These notes were written for the first office's renderer, since removed. Its half that drew the land (`build.js`,
 `city-build.js`, `movers.js`, `palette.js`, `outside.js` below), the lab that measured it and the script that took the
-JPEGs in this folder went with it; the JPEGs stay as a record. `bun scripts/world-page-shots.ts` shoots the land on the
-real page today (`docs/screens/world-*.jpg`).
+JPEGs in this folder went with it; the JPEGs stay as a record. `bun scripts/office-shots.ts` shoots the land on the
+real page today (`docs/screens/office-wide-*.jpg` and `office-city-*.jpg`).
 
 ## How it works
 

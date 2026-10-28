@@ -337,3 +337,35 @@ The open questions, answered:
 The walk: `src/client/office/acts.js` has a `visit-lead` row, marked `off`, and `actFor(..., { visitLead })` uses it
 for `with_lead`. A later setting turns it on. The walk itself needs a visit pose, a general errand and same-room
 routing first (the proposal lists them).
+
+## D21. The engine office is the only office
+
+The office on `@hq/world` (`src/client/office-view/`, D18) reached the classic renderer's features, so it became the
+only office and the classic renderer was deleted in the same change, with no way back to it.
+
+- **Removed.** The OFFICE setting and its row, the `?office=` parameter and the reload that switched renderers;
+  `src/client/world/` except `index.js` (the page's side: insets, keys, turn and fit buttons, `window.__world`),
+  `api.js` (the door other areas use) and `world.css`; `world/outside/`, the classic lab (`scripts/world-lab.ts`,
+  `docs/design/world-lab.html`, `showroom.js`, `outside/lab.html`), `scripts/world-shots.ts`, the RoundedBoxGeometry
+  addon and `test/client/world-plan.test.ts` (its layout checks moved to `office-plan.test.ts`). The subagent balls
+  moved to `office-view/balls.js`. A server that still holds an `office` setting keeps it unused. The page always keeps
+  the office right of the open reader.
+- **Light at night.** Each team room and the HQ suite get one host lamp over their middle (`view.addLamp`, a new
+  engine call: a spot light lit by night only, left out of the land outside). A room is lit while any of its lanes
+  is active and dim when all are parked or gone, as the classic office did. A dim lamp is set to 0, never removed,
+  because a change in the number of lights recompiles every shader (`office-view/lamps.js`).
+- **Status lights and badges.** A small paper lantern on each live desk glows in its lane's status colour (the
+  colours the HUD uses). Over the worker hangs the classic badge: a round disc with a short tail and a glyph, never a
+  diamond or crystal. Red `!` when the lane waits on the owner (or any of its questions blocks), amber `hq` on HQ's
+  turn, a clock while it waits on CI or its lead. A worker waiting on the owner also stands and waves beside its desk
+  (`office/acts.js`), so it reads differently from one that types (`office-view/marks.js`).
+- **Fit right of the reader.** With 13 zoom stops from 16 px per metre, a 12-lane office (an indoor box of 26 by
+  12 m) did not fit right of the open reader at 1280 by 800 (364 px free) and only just at 1440 by 900. The engine's
+  ladder gained two stops below 16 (11.3 and 13.5), on the same 2^(1/4) steps; the named stops keep their scale.
+  The office stays small there, and the desk chips name every lane.
+- **Hover.** The engine highlighted any object under the pointer. A new `hoverTarget` option chooses what a hover
+  highlights: a live lane's desk or chair, and its desk when the pointer is on the worker. Other furniture, empty
+  desks and the land highlight nothing.
+- **Seen from far.** Subagent balls, desk lanterns and badges keep a minimum size on screen (4 px radius for a ball)
+  however far the camera is (`office-view/size.js`), and the balls are unlit, so they read in both themes.
+- **Tests.** `test/client/world.test.ts` covers the engine office, with `office-view.test.ts` folded into it.
