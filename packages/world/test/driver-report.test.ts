@@ -40,6 +40,16 @@ test("a character removed while her doc act is pending: the act is over and noth
   expect(errors).toEqual([]);
 });
 
+test("an act started at load, its character removed while it works: nothing is logged", async () => {
+  const d = createDriver(withBo(), { size: { w: 1280, h: 800, dpr: 1 } });
+  d.startActs();
+  run(d, 500);
+  expect(d.sim.characters()).toContain("bo");
+  const errors = await logged(() => { d.apply(quiet); run(d, 500); });
+  expect(d.sim.characters()).not.toContain("bo");
+  expect(errors).toEqual([]);
+});
+
 test("a doc act refused for another reason is still logged", async () => {
   const d = createDriver(quiet, { size: { w: 1280, h: 800, dpr: 1 } });
   d.sim.act("ada", { do: "sit", target: "chair-2" });

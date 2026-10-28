@@ -59,6 +59,8 @@ export function createDriver(world, opts = {}) {
   const stats = { frames: 0, renders: 0, shadows: 0 };
   let lastDraw = -Infinity;
   const report = (e) => console.error(`@hq/world: ${e?.message ?? e}`);
+  // A doc act whose character was removed is over, which is what the edit meant: only other refusals are reported.
+  const reportAct = (e) => { if (!e?.problems?.some((p) => p.code === "character.removed")) report(e); };
 
   // The cut walls: worked out again only when what they depend on changes, so a still view costs no cutaway pass.
   let cutKey = "", cutText = "", cut = new Set(), lotRev = 0;
@@ -111,7 +113,7 @@ export function createDriver(world, opts = {}) {
     sim, cam, stats,
 
     /** Run the world's own acts (createWorld does, unless startActs is false). */
-    startActs() { for (const a of current.doc.acts) sim.act(a.who, a, { doc: true }).catch(report); },
+    startActs() { for (const a of current.doc.acts) sim.act(a.who, a, { doc: true }).catch(reportAct); },
 
     /**
      * One frame of dtMs at time now (ms): step the camera and the sim, then say what to draw.
@@ -168,8 +170,7 @@ export function createDriver(world, opts = {}) {
         cam.focus = [Math.min(cam.focus[0], lot.w), Math.min(cam.focus[1], lot.d)]; // a lot that shrank; no refit
       }
       current = nextWorld; key = k;
-      // a doc act whose character was removed is over, which is what the edit meant: only other refusals are reported
-      for (const a of diff.acts) sim.act(a.who, a, { doc: true }).catch((e) => { if (!e?.problems?.some((p) => p.code === "character.removed")) report(e); });
+      for (const a of diff.acts) sim.act(a.who, a, { doc: true }).catch(reportAct);
       invalidate({ shadows: true });
       return diff;
     },
