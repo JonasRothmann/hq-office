@@ -168,7 +168,8 @@ export function createDriver(world, opts = {}) {
         cam.focus = [Math.min(cam.focus[0], lot.w), Math.min(cam.focus[1], lot.d)]; // a lot that shrank; no refit
       }
       current = nextWorld; key = k;
-      for (const a of diff.acts) sim.act(a.who, a, { doc: true }).catch(report);
+      // a doc act whose character was removed is over, which is what the edit meant: only other refusals are reported
+      for (const a of diff.acts) sim.act(a.who, a, { doc: true }).catch((e) => { if (!e?.problems?.some((p) => p.code === "character.removed")) report(e); });
       invalidate({ shadows: true });
       return diff;
     },
