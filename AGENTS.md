@@ -41,7 +41,7 @@ what it is for. `docs/structure.md` explains the layout and its trade-offs.
 - `src/server/routes/`: one file per resource; the router loads them all.
 - `src/server/schema/`: one `.sql` file per table, applied at startup.
 - `test/`: the original tests; `test/server/` and `test/client/` mirror `src/`.
-- `scripts/`: `release.ts` (the release routine, below), `restructure.ts` (how the split was made; re-runnable), `room-hash.ts` (browser test tools: Chrome, with WebGL when asked, a test server, `FREEZE`), `office-shots.ts` (the real page on a seeded throwaway server, to `docs/screens/office-*.jpg`: wide, city, near, hover, and the reader open at 1440 and 1280), `shell-shots.ts` (the glass shell, `docs/screens/glass-*.jpg`).
+- `scripts/`: `release.ts` (the release routine, below), `restructure.ts` (how the split was made; re-runnable), `room-hash.ts` (browser test tools: Chrome, with WebGL when asked, a test server, `FREEZE`), `office-shots.ts` (the real page on a seeded throwaway server, to `docs/screens/office-*.jpg`: wide, city, near, hover, and the reader open at 1440 and 1280).
 
 ## Working in parallel (lanes)
 

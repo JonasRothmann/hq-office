@@ -43,7 +43,7 @@ src/server/               the server, one file per concern
 test/                     the tests that were there, unchanged
   server/ client/         the server starts and serves; modules link; the page works; the office draws
 scripts/                  restructure.ts (the split), room-hash.ts (Chrome, test server and clock tools for browser tests),
-                          office-shots.ts, shell-shots.ts (screenshots)
+                          office-shots.ts (screenshots)
 docs/                     this file
 ```
 
