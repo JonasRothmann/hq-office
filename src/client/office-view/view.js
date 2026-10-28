@@ -81,14 +81,23 @@ export function mountOffice(canvas, opts = {}) {
     try { world.setScenery(next); } catch (e) { console.error("the land round the office could not change", e); }
   }
 
+  // setLanes and setHq mark the doc dirty; one build runs on the next microtask, so a state event builds once.
+  let dirty = false;
+  function rebuild() {
+    if (dirty) return;
+    dirty = true;
+    queueMicrotask(() => { if (dirty) build(); });
+  }
+
   function build() {
+    dirty = false;
     // HQ's own lane, when it is one, sits in the suite, not at a team desk (layout.js leaves it out)
     res = officeDoc(lanes, res, { hq: hqName, hqStatus });
     live = new Set([...res.layout.desks.filter((d) => !d.vacant).map((d) => d.lane), ...(res.layout.hq ? [hqName] : [])]);
     statusOf = new Map([...lanes.map((l) => [l.name, l.status]), [hqName, hqStatus]]);
     blockingOf = new Map(lanes.map((l) => [l.name, l.blocking]));
     if (!world) {
-      world = createWorld(canvas, docOf(res.doc), { theme, time: TIME[theme], insets, systems: [pace], idleFps: FPS[mode], scenery: sceneryFor(), hoverTarget });
+      world = createWorld(canvas, docOf(res.doc), { theme, time: TIME[theme], insets, systems: [pace], idleFps: FPS[mode], scenery: sceneryFor(), hoverTarget, pickable });
       marks = new Marks(world);
       lamps = roomLamps(world);
       world.three.scene.add(balls.mesh);
@@ -133,6 +142,7 @@ export function mountOffice(canvas, opts = {}) {
     if (key === ballsKey) return;
     ballsKey = key;
     for (const lane of [...balls.desks.keys()]) if (!live.has(lane) || !vitals[lane]) balls.drop(lane, now);
+    for (const [lane, g] of deskFrames) if (!live.has(lane)) { g.removeFromParent(); deskFrames.delete(lane); }
     for (const lane of live) {
       const v = vitals[lane];
       if (!v) continue;
@@ -149,13 +159,13 @@ export function mountOffice(canvas, opts = {}) {
   function setLanes(next, nextVitals = vitals) {
     lanes = next.map((l) => ({ name: l.name, parent: l.parent ?? null, status: l.status ?? "hq_turn", blocking: l.blocking ?? 0 }));
     vitals = nextVitals ?? {};
-    build();
+    rebuild();
   }
 
   function setHq(name, status) {
     if (name) hqName = name;
     hqStatus = status ?? hqStatus;
-    if (world) build();
+    if (world) rebuild();
   }
 
   function setTheme(t) {
@@ -249,6 +259,9 @@ export function mountOffice(canvas, opts = {}) {
     if (!lane || !live.has(lane)) return null;
     return hit.kind === "character" ? deskId(lane) : hit.id;
   }
+
+  // The engine skips a hit this refuses, so furniture in front of a worker (a pendant, a plant) does not swallow the click.
+  const pickable = (id) => { const lane = laneIn(id); return lane != null && live.has(lane); };
 
   // A pick as a lane: a worker, or its desk or chair. Empty desks and the rest of the furniture are no one's.
   function pick(clientX, clientY) {
@@ -363,6 +376,7 @@ export function mountOffice(canvas, opts = {}) {
     deskAnchor, project, addToWorld, pick, inspect, roomWalls, workerOf,
     get engine() { return world; },
     dispose() {
+      dirty = false; // a build queued before dispose does not run
       cleanups.forEach((f) => f());
       lamps?.dispose(); marks?.dispose();
       if (world) { world.dispose(); world = null; }

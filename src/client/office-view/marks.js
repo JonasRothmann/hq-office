@@ -75,13 +75,13 @@ export class Marks {
       this.state.set(lane, { light, marker });
 
       let g = this.lights.get(lane);
-      if (!g) this.lights.set(lane, (g = this.lantern()));
+      if (!g) this.lights.set(lane, (g = this.lantern(lane)));
       g.getObjectByName("shade").material = this.glow(light ?? LIGHT_OFF);
       if (!g.parent && this.world.attach(g, deskId(lane))) changed = true;
 
       let b = this.badges.get(lane);
       if (!marker) { if (b) { b.removeFromParent(); this.badges.delete(lane); } continue; }
-      if (!b) this.badges.set(lane, (b = this.sprite(this.badgeMat(marker))));
+      if (!b) this.badges.set(lane, (b = this.sprite(this.badgeMat(marker), workerId(lane))));
       else b.material = this.badgeMat(marker);
       if (!b.parent && this.world.attach(b, workerId(lane))) changed = true;
     }
@@ -103,7 +103,8 @@ export class Marks {
 
   of(lane) { return this.state.get(lane) ?? null; }
 
-  lantern() {
+  // A click on the lantern is a click on its desk: each part names the desk as its entity (the engine's pick reads it).
+  lantern(lane) {
     const g = new THREE.Group();
     g.name = "status-light";
     g.position.copy(LIGHT_AT);
@@ -111,7 +112,7 @@ export class Marks {
     const shade = new THREE.Mesh(this.geo.shade, this.glow(LIGHT_OFF));
     const cap = new THREE.Mesh(this.geo.cap, this.steel);
     shade.name = "shade";
-    for (const m of [foot, shade, cap]) { m.castShadow = false; m.receiveShadow = false; g.add(m); }
+    for (const m of [foot, shade, cap]) { m.castShadow = false; m.receiveShadow = false; m.userData.entity = deskId(lane); g.add(m); }
     return g;
   }
 
@@ -121,9 +122,11 @@ export class Marks {
     return this.mats.get(color);
   }
 
-  sprite(material) {
+  // A click on the badge is a click on its worker (the engine's pick reads userData.entity).
+  sprite(material, entity) {
     const s = new THREE.Sprite(material);
     s.name = "marker";
+    s.userData.entity = entity;
     s.center.set(0.5, 0); // the tail's tip is the sprite's anchor, so the badge grows upward from the head
     s.renderOrder = 10;
     return s;
