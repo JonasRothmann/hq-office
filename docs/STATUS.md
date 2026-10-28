@@ -1,6 +1,6 @@
 # Status: 3D office, question tiers and the new HUD
 
-This branch delivers question tiers, go to the lead, the new HUD, attachments and threads, the @hq/world engine, and the 3D office with its status signals. It is draft PR https://github.com/JonasRothmann/hq-office/pull/1 on the owner's fork. Decisions are D1 to D22 in `docs/decisions.md`. The spec is `docs/spec-3d-office.md`.
+This branch delivers question tiers, go to the lead, the new HUD, attachments and threads, the @hq/world engine, and the 3D office with its status signals. It is draft PR 1 on the owner's fork. Decisions are D1 to D22 in `docs/decisions.md`. The spec is `docs/spec-3d-office.md`.
 
 ## What it delivers
 
@@ -17,7 +17,7 @@ This branch delivers question tiers, go to the lead, the new HUD, attachments an
 
 ## Tests (state at the end)
 
-- Full `bun test` on the merged branch: 1038 pass, 2 fail in one run under heavy machine load. `ask-scope.test.ts` timed out under load and passed alone.
+- Full `bun test` on the merged branch: 1038 pass, 2 fail in one run under heavy machine load. `ask-scope.test.ts` timed out under load and passed alone; the other was the phone room test below.
 - `rooms.test.ts` (phone room scroll) depended on timing. The cause: the room did not watch its sections for late content. It is fixed, with a test that fails without the fix. `rooms.test.ts` now passes 9 of 9.
 - After the last fixes: `world.test.ts` 16 of 16 (new tests for lane removal, rename, theme flips and badge clicks). `packages/world` tests 286 of 286. `test:hud` 478 of 478 after the review fixes. `modules.test.ts` 167 of 167.
 - `test:world` now runs every office and engine test.
