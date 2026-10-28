@@ -12,7 +12,7 @@
 
 export const PITCH = Math.PI / 6;              // 30°: a tile projects to an exact 2:1 diamond
 // px per metre: 16·2^(k/4) for k = -2..12, rounded to 0.1, so each stop is about 19 % closer than the last. The two
-// stops below 16 let a wide office fit beside a host's panel (12 lanes right of the reader at 1280×800). The named
+// stops below 16 let a wide lot fit beside a host's panel (a 26 m by 12 m building in 364 px). The named
 // stops are the old three steps (22.6, 45.3, 90.5); look them up by name, never by index.
 export const ZOOMS = [11.3, 13.5, 16, 19, 22.6, 26.9, 32, 38.1, 45.3, 53.8, 64, 76.1, 90.5, 107.6, 128];
 export const ZOOM_STOPS = Object.freeze({ far: ZOOMS.indexOf(22.6), mid: ZOOMS.indexOf(45.3), near: ZOOMS.indexOf(90.5) });
